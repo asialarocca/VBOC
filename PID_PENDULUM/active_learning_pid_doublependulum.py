@@ -52,8 +52,6 @@ for n in range(N_init):
     y_iter = np.append(y_iter, res)
     Xu_iter = np.delete(Xu_iter, n, axis=0)
 
-print(y_iter)
-
 # Create and train the initial svm classifier:
 clf = svm.SVC(C=100000, kernel='rbf', probability=True,
               class_weight='balanced')

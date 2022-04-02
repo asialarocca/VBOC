@@ -14,6 +14,8 @@ class PIDdoublependulum:
         r = loadDoublePendulum()
         self.conf = conf
         self.robot = RobotWrapper(r.model, r.collision_model, r.visual_model)
+        self.simu = RobotSimulator(self.conf, np.array(
+            [0., 0.]), np.array([0., 0.]), self.robot)
         self.N = int(conf.T_SIMULATION/conf.dt)
         self.tau_max = conf.tau_max
         self.tau_min = conf.tau_min
@@ -26,64 +28,67 @@ class PIDdoublependulum:
         self.PRINT_T = conf.PRINT_T
         self.kd = conf.kd
         self.simulate_real_time = conf.simulate_real_time
-        self.q = np.empty((2, self.N+1))*nan
-        self.v = np.empty((2, self.N+1))*nan
+        self.q = np.empty((2, self.N*10+1))*nan
+        self.v = np.empty((2, self.N*10+1))*nan
+        self.tau = np.empty((2, self.N*10+1))*nan
         self.niter = 0
 
     def compute_problem(self, q0, v0):
-        t = 0.0
-
-        tau = np.empty((2, self.N+1))*nan    # joint torques
-
-        self.q.fill(nan)
-        self.v.fill(nan)
-
-        PRINT_N = int(self.PRINT_T/self.dt)
-
-        simu = RobotSimulator(self.conf, q0, v0, self.robot)
-        self.niter = 0
-
-        self.q[:, 0] = simu.q
-        self.v[:, 0] = simu.v
-
         if (self.v[:, 0] > self.v_max).all() or (self.v[:, 0] < self.v_min).all() or (self.q[:, 0] > self.q_max).all() or (self.q[:, 0] < self.q_min).all():
             # print('Unfeasible initial conditions')
             return 0
 
-        for i in range(1, self.N):
-            time_start = time.time()
+        # Simulate the controller with an increasing number of iterations:
+        for k in range(1, 10):
+            t = 0.0
+            self.niter = 0
 
-            sg = self.robot.gravity(self.q[:, i-1])
-            tau[:, i] = - self.kd*self.v[:, i-1] + sg
+            self.q.fill(nan)
+            self.v.fill(nan)
+            self.tau.fill(nan)
 
-            if (tau[:, i] < self.tau_min).all():
-                tau[:, i] = self.tau_min
-            elif (tau[:, i] > self.tau_max).all():
-                tau[:, i] = self.tau_max
+            self.simu.init(q0, v0, True)
 
-            # send joint torques to simulator
-            simu.simulate(tau[:, i], self.dt, self.ndt)
+            self.q[:, 0] = self.simu.q
+            self.v[:, 0] = self.simu.v
 
-            # read current state from simulator
-            self.q[:, i] = simu.q
-            self.v[:, i] = simu.v
+            for i in range(1, self.N*k):
+                time_start = time.time()
 
-            if (self.v[:, i] > self.v_max).all() or (self.v[:, i] < self.v_min).all() or (self.q[:, i] > self.q_max).all() or (self.q[:, i] < self.q_min).all():
-                self.niter = i
-                # print('constraints violated')
-                return 0
+                sg = self.robot.gravity(self.q[:, i-1])
+                self.tau[:, i] = - self.kd*self.v[:, i-1] + sg
 
-            if norm(self.v[:, i]) < 0.01:
-                self.niter = i
-                # print('zero velocity reached')
-                return 1
+                if (self.tau[:, i] < self.tau_min).all():
+                    self.tau[:, i] = self.tau_min
+                elif (self.tau[:, i] > self.tau_max).all():
+                    self.tau[:, i] = self.tau_max
 
-            t += self.dt
+                # send joint torques to simulator
+                self.simu.simulate(self.tau[:, i], self.dt, self.ndt)
 
-            time_spent = time.time() - time_start
-            if(self.simulate_real_time and time_spent < self.dt):
-                time.sleep(self.dt-time_spent)
+                # read current state from simulator
+                self.q[:, i] = self.simu.q
+                self.v[:, i] = self.simu.v
 
-        self.niter = self.N
+                if (self.v[:, i] > self.v_max).all() or (self.v[:, i] < self.v_min).all() or (self.q[:, i] > self.q_max).all() or (self.q[:, i] < self.q_min).all():
+                    self.niter = i
+                    # print('constraints violated')
+                    return 0
+
+                if norm(self.v[:, i]) < 0.01:
+                    self.niter = i
+                    # print('zero velocity reached')
+                    return 1
+
+                t += self.dt
+                self.niter += 1
+
+                time_spent = time.time() - time_start
+                if(self.simulate_real_time and time_spent < self.dt):
+                    time.sleep(self.dt-time_spent)
+
+            if k > 1:
+                print('try with', round(self.conf.T_SIMULATION*k, 2), 'seconds')
+
         # print('It neither violated the constraints or stopped')
         return 0
