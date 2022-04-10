@@ -23,6 +23,9 @@ N = 20
 # set dimensions
 ocp.dims.N = N
 
+# set prediction horizon
+ocp.solver_options.tf = Tf
+
 # set cost
 Q = 2*np.diag([0.0, 1e-2])
 R = 2*np.diag([0.0])
@@ -44,33 +47,24 @@ ocp.cost.yref_e = np.zeros((ny_e, ))
 
 # set constraints
 Fmax = 10
-ocp.constraints.lbu = np.array([-Fmax])
-ocp.constraints.ubu = np.array([+Fmax])
-ocp.constraints.idxbu = np.array([0])
 thetamax = np.pi/2
 thetamin = 0.0
 dthetamax = 10.
+
+ocp.constraints.lbu = np.array([-Fmax])
+ocp.constraints.ubu = np.array([+Fmax])
+ocp.constraints.idxbu = np.array([0])
 ocp.constraints.lbx = np.array([thetamin,-dthetamax])
 ocp.constraints.ubx = np.array([thetamax,dthetamax])
 ocp.constraints.idxbx = np.array([0,1])
 ocp.constraints.lbx_e = np.array([thetamin,-dthetamax])
 ocp.constraints.ubx_e = np.array([thetamax,dthetamax])
 ocp.constraints.idxbx_e = np.array([0,1])
-
-# set options
-ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
-ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
-ocp.solver_options.integrator_type = 'ERK'
-ocp.solver_options.nlp_solver_type = 'SQP'
-
-# set prediction horizon
-ocp.solver_options.tf = Tf
+#ocp.constraints.lh_e = np.array([0.3])
+#ocp.constraints.uh_e = np.array([0.35])
 
 # Initial cnditions
 ocp.constraints.x0 = np.array([0., 4.])
-
-simX = np.ndarray((N+1, nx))
-simU = np.ndarray((N, nu))
 
 # Solver
 ocp_solver = AcadosOcpSolver(ocp, json_file = 'acados_ocp.json')
@@ -82,6 +76,9 @@ if status != 0:
 	raise Exception(f'acados returned status {status}.')
 
 # get solution
+simX = np.ndarray((N+1, nx))
+simU = np.ndarray((N, nu))
+
 for i in range(N):
 	simX[i,:] = ocp_solver.get(i, "x")
 	simU[i,:] = ocp_solver.get(i, "u")

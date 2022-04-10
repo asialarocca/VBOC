@@ -70,8 +70,8 @@ int main()
     x_current[1] = 0.0;
 
   
-    x_current[0] = 0.05368932757599744;
-    x_current[1] = -2.830361225422954;
+    x_current[0] = 0;
+    x_current[1] = 5;
     
   
 

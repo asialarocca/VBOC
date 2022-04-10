@@ -103,10 +103,10 @@ int main()
 
     double lbx0[NBX0];
     double ubx0[NBX0];
-    lbx0[0] = 0.05368932757599744;
-    ubx0[0] = 0.05368932757599744;
-    lbx0[1] = -2.830361225422954;
-    ubx0[1] = -2.830361225422954;
+    lbx0[0] = 0;
+    ubx0[0] = 0;
+    lbx0[1] = 5;
+    ubx0[1] = 5;
 
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "idxbx", idxbx0);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "lbx", lbx0);

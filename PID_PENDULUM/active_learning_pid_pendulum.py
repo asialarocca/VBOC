@@ -84,6 +84,7 @@ print("INITIAL CLASSIFIER TRAINED")
 # Model Accuracy (calculated on the training set):
 print("Accuracy:", metrics.accuracy_score(y_iter, clf.predict(X_iter)))
 
+# Plot of the labeled data and classifier:
 plt.figure()
 #x_min, x_max = X_iter[:,0].min(), X_iter[:,0].max()
 #y_min, y_max = X_iter[:,1].min(), X_iter[:,1].max()
@@ -93,13 +94,19 @@ h = 0.02
 xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
 Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
 Z = Z.reshape(xx.shape)
-plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter,
-            marker=".", alpha=0.5, cmap=plt.cm.Paired)
 
+plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+scatter = plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter,
+                      marker=".", alpha=0.5, cmap=plt.cm.Paired)
 plt.xlim([0., np.pi/2 - 0.02])
 plt.ylim([-10., 10.])
+plt.xlabel('Initial position [rad]')
+plt.ylabel('Initial velocity [rad/s]')
+plt.title('Classifier')
+hand = scatter.legend_elements()[0]
+plt.legend(handles=hand, labels=("Unfeasible", "Feasible"))
 
+# Plot of the support vectors:
 sup = clf.support_
 sup_X = X_iter[sup]
 sup_y = y_iter[sup]
@@ -107,23 +114,37 @@ sup_y = y_iter[sup]
 plt.figure()
 plt.scatter(sup_X[:, 0], sup_X[:, 1], c=sup_y,
             marker=".", alpha=0.5, cmap=plt.cm.Paired)
+plt.xlabel('Initial position [rad]')
+plt.ylabel('Initial velocity [rad/s]')
+plt.title('Support vectors')
 
+# Plot of the decision function:
 out = clf.decision_function(data)
+
 plt.figure()
 plt.scatter(data[:, 0], data[:, 1], c=out,
             marker=".", alpha=0.5, cmap=plt.cm.Paired)
+plt.xlabel('Initial position [rad]')
+plt.ylabel('Initial velocity [rad/s]')
+plt.title('Decision function')
 
+# PLOT OF THE POINTS NEAR TO THE DECISION BOUNDARY:
 # y_score = clf.decision_function(data)
 # y_score = np.where(abs(y_score) <= 0.1, 1, 0)
 # plt.figure()
 # plt.scatter(data[:, 0], data[:, 1], c=y_score,
 #             marker=".", alpha=0.5, cmap=plt.cm.Paired)
 
-# DECISION FUNCTION
+y_score = clf.decision_function([data[0, :]])
+y_score = np.where(y_score >= 0., y_score, 0)
+# plt.figure()
+# plt.scatter(data[:, 0], data[:, 1], c=y_score,
+#             marker=".", alpha=0.5, cmap=plt.cm.Paired)
+
+# DECISION FUNCTION (IT DOESN'T WORK LIKE THIS, IT SHOULD BE INSIDE A FUNCTION MAYBE):
 # dual_coef = clf.dual_coef_
 # sup_vec = clf.support_vectors_
 # const = clf.intercept_
-
 # x = X_iter[:1, :]
 # output = 0
 # for i in range(sup.shape[0]):
@@ -131,6 +152,7 @@ plt.scatter(data[:, 0], data[:, 1], c=out,
 #         math.exp(- (norm(input - sup_vec[i])**2)/(2*X_iter.var()))
 # output += const
 
+# THIS IS TO FIX THE NUMBER OF ACTIVE LEARNING ITERATIONS:
 # # Update the labeled set with active learning and re-train the classifier:
 # for k in range(N_iter):
 
@@ -178,22 +200,66 @@ while True:
 
     k += 1
 
+# plt.figure()
+# #x_min, x_max = X_iter[:,0].min(), X_iter[:,0].max()
+# #y_min, y_max = X_iter[:,1].min(), X_iter[:,1].max()
+# x_min, x_max = 0., np.pi/2
+# y_min, y_max = -10., 10.
+# h = .02
+# xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+# Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
+# Z = Z.reshape(xx.shape)
+# plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+# plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter,
+#             marker=".", alpha=0.5, cmap=plt.cm.Paired)
+
+# plt.xlim([0., np.pi/2 - 0.02])
+# plt.ylim([-10., 10.])
+
+# sup = clf.support_
+# sup_X = X_iter[sup]
+# sup_y = y_iter[sup]
+
+# plt.figure()
+# plt.scatter(sup_X[:, 0], sup_X[:, 1], c=sup_y,
+#             marker=".", alpha=0.5, cmap=plt.cm.Paired)
+
+# sup = clf.support_
+# sup_X = X_iter[sup]
+# sup_y = y_iter[sup]
+
+# plt.figure()
+# plt.scatter(sup_X[:, 0], sup_X[:, 1], c=sup_y,
+#             marker=".", alpha=0.5, cmap=plt.cm.Paired)
+
+# out = clf.decision_function(data)
+# plt.figure()
+# plt.scatter(data[:, 0], data[:, 1], c=out,
+#             marker=".", alpha=0.5, cmap=plt.cm.Paired)
+
+# Plot of the labeled data and classifier:
 plt.figure()
 #x_min, x_max = X_iter[:,0].min(), X_iter[:,0].max()
 #y_min, y_max = X_iter[:,1].min(), X_iter[:,1].max()
 x_min, x_max = 0., np.pi/2
 y_min, y_max = -10., 10.
-h = .02
+h = 0.02
 xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
 Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
 Z = Z.reshape(xx.shape)
-plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter,
-            marker=".", alpha=0.5, cmap=plt.cm.Paired)
 
+plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+scatter = plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter,
+                      marker=".", alpha=0.5, cmap=plt.cm.Paired)
 plt.xlim([0., np.pi/2 - 0.02])
 plt.ylim([-10., 10.])
+plt.xlabel('Initial position [rad]')
+plt.ylabel('Initial velocity [rad/s]')
+plt.title('Classifier')
+hand = scatter.legend_elements()[0]
+plt.legend(handles=hand, labels=("Unfeasible", "Feasible"))
 
+# Plot of the support vectors:
 sup = clf.support_
 sup_X = X_iter[sup]
 sup_y = y_iter[sup]
@@ -201,19 +267,19 @@ sup_y = y_iter[sup]
 plt.figure()
 plt.scatter(sup_X[:, 0], sup_X[:, 1], c=sup_y,
             marker=".", alpha=0.5, cmap=plt.cm.Paired)
+plt.xlabel('Initial position [rad]')
+plt.ylabel('Initial velocity [rad/s]')
+plt.title('Support vectors')
 
-sup = clf.support_
-sup_X = X_iter[sup]
-sup_y = y_iter[sup]
-
-plt.figure()
-plt.scatter(sup_X[:, 0], sup_X[:, 1], c=sup_y,
-            marker=".", alpha=0.5, cmap=plt.cm.Paired)
-
+# Plot of the decision function:
 out = clf.decision_function(data)
+
 plt.figure()
 plt.scatter(data[:, 0], data[:, 1], c=out,
             marker=".", alpha=0.5, cmap=plt.cm.Paired)
+plt.xlabel('Initial position [rad]')
+plt.ylabel('Initial velocity [rad/s]')
+plt.title('Decision function')
 
 plt.show()
 
