@@ -1,11 +1,8 @@
-from utils import plot_pendulum
 import scipy.linalg as lin
 from pendulum_model import export_pendulum_ode_model
 from acados_template import AcadosOcp, AcadosOcpSolver
 from numpy.linalg import norm as norm
 import numpy as np
-from numpy import nan
-import time
 import sys
 sys.path.insert(0, '../common')
 
@@ -61,7 +58,6 @@ class OCPpendulum:
         ocp.constraints.lbu = np.array([-self.Fmax])
         ocp.constraints.ubu = np.array([+self.Fmax])
         ocp.constraints.idxbu = np.array([0])
-
         ocp.constraints.lbx = np.array([self.thetamin, -self.dthetamax])
         ocp.constraints.ubx = np.array([self.thetamax, self.dthetamax])
         ocp.constraints.idxbx = np.array([0, 1])

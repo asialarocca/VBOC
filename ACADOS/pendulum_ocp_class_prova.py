@@ -1,11 +1,8 @@
-from utils import plot_pendulum
 import scipy.linalg as lin
 from pendulum_model import export_pendulum_ode_model
 from acados_template import AcadosOcp, AcadosOcpSolver
 from numpy.linalg import norm as norm
 import numpy as np
-from numpy import nan
-import time
 import sys
 sys.path.insert(0, '../common')
 
@@ -25,8 +22,8 @@ class OCPpendulum:
         ny = nx + nu
         ny_e = nx
 
-        self.Tf = 1.0
-        self.N = 20
+        self.Tf = 1.
+        self.N = 10
 
         # set prediction horizon
         self.ocp.solver_options.tf = self.Tf
@@ -69,6 +66,8 @@ class OCPpendulum:
         self.ocp.constraints.lbx_e = np.array([self.thetamin, -self.dthetamax])
         self.ocp.constraints.ubx_e = np.array([self.thetamax, self.dthetamax])
         self.ocp.constraints.idxbx_e = np.array([0, 1])
+        
+        self.ocp.constraints.x0 = np.array([0.,0.])
 
         # set options
         self.ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
@@ -78,12 +77,12 @@ class OCPpendulum:
 
         self.simX = np.ndarray((self.N+1, 2))
 
-        # Initial cnditions
-        self.ocp.constraints.x0 = np.array([0, 0])
-
         # Solver
         self.ocp_solver = AcadosOcpSolver(
             self.ocp, json_file='acados_ocp.json')
+
+        self.ocp.solver_options.tol = 1e-6
+        self.ocp.solver_options.qp_tol = 1e-6
 
     def compute_problem(self, q0, v0):
 
