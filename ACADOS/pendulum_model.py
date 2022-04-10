@@ -1,5 +1,5 @@
 from acados_template import AcadosModel
-from casadi import SX, vertcat, sin, cos, Function
+from casadi import SX, vertcat, sin, Function, exp, norm_2
 
 
 def export_pendulum_ode_model():
@@ -16,7 +16,6 @@ def export_pendulum_ode_model():
     theta = SX.sym('theta')
     dtheta = SX.sym('dtheta')
 
-    #x = vertcat(x1, theta, v1, dtheta)
     x = vertcat(theta, dtheta)
 
     # controls
@@ -46,10 +45,24 @@ def export_pendulum_ode_model():
     model.u = u
     model.p = p
     model.name = model_name
-    
-    #model.con_h_expr_e = vertcat(theta)
+
+    # model.con_h_expr_e = vertcat(clf_decisionfunction(clf, X_iter, x))
 
     return model
+
+
+def clf_decisionfunction(clf, X_iter, x):
+    dual_coef = clf.dual_coef_
+    sup_vec = clf.support_vectors_
+    const = clf.intercept_
+    output = 0
+    for i in range(sup_vec.shape[0]):
+        output += dual_coef[0, i] * \
+            exp(- (norm_2(x - sup_vec[i])**2)/(2*X_iter.var()))
+    output += const
+
+    return output
+
 
 def export_pendulum_ode_model_with_discrete_rk4(dT):
 
