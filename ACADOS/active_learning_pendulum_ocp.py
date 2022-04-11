@@ -7,8 +7,7 @@ from sklearn import svm
 from sklearn import metrics
 from numpy.linalg import norm as norm
 import time
-#from pendulum_ocp_class import OCPpendulum
-from pendulum_ocp_class_prova import OCPpendulum
+from pendulum_ocp_class import OCPpendulum
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -85,7 +84,7 @@ while True:
     # Add the B most uncertain samples to the labeled set:
     maxindex = np.argpartition(etp, -B)[-B:]  # indexes of the uncertain samples
 
-    if sum(etp[maxindex])/B < 0.5:
+    if sum(etp[maxindex])/B < 0.1:
         break
 
     for x in range(B):

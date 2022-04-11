@@ -28,7 +28,7 @@ q_min = pid.q_min
 
 # Generate low-discrepancy unlabeled samples:
 sampler = qmc.Halton(d=4, scramble=False)
-sample = sampler.random(n=10000)
+sample = sampler.random(n=100000000)
 l_bounds = [q_min[0], q_min[1], v_min[0], v_min[1]]
 u_bounds = [q_max[0], q_max[1], v_max[0], v_max[1]]
 data = qmc.scale(sample, l_bounds, u_bounds)
