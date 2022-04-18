@@ -1,10 +1,10 @@
+from utils import plot_pendulum
+import scipy.linalg as lin
+import numpy as np
+from pendulum_model import export_pendulum_ode_model
+from acados_template import AcadosOcp, AcadosOcpSolver
 import sys
 sys.path.insert(0, '../common')
-from acados_template import AcadosOcp, AcadosOcpSolver
-from pendulum_model import export_pendulum_ode_model
-import numpy as np
-import scipy.linalg as lin
-from utils import plot_pendulum
 
 # create ocp object to formulate the OCP
 ocp = AcadosOcp()
@@ -13,12 +13,12 @@ ocp = AcadosOcp()
 model = export_pendulum_ode_model()
 ocp.model = model
 
-Tf = 1.0
+Tf = 0.1
 nx = model.x.size()[0]
 nu = model.u.size()[0]
 ny = nx + nu
 ny_e = nx
-N = 20
+N = 10
 
 # set dimensions
 ocp.dims.N = N
@@ -36,13 +36,13 @@ ocp.cost.cost_type = 'LINEAR_LS'
 ocp.cost.cost_type_e = 'LINEAR_LS'
 
 ocp.cost.Vx = np.zeros((ny, nx))
-ocp.cost.Vx[:nx,:nx] = np.eye(nx)
+ocp.cost.Vx[:nx, :nx] = np.eye(nx)
 Vu = np.zeros((ny, nu))
-Vu[2,0] = 1.0
+Vu[2, 0] = 1.0
 ocp.cost.Vu = Vu
 ocp.cost.Vx_e = np.eye(nx)
 
-ocp.cost.yref  = np.zeros((ny, ))
+ocp.cost.yref = np.zeros((ny, ))
 ocp.cost.yref_e = np.zeros((ny_e, ))
 
 # set constraints
@@ -54,37 +54,36 @@ dthetamax = 10.
 ocp.constraints.lbu = np.array([-Fmax])
 ocp.constraints.ubu = np.array([+Fmax])
 ocp.constraints.idxbu = np.array([0])
-ocp.constraints.lbx = np.array([thetamin,-dthetamax])
-ocp.constraints.ubx = np.array([thetamax,dthetamax])
-ocp.constraints.idxbx = np.array([0,1])
-ocp.constraints.lbx_e = np.array([thetamin,-dthetamax])
-ocp.constraints.ubx_e = np.array([thetamax,dthetamax])
-ocp.constraints.idxbx_e = np.array([0,1])
-#ocp.constraints.lh_e = np.array([0.3])
-#ocp.constraints.uh_e = np.array([0.35])
+ocp.constraints.lbx = np.array([thetamin, -dthetamax])
+ocp.constraints.ubx = np.array([thetamax, dthetamax])
+ocp.constraints.idxbx = np.array([0, 1])
+ocp.constraints.lbx_e = np.array([thetamin, -dthetamax])
+ocp.constraints.ubx_e = np.array([thetamax, dthetamax])
+ocp.constraints.idxbx_e = np.array([0, 1])
+ocp.constraints.lh_e = np.array([-0.01])
+ocp.constraints.uh_e = np.array([0.01])
 
 # Initial cnditions
-ocp.constraints.x0 = np.array([0., 4.])
+ocp.constraints.x0 = np.array([1.2, 2.3])
 
 # Solver
-ocp_solver = AcadosOcpSolver(ocp, json_file = 'acados_ocp.json')
+ocp_solver = AcadosOcpSolver(ocp, json_file='acados_ocp.json')
 
 status = ocp_solver.solve()
 
 if status != 0:
-	ocp_solver.print_statistics()
-	raise Exception(f'acados returned status {status}.')
+    ocp_solver.print_statistics()
+    raise Exception(f'acados returned status {status}.')
 
 # get solution
 simX = np.ndarray((N+1, nx))
 simU = np.ndarray((N, nu))
 
 for i in range(N):
-	simX[i,:] = ocp_solver.get(i, "x")
-	simU[i,:] = ocp_solver.get(i, "u")
-simX[N,:] = ocp_solver.get(N, "x")
+    simX[i, :] = ocp_solver.get(i, "x")
+    simU[i, :] = ocp_solver.get(i, "u")
+simX[N, :] = ocp_solver.get(N, "x")
 
 ocp_solver.print_statistics()
 
 plot_pendulum(np.linspace(0, Tf, N+1), Fmax, simU, simX, latexify=False)
-

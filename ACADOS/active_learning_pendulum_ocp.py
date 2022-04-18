@@ -44,7 +44,6 @@ for n in range(N_init):
     X_iter = np.append(X_iter, [[q0, v0]], axis=0)
     res = ocp.compute_problem(q0, v0)
     y_iter = np.append(y_iter, res)
-    Xu_iter = np.delete(Xu_iter, n, axis=0)
 
     # Add intermediate states of succesfull initial conditions
     if res == 1:
@@ -52,6 +51,8 @@ for n in range(N_init):
             if norm(ocp.simX[f, 1]) > 0.01:
                 X_iter = np.append(X_iter, [[ocp.simX[f, 0], ocp.simX[f, 1]]], axis=0)
                 y_iter = np.append(y_iter, 1)
+                
+Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
 
 clf = svm.SVC(C=100000, kernel='rbf', probability=True, class_weight='balanced')
 clf.fit(X_iter, y_iter)

@@ -50,7 +50,8 @@ for n in range(N_init):
         X_iter, [[data[n, 0], data[n, 1], data[n, 2], data[n, 3]]], axis=0)
     res = pid.compute_problem(np.array(q0), np.array(v0))
     y_iter = np.append(y_iter, res)
-    Xu_iter = np.delete(Xu_iter, n, axis=0)
+    
+Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
 
 # Create and train the initial svm classifier:
 clf = svm.SVC(C=100000, kernel='rbf', probability=True,

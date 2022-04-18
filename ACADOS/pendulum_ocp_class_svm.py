@@ -1,5 +1,5 @@
 import scipy.linalg as lin
-from pendulum_model import export_pendulum_ode_model
+from pendulum_model_svm import export_pendulum_ode_model
 from acados_template import AcadosOcp, AcadosOcpSolver
 from numpy.linalg import norm as norm
 import numpy as np
@@ -7,14 +7,14 @@ import sys
 sys.path.insert(0, '../common')
 
 
-class OCPpendulum:
+class OCPpendulumiter:
 
-    def __init__(self):
+    def __init__(self, clf, X_iter):
         # create ocp object to formulate the OCP
         self.ocp = AcadosOcp()
 
         # set model
-        model = export_pendulum_ode_model()
+        model = export_pendulum_ode_model(clf, X_iter)
         self.ocp.model = model
 
         nx = model.x.size()[0]
@@ -24,7 +24,7 @@ class OCPpendulum:
 
         Tf = 0.1
         self.Tf = Tf
-        self.N = 10  # int(100*Tf)
+        self.N = 10
 
         # set prediction horizon
         self.ocp.solver_options.tf = self.Tf
@@ -64,14 +64,17 @@ class OCPpendulum:
         self.ocp.constraints.lbx = np.array([self.thetamin, -self.dthetamax])
         self.ocp.constraints.ubx = np.array([self.thetamax, self.dthetamax])
         self.ocp.constraints.idxbx = np.array([0, 1])
-        self.ocp.constraints.lbx_e = np.array([self.thetamin, -0.01])
-        self.ocp.constraints.ubx_e = np.array([self.thetamax, 0.01])
+        self.ocp.constraints.lbx_e = np.array([self.thetamin, -self.dthetamax])
+        self.ocp.constraints.ubx_e = np.array([self.thetamax, self.dthetamax])
         self.ocp.constraints.idxbx_e = np.array([0, 1])
 
         self.ocp.constraints.idxbx_0 = np.array([0, 1])
         self.ocp.constraints.idxbxe_0 = np.array([0, 1])
         self.ocp.constraints.lbx_0 = np.array([0., 0.])
         self.ocp.constraints.ubx_0 = np.array([0., 0.])
+
+        self.ocp.constraints.lh_e = np.array([0.])
+        self.ocp.constraints.uh_e = np.array([10000000.])
 
         # set options
         self.ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
@@ -83,7 +86,7 @@ class OCPpendulum:
 
         # Solver
         self.ocp_solver = AcadosOcpSolver(
-            self.ocp, json_file='acados_ocp.json')
+            self.ocp, json_file='acados_ocp_nlp.json')
 
     def compute_problem(self, q0, v0):
 

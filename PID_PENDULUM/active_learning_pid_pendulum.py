@@ -55,8 +55,6 @@ for n in range(N_init):
     X_iter = np.append(X_iter, [[q0, v0]], axis=0)
     res = pid.compute_problem(np.array([q0]), np.array([v0]))
     y_iter = np.append(y_iter, res)
-    Xu_iter = np.delete(Xu_iter, n, axis=0)
-
     # if res == 1:
     #	n_pos += 1
     # else:
@@ -70,6 +68,8 @@ for n in range(N_init):
             for l in range(1, q_traj.shape[0], int(q_traj.shape[0]/5)):
                 X_iter = np.append(X_iter, [[q_traj[l], v_traj[l]]], axis=0)
                 y_iter = np.append(y_iter, 1)
+                
+Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
 
 # Create and train the initial svm classifier:
 #param_grid = {'C': [100000], 'kernel': ['rbf'], 'probability': [True], 'class_weight': ['balanced']}

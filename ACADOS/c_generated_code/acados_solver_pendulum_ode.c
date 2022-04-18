@@ -46,6 +46,8 @@
 
 
 
+#include "pendulum_ode_constraints/pendulum_ode_h_e_constraint.h"
+
 
 #include "acados_solver_pendulum_ode.h"
 
@@ -303,6 +305,8 @@ void pendulum_ode_acados_create_3_create_and_set_functions(pendulum_ode_solver_c
     }while(false)
 
 
+    MAP_CASADI_FNC(nl_constr_h_e_fun_jac, pendulum_ode_constr_h_e_fun_jac_uxt_zt);
+    MAP_CASADI_FNC(nl_constr_h_e_fun, pendulum_ode_constr_h_e_fun);
 
 
     // explicit ode
@@ -352,7 +356,7 @@ void pendulum_ode_acados_create_5_set_nlp_in(pendulum_ode_solver_capsule* capsul
     if (new_time_steps) {
         pendulum_ode_acados_update_time_steps(capsule, N, new_time_steps);
     } else {// all time_steps are identical
-        double time_step = 0.05;
+        double time_step = 0.01;
         for (int i = 0; i < N; i++)
         {
             ocp_nlp_in_set(nlp_config, nlp_dims, nlp_in, i, "Ts", &time_step);
@@ -561,6 +565,21 @@ void pendulum_ode_acados_create_5_set_nlp_in(pendulum_ode_solver_capsule* capsul
 
 
 
+    // set up nonlinear constraints for last stage
+    double* luh_e = calloc(2*NHN, sizeof(double));
+    double* lh_e = luh_e;
+    double* uh_e = luh_e + NHN;
+    
+
+    
+    uh_e[0] = 10000000;
+
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "nl_constr_h_fun_jac", &capsule->nl_constr_h_e_fun_jac);
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "nl_constr_h_fun", &capsule->nl_constr_h_e_fun);
+    
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "lh", lh_e);
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "uh", uh_e);
+    free(luh_e);
 
 
 }
@@ -874,6 +893,8 @@ int pendulum_ode_acados_free(pendulum_ode_solver_capsule* capsule)
     // cost
 
     // constraints
+    external_function_param_casadi_free(&capsule->nl_constr_h_e_fun_jac);
+    external_function_param_casadi_free(&capsule->nl_constr_h_e_fun);
 
     return 0;
 }

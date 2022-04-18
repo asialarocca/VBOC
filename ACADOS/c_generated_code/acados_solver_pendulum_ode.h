@@ -63,10 +63,10 @@
 #define PENDULUM_ODE_NY0    3
 #define PENDULUM_ODE_NY     3
 #define PENDULUM_ODE_NYN    2
-#define PENDULUM_ODE_N      20
+#define PENDULUM_ODE_N      10
 #define PENDULUM_ODE_NH     0
 #define PENDULUM_ODE_NPHI   0
-#define PENDULUM_ODE_NHN    0
+#define PENDULUM_ODE_NHN    1
 #define PENDULUM_ODE_NPHIN  0
 #define PENDULUM_ODE_NR     0
 
@@ -110,6 +110,9 @@ typedef struct pendulum_ode_solver_capsule
 
 
 
+    external_function_param_casadi nl_constr_h_e_fun_jac;
+    external_function_param_casadi nl_constr_h_e_fun;
+    external_function_param_casadi nl_constr_h_e_fun_jac_hess;
 
 } pendulum_ode_solver_capsule;
 
