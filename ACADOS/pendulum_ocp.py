@@ -5,6 +5,9 @@ from pendulum_model import export_pendulum_ode_model
 from acados_template import AcadosOcp, AcadosOcpSolver
 import sys
 sys.path.insert(0, '../common')
+import time
+
+start_time = time.time()
 
 # create ocp object to formulate the OCP
 ocp = AcadosOcp()
@@ -60,11 +63,11 @@ ocp.constraints.idxbx = np.array([0, 1])
 ocp.constraints.lbx_e = np.array([thetamin, -dthetamax])
 ocp.constraints.ubx_e = np.array([thetamax, dthetamax])
 ocp.constraints.idxbx_e = np.array([0, 1])
-ocp.constraints.lh_e = np.array([-0.01])
-ocp.constraints.uh_e = np.array([0.01])
+#ocp.constraints.lh_e = np.array([-0.01])
+#ocp.constraints.uh_e = np.array([0.01])
 
 # Initial cnditions
-ocp.constraints.x0 = np.array([1.2, 2.3])
+ocp.constraints.x0 = np.array([1., 2.])
 
 # Solver
 ocp_solver = AcadosOcpSolver(ocp, json_file='acados_ocp.json')
@@ -85,5 +88,6 @@ for i in range(N):
 simX[N, :] = ocp_solver.get(N, "x")
 
 ocp_solver.print_statistics()
+print("Execution time: %s seconds" % (time.time() - start_time))
 
 plot_pendulum(np.linspace(0, Tf, N+1), Fmax, simU, simX, latexify=False)

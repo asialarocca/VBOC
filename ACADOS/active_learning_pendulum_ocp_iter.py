@@ -34,7 +34,7 @@ data = qmc.scale(sample, l_bounds, u_bounds)
 
 # Generate the initial set of labeled samples:
 X_iter = [[0., 0.]]
-y_iter = [ocp.compute_problem(0., 0.)]
+y_iter = [1]
 
 Xu_iter = data
 
@@ -60,6 +60,7 @@ clf.fit(X_iter, y_iter)
 
 while True:
     # Compute the shannon entropy of the unlabeled samples:
+
     prob_xu = clf.predict_proba(Xu_iter)
     etp = np.empty(prob_xu.shape[0])*nan
     for p in range(prob_xu.shape[0]):
@@ -68,7 +69,7 @@ while True:
     # Add the B most uncertain samples to the labeled set:
     maxindex = np.argpartition(etp, -B)[-B:]  # indexes of the uncertain samples
 
-    if sum(etp[maxindex])/B < 0.5:
+    if sum(etp[maxindex])/B < 0.1:
         break
 
     for x in range(B):
@@ -124,21 +125,23 @@ while True:
     data_xinit = np.array([X_iter[i] for i in range(X_iter.shape[0]) if y_iter[i] == 0])
     data_xuinit = np.array([Xu_iter[i] for i in range(Xu_iter.shape[0])
                             if clf.predict([Xu_iter[i]]) == 0])
-    data_start = np.concatenate([data_xuinit, data_xinit])
 
-    X_tmp = np.array([X_iter[i] for i in range(X_iter.shape[0]) if y_iter[i] == 1])
-    y_tmp = np.array([y_iter[i] for i in range(y_iter.shape[0]) if y_iter[i] == 1])
+    #X_tmp = np.array([X_iter[i] for i in range(X_iter.shape[0]) if y_iter[i] == 1])
+    #y_tmp = np.array([y_iter[i] for i in range(y_iter.shape[0]) if y_iter[i] == 1])
+    
+    X_tmp = X_iter[y_iter==1]
+    y_tmp = y_iter[y_iter==1]
 
-    Xu_iter = data_start
+    Xu_iter = np.concatenate([data_xuinit, data_xinit])
     X_iter = X_tmp
     y_iter = y_tmp
 
     # plt.figure()
     # plt.scatter(data_start[:, 0], data_start[:, 1], marker=".", alpha=0.5, cmap=plt.cm.Paired)
 
-    for n in range(N_init):
-        q0 = data_start[n, 0]
-        v0 = data_start[n, 1]
+    for n in range(N_init - int(N_init * n_sum / (1000))):
+        q0 = Xu_iter[n, 0]
+        v0 = Xu_iter[n, 1]
 
         X_iter = np.append(X_iter, [[q0, v0]], axis=0)
         res = ocp.compute_problem(q0, v0)
@@ -155,38 +158,38 @@ while True:
 
     clf.fit(X_iter, y_iter)
 
-while True:
-    # Compute the shannon entropy of the unlabeled samples:
-    prob_xu = clf.predict_proba(Xu_iter)
-    etp = np.empty(prob_xu.shape[0])*nan
-    for p in range(prob_xu.shape[0]):
-        etp[p] = entropy(prob_xu[p])
+    while True:
+        # Compute the shannon entropy of the unlabeled samples:
+        prob_xu = clf.predict_proba(Xu_iter)
+        etp = np.empty(prob_xu.shape[0])*nan
+        for p in range(prob_xu.shape[0]):
+            etp[p] = entropy(prob_xu[p])
 
-    # Add the B most uncertain samples to the labeled set:
-    maxindex = np.argpartition(etp, -B)[-B:]  # indexes of the uncertain samples
+        # Add the B most uncertain samples to the labeled set:
+        maxindex = np.argpartition(etp, -B)[-B:]  # indexes of the uncertain samples
 
-    if sum(etp[maxindex])/B < 0.5:
-        break
+        if sum(etp[maxindex])/B < 0.1:
+            break
 
-    for x in range(B):
-        q0 = Xu_iter[maxindex[x], 0]
-        v0 = Xu_iter[maxindex[x], 1]
+        for x in range(B):
+            q0 = Xu_iter[maxindex[x], 0]
+            v0 = Xu_iter[maxindex[x], 1]
 
-        X_iter = np.append(X_iter, [[q0, v0]], axis=0)
-        res = ocp.compute_problem(q0, v0)
-        y_iter = np.append(y_iter, res)
+            X_iter = np.append(X_iter, [[q0, v0]], axis=0)
+            res = ocp.compute_problem(q0, v0)
+            y_iter = np.append(y_iter, res)
 
-    # Add intermediate states of succesfull initial conditions
-    if res == 1:
-        for f in range(1, ocp.N):
-            if norm(ocp.simX[f, 1]) > 0.01:
-                X_iter = np.append(X_iter, [[ocp.simX[f, 0], ocp.simX[f, 1]]], axis=0)
-                y_iter = np.append(y_iter, 1)
+        # Add intermediate states of succesfull initial conditions
+        if res == 1:
+            for f in range(1, ocp.N):
+                if norm(ocp.simX[f, 1]) > 0.01:
+                    X_iter = np.append(X_iter, [[ocp.simX[f, 0], ocp.simX[f, 1]]], axis=0)
+                    y_iter = np.append(y_iter, 1)
 
-    Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
+        Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
 
-    # Re-fit the model with the new selected X_iter:
-    clf.fit(X_iter, y_iter)
+        # Re-fit the model with the new selected X_iter:
+        clf.fit(X_iter, y_iter)
 
     print("CLASSIFIER", r, "TRAINED")
 
@@ -205,6 +208,6 @@ while True:
     plt.xlim([0., np.pi/2 - 0.02])
     plt.ylim([-10., 10.])
 
-plt.show()
-
 print("Execution time: %s seconds" % (time.time() - start_time))
+
+plt.show()

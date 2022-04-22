@@ -46,7 +46,7 @@ def export_pendulum_ode_model(clf, X_iter):
     model.p = p
     model.name = model_name
 
-    model.con_h_expr_e = vertcat(clf_decisionfunction(clf, X_iter, x))
+    model.con_h_expr_e = clf_decisionfunction(clf, X_iter, x)
 
     return model
 
@@ -61,4 +61,4 @@ def clf_decisionfunction(clf, X_iter, x):
             exp(- (norm_2(x - sup_vec[i])**2)/(2*X_iter.var()))
     output += const
 
-    return output
+    return vertcat(output)

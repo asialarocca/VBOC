@@ -17,10 +17,10 @@ class OCPpendulum:
         model = export_pendulum_ode_model()
         self.ocp.model = model
 
-        nx = model.x.size()[0]
+        self.nx = model.x.size()[0]
         nu = model.u.size()[0]
-        ny = nx + nu
-        ny_e = nx
+        ny = self.nx + nu
+        ny_e = self.nx
 
         Tf = 0.1
         self.Tf = Tf
@@ -42,12 +42,12 @@ class OCPpendulum:
         self.ocp.cost.cost_type = 'LINEAR_LS'
         self.ocp.cost.cost_type_e = 'LINEAR_LS'
 
-        self.ocp.cost.Vx = np.zeros((ny, nx))
-        self.ocp.cost.Vx[:nx, :nx] = np.eye(nx)
+        self.ocp.cost.Vx = np.zeros((ny, self.nx))
+        self.ocp.cost.Vx[:self.nx, :self.nx] = np.eye(self.nx)
         Vu = np.zeros((ny, nu))
         Vu[2, 0] = 1.0
         self.ocp.cost.Vu = Vu
-        self.ocp.cost.Vx_e = np.eye(nx)
+        self.ocp.cost.Vx_e = np.eye(self.nx)
 
         self.ocp.cost.yref = np.zeros((ny, ))
         self.ocp.cost.yref_e = np.zeros((ny_e, ))
@@ -64,8 +64,8 @@ class OCPpendulum:
         self.ocp.constraints.lbx = np.array([self.thetamin, -self.dthetamax])
         self.ocp.constraints.ubx = np.array([self.thetamax, self.dthetamax])
         self.ocp.constraints.idxbx = np.array([0, 1])
-        self.ocp.constraints.lbx_e = np.array([self.thetamin, -0.01])
-        self.ocp.constraints.ubx_e = np.array([self.thetamax, 0.01])
+        self.ocp.constraints.lbx_e = np.array([self.thetamin, 0.])
+        self.ocp.constraints.ubx_e = np.array([self.thetamax, 0.])
         self.ocp.constraints.idxbx_e = np.array([0, 1])
 
         self.ocp.constraints.idxbx_0 = np.array([0, 1])
