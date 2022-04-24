@@ -10,7 +10,7 @@ def export_pendulum_ode_model():
     m = 0.4  # mass of the ball [kg]
     g = 9.81  # gravity constant [m/s^2]
     l = 0.8  # length of the rod [m]
-    b = 0.1  # damping
+    b = 0.  # damping
 
     # set up states & controls
     theta = SX.sym('theta')

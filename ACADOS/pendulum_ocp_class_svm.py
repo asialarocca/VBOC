@@ -74,15 +74,13 @@ class OCPpendulumiter:
         self.ocp.constraints.ubx_0 = np.array([0., 0.])
 
         self.ocp.constraints.lh_e = np.array([0.])
-        self.ocp.constraints.uh_e = np.array([10000000.])
+        self.ocp.constraints.uh_e = np.array([1e6]) # prova con inf o nan
 
         # set options
         self.ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
         self.ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
         self.ocp.solver_options.integrator_type = 'ERK'
         self.ocp.solver_options.nlp_solver_type = 'SQP'
-
-        self.simX = np.ndarray((self.N+1, 2))
 
         # Solver
         self.ocp_solver = AcadosOcpSolver(
@@ -102,8 +100,4 @@ class OCPpendulumiter:
         if status != 0:
             return 0
         else:
-            # get solution
-            for i in range(self.N):
-                self.simX[i, :] = self.ocp_solver.get(i, "x")
-            self.simX[self.N, :] = self.ocp_solver.get(self.N, "x")
             return 1

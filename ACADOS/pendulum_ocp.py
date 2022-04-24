@@ -1,3 +1,4 @@
+import time
 from utils import plot_pendulum
 import scipy.linalg as lin
 import numpy as np
@@ -5,7 +6,6 @@ from pendulum_model import export_pendulum_ode_model
 from acados_template import AcadosOcp, AcadosOcpSolver
 import sys
 sys.path.insert(0, '../common')
-import time
 
 start_time = time.time()
 
@@ -67,7 +67,7 @@ ocp.constraints.idxbx_e = np.array([0, 1])
 #ocp.constraints.uh_e = np.array([0.01])
 
 # Initial cnditions
-ocp.constraints.x0 = np.array([1., 2.])
+ocp.constraints.x0 = np.array([thetamin, -0.1])
 
 # Solver
 ocp_solver = AcadosOcpSolver(ocp, json_file='acados_ocp.json')

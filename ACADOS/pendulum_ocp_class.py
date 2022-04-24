@@ -22,7 +22,7 @@ class OCPpendulum:
         ny = self.nx + nu
         ny_e = self.nx
 
-        Tf = 0.1
+        Tf = .1
         self.Tf = Tf
         self.N = 10  # int(100*Tf)
 
@@ -79,8 +79,6 @@ class OCPpendulum:
         self.ocp.solver_options.integrator_type = 'ERK'
         self.ocp.solver_options.nlp_solver_type = 'SQP'
 
-        self.simX = np.ndarray((self.N+1, 2))
-
         # Solver
         self.ocp_solver = AcadosOcpSolver(
             self.ocp, json_file='acados_ocp.json')
@@ -99,8 +97,4 @@ class OCPpendulum:
         if status != 0:
             return 0
         else:
-            # get solution
-            for i in range(self.N):
-                self.simX[i, :] = self.ocp_solver.get(i, "x")
-            self.simX[self.N, :] = self.ocp_solver.get(self.N, "x")
             return 1
