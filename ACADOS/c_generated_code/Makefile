@@ -39,28 +39,26 @@
 
 # model
 MODEL_SRC=
-MODEL_SRC+= pendulum_ode_model/pendulum_ode_expl_ode_fun.c
-MODEL_SRC+= pendulum_ode_model/pendulum_ode_expl_vde_forw.c
+MODEL_SRC+= double_pendulum_ode_model/double_pendulum_ode_expl_ode_fun.c
+MODEL_SRC+= double_pendulum_ode_model/double_pendulum_ode_expl_vde_forw.c
 MODEL_OBJ := $(MODEL_SRC:.c=.o)
 
 # optimal control problem - mostly CasADi exports
 OCP_SRC=
-OCP_SRC+= pendulum_ode_constraints/pendulum_ode_constr_h_e_fun_jac_uxt_zt.c
-OCP_SRC+= pendulum_ode_constraints/pendulum_ode_constr_h_e_fun.c
-OCP_SRC+= acados_solver_pendulum_ode.c
+OCP_SRC+= acados_solver_double_pendulum_ode.c
 OCP_OBJ := $(OCP_SRC:.c=.o)
 
 # for sim solver
-SIM_SRC= acados_sim_solver_pendulum_ode.c
+SIM_SRC= acados_sim_solver_double_pendulum_ode.c
 SIM_OBJ := $(SIM_SRC:.c=.o)
 
 # for target example
-EX_SRC= main_pendulum_ode.c
+EX_SRC= main_double_pendulum_ode.c
 EX_OBJ := $(EX_SRC:.c=.o)
 EX_EXE := $(EX_SRC:.c=)
 
 # for target example_sim
-EX_SIM_SRC= main_sim_pendulum_ode.c
+EX_SIM_SRC= main_sim_double_pendulum_ode.c
 EX_SIM_OBJ := $(EX_SIM_SRC:.c=.o)
 EX_SIM_EXE := $(EX_SIM_SRC:.c=)
 
@@ -77,10 +75,12 @@ INCLUDE_PATH = /home/asia/acados/include
 LIB_PATH = /home/asia/acados/lib
 
 # preprocessor flags for make's implicit rules
+CPPFLAGS += -DACADOS_WITH_QPOASES
 CPPFLAGS+= -I$(INCLUDE_PATH)
 CPPFLAGS+= -I$(INCLUDE_PATH)/acados
 CPPFLAGS+= -I$(INCLUDE_PATH)/blasfeo/include
 CPPFLAGS+= -I$(INCLUDE_PATH)/hpipm/include
+CPPFLAGS+= -I $(INCLUDE_PATH)/qpOASES_e/
 
 
 # define the c-compiler flags for make's implicit rules
@@ -96,11 +96,11 @@ LDLIBS+= -lacados
 LDLIBS+= -lhpipm
 LDLIBS+= -lblasfeo
 LDLIBS+= -lm
-LDLIBS+= 
+LDLIBS+= -lqpOASES_e
 
 # libraries
-LIBACADOS_SOLVER=libacados_solver_pendulum_ode.so
-LIBACADOS_OCP_SOLVER=libacados_ocp_solver_pendulum_ode.so
+LIBACADOS_SOLVER=libacados_solver_double_pendulum_ode.so
+LIBACADOS_OCP_SOLVER=libacados_ocp_solver_double_pendulum_ode.so
 LIBACADOS_SIM_SOLVER=lib$(SIM_SRC:.c=.so)
 
 # virtual targets
@@ -153,7 +153,7 @@ ocp_cython: ocp_cython_o
 	-o acados_ocp_solver_pyx.so \
 	-Wl,-rpath=$(LIB_PATH) \
 	acados_ocp_solver_pyx.o \
-	$(abspath .)/libacados_ocp_solver_pendulum_ode.so \
+	$(abspath .)/libacados_ocp_solver_double_pendulum_ode.so \
 	$(LDFLAGS) $(LDLIBS)
 
 clean:
@@ -166,7 +166,7 @@ clean_ocp_shared_lib:
 	$(RM) $(OCP_OBJ)
 
 clean_ocp_cython:
-	$(RM) libacados_ocp_solver_pendulum_ode.so
-	$(RM) acados_solver_pendulum_ode.o
+	$(RM) libacados_ocp_solver_double_pendulum_ode.so
+	$(RM) acados_solver_double_pendulum_ode.o
 	$(RM) acados_ocp_solver_pyx.so
 	$(RM) acados_ocp_solver_pyx.o
