@@ -26,12 +26,13 @@ with cProfile.Profile() as pr:
     q_min = ocp.thetamin
 
     # Initialization of the SVM classifier:
-    clf = svm.SVC(C=1000, kernel='rbf', probability=True, class_weight='balanced')
+    clf = svm.SVC(C=1000, kernel='rbf', probability=True, class_weight={1: 1, 0: 100})
 
     # Active learning parameters:
-    N_init = pow(5, ocp_dim)  # size of initial labeled set
+    N_init = pow(10, ocp_dim)  # size of initial labeled set
     B = pow(10, ocp_dim)  # batch size
-    etp_stop = 0.2  # active learning stopping condition
+    etp_stop = 0.1  # active learning stopping condition
+    etp_ref = 1e-4
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=2, scramble=False)
@@ -40,10 +41,64 @@ with cProfile.Profile() as pr:
     u_bounds = [q_max, v_max]
     data = qmc.scale(sample, l_bounds, u_bounds)
 
+    # # Generate the initial set of labeled samples:
+    # X_iter = [[(q_max+q_min)/2, 0.]]
+    # y_iter = [ocp.compute_problem((q_max+q_min)/2, 0.)]
+    # y_weight = [1]
+
+    # # Check boundaries:
+    # for p in range(10):
+    #     v_test = v_min + p*(v_max - v_min)/10
+    #     X_iter = np.append(X_iter, [[q_min, v_test]], axis=0)
+    #     res = ocp.compute_problem(q_min, v_test)
+    #     y_iter = np.append(y_iter, res)
+    #     if res == 1:
+    #         y_weight = np.append(y_weight, 1)
+    #     else:
+    #         y_weight = np.append(y_weight, 10)
+    #     X_iter = np.append(X_iter, [[q_max, v_test]], axis=0)
+    #     res = ocp.compute_problem(q_max, v_test)
+    #     y_iter = np.append(y_iter, res)
+    #     if res == 1:
+    #         y_weight = np.append(y_weight, 1)
+    #     else:
+    #         y_weight = np.append(y_weight, 10)
+    # for p in range(10):
+    #     q_test = q_min + p*(q_max - q_min)/10
+    #     X_iter = np.append(X_iter, [[q_test, v_min]], axis=0)
+    #     res = ocp.compute_problem(q_test, v_min)
+    #     y_iter = np.append(y_iter, res)
+    #     if res == 1:
+    #         y_weight = np.append(y_weight, 1)
+    #     else:
+    #         y_weight = np.append(y_weight, 10)
+    #     X_iter = np.append(X_iter, [[q_test, v_max]], axis=0)
+    #     res = ocp.compute_problem(q_test, v_max)
+    #     y_iter = np.append(y_iter, res)
+    #     if res == 1:
+    #         y_weight = np.append(y_weight, 1)
+    #     else:
+    #         y_weight = np.append(y_weight, 10)
+
     # Generate the initial set of labeled samples:
-    X_iter = [[(q_max+q_min)/2, 0.]]
-    y_iter = [ocp.compute_problem((q_max+q_min)/2, 0.)]
-    y_weight = [1]
+    X_iter = np.empty((ocp_dim * 2 * 10, ocp_dim))
+    y_iter = np.empty(ocp_dim * 2 * 10)
+
+    for p in range(10):
+        v_test = v_min + p*(v_max - v_min)/10
+        q_test = q_min + p*(q_max - q_min)/10
+
+        X_iter[p, :] = [q_min - 0.1, v_test]
+        y_iter[p] = 0
+
+        X_iter[p + 10, :] = [q_max + 0.1, v_test]
+        y_iter[p + 10] = 0
+
+        X_iter[p + 20, :] = [q_test, v_min - 0.1]
+        y_iter[p + 20] = 0
+
+        X_iter[p + 30, :] = [q_test, v_max + 0.1]
+        y_iter[p + 30] = 0
 
     Xu_iter = data  # Unlabeled set
 
@@ -56,7 +111,6 @@ with cProfile.Profile() as pr:
         X_iter = np.append(X_iter, [[q0, v0]], axis=0)
         res = ocp.compute_problem(q0, v0)
         y_iter = np.append(y_iter, res)
-        y_weight = np.append(y_weight, 1)
 
         # Add intermediate states of succesfull initial conditions
         if res == 1:
@@ -65,49 +119,14 @@ with cProfile.Profile() as pr:
                 if norm(current_val[1]) > 0.01:
                     X_iter = np.append(X_iter, [current_val], axis=0)
                     y_iter = np.append(y_iter, 1)
-                    y_weight = np.append(y_weight, 1)
                 else:
                     break
 
     # Delete tested data from the unlabeled set:
     Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
 
-    # Check boundaries:
-    for p in range(10):
-        v_test = v_min + p*(v_max - v_min)/10
-        X_iter = np.append(X_iter, [[q_min, v_test]], axis=0)
-        res = ocp.compute_problem(q_min, v_test)
-        y_iter = np.append(y_iter, res)
-        if res == 1:
-            y_weight = np.append(y_weight, 1)
-        else:
-            y_weight = np.append(y_weight, 10)
-        X_iter = np.append(X_iter, [[q_max, v_test]], axis=0)
-        res = ocp.compute_problem(q_max, v_test)
-        y_iter = np.append(y_iter, res)
-        if res == 1:
-            y_weight = np.append(y_weight, 1)
-        else:
-            y_weight = np.append(y_weight, 10)
-    for p in range(10):
-        q_test = q_min + p*(q_max - q_min)/10
-        X_iter = np.append(X_iter, [[q_test, v_min]], axis=0)
-        res = ocp.compute_problem(q_test, v_min)
-        y_iter = np.append(y_iter, res)
-        if res == 1:
-            y_weight = np.append(y_weight, 1)
-        else:
-            y_weight = np.append(y_weight, 10)
-        X_iter = np.append(X_iter, [[q_test, v_max]], axis=0)
-        res = ocp.compute_problem(q_test, v_max)
-        y_iter = np.append(y_iter, res)
-        if res == 1:
-            y_weight = np.append(y_weight, 1)
-        else:
-            y_weight = np.append(y_weight, 10)
-
     # Training of the classifier:
-    clf.fit(X_iter, y_iter, sample_weight=y_weight)
+    clf.fit(X_iter, y_iter)
 
     print("INITIAL CLASSIFIER TRAINED")
 
@@ -127,7 +146,7 @@ with cProfile.Profile() as pr:
     Z = Z.reshape(xx.shape)
     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
     plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter, marker=".", alpha=0.5, cmap=plt.cm.Paired)
-    plt.xlim([0., np.pi/2 - 0.02])
+    plt.xlim([0., np.pi/2 - 0.01])
     plt.ylim([-10., 10.])
 
     # Active learning:
@@ -148,6 +167,9 @@ with cProfile.Profile() as pr:
         etp = entropy(prob_xu, axis=1)
         maxindex = np.argpartition(etp, -B)[-B:]  # indexes of the uncertain samples
 
+        # plt.figure()
+        # plt.scatter(Xu_iter[:, 0], Xu_iter[:, 1], c=etp)
+
         etpmax = max(etp[maxindex])  # max entropy used for the stopping condition
 
         # Add the B most uncertain samples to the labeled set:
@@ -159,10 +181,6 @@ with cProfile.Profile() as pr:
             X_iter = np.append(X_iter, [[q0, v0]], axis=0)
             res = ocp.compute_problem(q0, v0)
             y_iter = np.append(y_iter, res)
-            if res == 1:
-                y_weight = np.append(y_weight, 1)
-            else:
-                y_weight = np.append(y_weight, 3)
 
             # Add intermediate states of succesfull initial conditions:
             if res == 1:
@@ -170,20 +188,19 @@ with cProfile.Profile() as pr:
                     current_val = ocp.ocp_solver.get(f, "x")
                     prob_sample = clf.predict_proba([current_val])
                     etp_sample = entropy(prob_sample, axis=1)
-                    if etp_sample > etp_stop/10:
+                    if etp_sample > etp_ref:
                         X_iter = np.append(X_iter, [current_val], axis=0)
                         y_iter = np.append(y_iter, 1)
-                        y_weight = np.append(y_weight, 1)
                     else:
                         break
 
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
-        # etp = np.delete(etp, maxindex)
-        # Xu_iter = Xu_iter[etp > etpmax * etp_stop/10]
+        etp = np.delete(etp, maxindex)
+        Xu_iter = Xu_iter[etp > etpmax*etp_ref]
 
         # Re-fit the model with the new selected X_iter:
-        clf.fit(X_iter, y_iter, sample_weight=y_weight)
+        clf.fit(X_iter, y_iter)
 
         k += 1
 
@@ -199,7 +216,7 @@ with cProfile.Profile() as pr:
         plt.figure()
         x_min, x_max = 0., np.pi/2
         y_min, y_max = -10., 10.
-        h = .01
+        h = .02
         xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
         Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
         Z = Z.reshape(xx.shape)

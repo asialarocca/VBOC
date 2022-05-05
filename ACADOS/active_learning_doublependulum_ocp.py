@@ -26,12 +26,13 @@ with cProfile.Profile() as pr:
     q_min = ocp.thetamin
 
     # Initialization of the SVM classifier:
-    clf = svm.SVC(C=10000, kernel='rbf', probability=True, class_weight='balanced')
+    clf = svm.SVC(C=1000, kernel='rbf', probability=True, class_weight={1: 1, 0: 100})
 
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
     B = pow(10, ocp_dim)  # batch size
     etp_stop = 0.5  # active learning stopping condition
+    etp_ref = 1e-4
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=4, scramble=False)
@@ -44,7 +45,6 @@ with cProfile.Profile() as pr:
     X_iter = [[(q_max+q_min)/2, (q_max+q_min)/2, 0., 0.]]
     res = ocp.compute_problem([(q_max+q_min)/2, (q_max+q_min)/2], [0., 0.])
     y_iter = [res]
-    y_weight = [1]
 
     Xu_iter = data  # Unlabeled set
 
@@ -57,7 +57,6 @@ with cProfile.Profile() as pr:
         X_iter = np.append(X_iter, [[q0[0], q0[1], v0[0], v0[1]]], axis=0)
         res = ocp.compute_problem(q0, v0)
         y_iter = np.append(y_iter, res)
-        y_weight = np.append(y_weight, 1)
 
         # Add intermediate states of succesfull initial conditions:
         if res == 1:
@@ -66,7 +65,6 @@ with cProfile.Profile() as pr:
                 if norm(current_val[2:]) > 0.01:
                     X_iter = np.append(X_iter, [current_val], axis=0)
                     y_iter = np.append(y_iter, 1)
-                    y_weight = np.append(y_weight, 1)
                 else:
                     break
 
@@ -74,7 +72,7 @@ with cProfile.Profile() as pr:
     Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
 
     # Training of the classifier:
-    clf.fit(X_iter, y_iter, sample_weight=y_weight)
+    clf.fit(X_iter, y_iter)
 
     print("INITIAL CLASSIFIER TRAINED")
 
@@ -107,10 +105,6 @@ with cProfile.Profile() as pr:
             X_iter = np.append(X_iter, [[q0[0], q0[1], v0[0], v0[1]]], axis=0)
             res = ocp.compute_problem(q0, v0)
             y_iter = np.append(y_iter, res)
-            if res == 1:
-                y_weight = np.append(y_weight, 1)
-            else:
-                y_weight = np.append(y_weight, 3)
 
             # Add intermediate states of succesfull initial conditions:
             if res == 1:
@@ -118,20 +112,19 @@ with cProfile.Profile() as pr:
                     current_val = ocp.ocp_solver.get(f, "x")
                     prob_sample = clf.predict_proba([current_val])
                     etp_sample = entropy(prob_sample, axis=1)
-                    if etp_sample > etp_stop/10:
+                    if etp_sample > etp_ref:
                         X_iter = np.append(X_iter, [current_val], axis=0)
                         y_iter = np.append(y_iter, 1)
-                        y_weight = np.append(y_weight, 1)
                     else:
                         break
 
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
-        # etp = np.delete(etp, maxindex)
-        # Xu_iter = Xu_iter[etp > etp_stop/5]
+        etp = np.delete(etp, maxindex)
+        Xu_iter = Xu_iter[etp > etpmax*etp_ref]
 
         # Re-fit the model with the new selected X_iter:
-        clf.fit(X_iter, y_iter, sample_weight=y_weight)
+        clf.fit(X_iter, y_iter)
 
         k += 1
 
