@@ -32,37 +32,42 @@ with cProfile.Profile() as pr:
     clf = svm.SVC(C=1000, kernel='rbf', probability=True, class_weight={1: 1, 0: 100})
 
     # Active learning parameters:
-    N_init = pow(10, ocp_dim)  # size of initial labeled set
-    B = pow(10, ocp_dim)  # batch size
-    etp_stop = 0.1  # active learning stopping condition
+    N_init = pow(5, ocp_dim)  # size of initial labeled set
+    B = pow(5, ocp_dim)  # batch size
+    etp_stop = 0.2  # active learning stopping condition
     etp_ref = 1e-4
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=2, scramble=False)
-    sample = sampler.random(n=pow(100, ocp_dim))
+    sample = sampler.random(n=pow(80, ocp_dim))
     l_bounds = [q_min, v_min]
     u_bounds = [q_max, v_max]
     data = qmc.scale(sample, l_bounds, u_bounds)
 
     # Generate the initial set of labeled samples:
-    X_iter = np.empty((ocp_dim * 2 * 10, ocp_dim))
-    y_iter = np.empty(ocp_dim * 2 * 10)
+    X_iter = [[(q_max+q_min)/2, 0.]]
+    y_iter = [ocp.compute_problem((q_max+q_min)/2, 0.)]
+    y_weight = [1]
 
-    for p in range(10):
-        v_test = v_min + p*(v_max - v_min)/10
-        q_test = q_min + p*(q_max - q_min)/10
+    # # Generate the initial set of labeled samples:
+    # X_iter = np.empty((ocp_dim * 2 * 10, ocp_dim))
+    # y_iter = np.empty(ocp_dim * 2 * 10)
 
-        X_iter[p, :] = [q_min - 0.1, v_test]
-        y_iter[p] = 0
+    # for p in range(10):
+    #     v_test = v_min + p*(v_max - v_min)/10
+    #     q_test = q_min + p*(q_max - q_min)/10
 
-        X_iter[p + 10, :] = [q_max + 0.1, v_test]
-        y_iter[p + 10] = 0
+    #     X_iter[p, :] = [q_min - 0.1, v_test]
+    #     y_iter[p] = 0
 
-        X_iter[p + 20, :] = [q_test, v_min - 0.1]
-        y_iter[p + 20] = 0
+    #     X_iter[p + 10, :] = [q_max + 0.1, v_test]
+    #     y_iter[p + 10] = 0
 
-        X_iter[p + 30, :] = [q_test, v_max + 0.1]
-        y_iter[p + 30] = 0
+    #     X_iter[p + 20, :] = [q_test, v_min - 0.1]
+    #     y_iter[p + 20] = 0
+
+    #     X_iter[p + 30, :] = [q_test, v_max + 0.1]
+    #     y_iter[p + 30] = 0
 
     # Generate the initial set of unlabeled samples:
     Xu_iter = data
@@ -152,7 +157,7 @@ with cProfile.Profile() as pr:
         ind_set = np.append(ind_set, ind_test[maxindex])
         ind_test = np.delete(ind_test, maxindex)
         etp = np.delete(etp, maxindex)
-        ind_test = ind_test[etp > etpmax * etp_stop/10]
+        ind_test = ind_test[etp > etpmax*etp_ref]
 
         # Re-fit the model with the new selected X_iter:
         clf.fit(X_iter, y_iter)
@@ -328,7 +333,7 @@ with cProfile.Profile() as pr:
         # data from a predefined pool of samples:
         # number of positively classified data
         n_temp = sum(clf.predict(data[1: pow(10, ocp_dim), :]))
-        if n_temp < n_sum + 10 and n_temp > n_sum - 10:
+        if n_temp - n_sum == 0:
             break
         n_sum = n_temp
 

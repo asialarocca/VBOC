@@ -30,23 +30,26 @@ q_min = pid.q_min
 
 # Generate low-discrepancy unlabeled samples:
 sampler = qmc.Halton(d=2, scramble=False)
-sample = sampler.random(n=10000)
+sample = sampler.random(n=100**2)
 l_bounds = [q_min, v_min]
 u_bounds = [q_max, v_max]
 data = qmc.scale(sample, l_bounds, u_bounds)
 
 # plt.figure()
-#plt.scatter(data[:,0], data[:,1], marker=".", alpha=0.5);
+# plt.scatter(data[:, 0], data[:, 1], marker=".", alpha=0.5)
 
 # Generate the initial set of labeled samples:
-X_iter = [[0, 0]]
-y_iter = [pid.compute_problem(np.zeros(1), np.zeros(1))]
+X_iter = np.empty((0, 2))  # [[0, 0]]
+y_iter = np.empty((0, 1))  # [pid.compute_problem(np.zeros(1), np.zeros(1))]
+X_traj = np.empty((0, 2))
+y_traj = np.empty((0, 1))
+y_traj_plot = np.empty((0, 1))
 
 Xu_iter = data
 
 # Counters of positive and negative samples:
-#n_pos = 0
-#n_neg = 0
+# n_pos = 0
+# n_neg = 0
 
 for n in range(N_init):
     q0 = data[n, 0]
@@ -65,38 +68,45 @@ for n in range(N_init):
         q_traj = pid.q[:pid.niter]
         v_traj = pid.v[:pid.niter]
         if int(q_traj.shape[0]/5) != 0:
-            for l in range(1, q_traj.shape[0], int(q_traj.shape[0]/5)):
-                X_iter = np.append(X_iter, [[q_traj[l], v_traj[l]]], axis=0)
-                y_iter = np.append(y_iter, 1)
-                
+            for l in range(2, q_traj.shape[0], int(q_traj.shape[0]/5)):
+                # X_iter = np.append(X_iter, [[q_traj[l], v_traj[l]]], axis=0)
+                X_traj = np.append(X_traj, [[q_traj[l], v_traj[l]]], axis=0)
+                # y_iter = np.append(y_iter, 1)
+                y_traj = np.append(y_traj, 1)
+                y_traj_plot = np.append(y_traj_plot, 2)
+
 Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
+X_conc = np.concatenate([X_iter, X_traj])
+y_conc = np.concatenate([y_iter, y_traj])
 
 # Create and train the initial svm classifier:
-#param_grid = {'C': [100000], 'kernel': ['rbf'], 'probability': [True], 'class_weight': ['balanced']}
-#clf = GridSearchCV(svm.SVC(), param_grid, refit = True)
+# param_grid = {'C': [100000], 'kernel': ['rbf'], 'probability': [True], 'class_weight': ['balanced']}
+# clf = GridSearchCV(svm.SVC(), param_grid, refit = True)
 
 clf = svm.SVC(C=100000, kernel='rbf', probability=True,
               class_weight='balanced')
-clf.fit(X_iter, y_iter)
+clf.fit(X_conc, y_conc)
 
 print("INITIAL CLASSIFIER TRAINED")
 
 # Model Accuracy (calculated on the training set):
-print("Accuracy:", metrics.accuracy_score(y_iter, clf.predict(X_iter)))
+print("Accuracy:", metrics.accuracy_score(y_conc, clf.predict(X_conc)))
 
 # Plot of the labeled data and classifier:
 plt.figure()
-#x_min, x_max = X_iter[:,0].min(), X_iter[:,0].max()
-#y_min, y_max = X_iter[:,1].min(), X_iter[:,1].max()
+# x_min, x_max = X_iter[:,0].min(), X_iter[:,0].max()
+# y_min, y_max = X_iter[:,1].min(), X_iter[:,1].max()
 x_min, x_max = 0., np.pi/2
 y_min, y_max = -10., 10.
-h = 0.02
+h = 0.01
 xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+out = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
+out = out.reshape(xx.shape)
 Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
 Z = Z.reshape(xx.shape)
-
 plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-scatter = plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter,
+plt.contour(xx, yy, out, levels=[0], linewidths=(2,), colors=('k',))
+scatter = plt.scatter(X_conc[:, 0], X_conc[:, 1], c=np.concatenate([y_iter, y_traj_plot]),
                       marker=".", alpha=0.5, cmap=plt.cm.Paired)
 plt.xlim([0., np.pi/2 - 0.02])
 plt.ylim([-10., 10.])
@@ -104,12 +114,22 @@ plt.xlabel('Initial position [rad]')
 plt.ylabel('Initial velocity [rad/s]')
 plt.title('Classifier')
 hand = scatter.legend_elements()[0]
-plt.legend(handles=hand, labels=("Unfeasible", "Feasible"))
+plt.legend(handles=hand, labels=("Unfeasible", "Feasible (tested)", "Feasible (intermediate results)"))
+
+# Plot of the decision function:
+plt.figure()
+levels = np.linspace(out.min(), out.max(), 10)
+plt.contourf(xx, yy, out, levels=levels)
+this = plt.contour(xx, yy, out, levels=levels, colors=('k',), linewidths=(1,))
+plt.clabel(this, fmt='%2.1f', colors='w', fontsize=11)
+plt.xlabel('Initial position [rad]')
+plt.ylabel('Initial velocity [rad/s]')
+plt.title('Decision function')
 
 # Plot of the support vectors:
 sup = clf.support_
-sup_X = X_iter[sup]
-sup_y = y_iter[sup]
+sup_X = X_conc[sup]
+sup_y = y_conc[sup]
 
 plt.figure()
 plt.scatter(sup_X[:, 0], sup_X[:, 1], c=sup_y,
@@ -118,15 +138,6 @@ plt.xlabel('Initial position [rad]')
 plt.ylabel('Initial velocity [rad/s]')
 plt.title('Support vectors')
 
-# Plot of the decision function:
-out = clf.decision_function(data)
-
-plt.figure()
-plt.scatter(data[:, 0], data[:, 1], c=out,
-            marker=".", alpha=0.5, cmap=plt.cm.Paired)
-plt.xlabel('Initial position [rad]')
-plt.ylabel('Initial velocity [rad/s]')
-plt.title('Decision function')
 
 # PLOT OF THE POINTS NEAR TO THE DECISION BOUNDARY:
 # y_score = clf.decision_function(data)
@@ -184,19 +195,23 @@ while True:
             q_traj = pid.q[:pid.niter]
             v_traj = pid.v[:pid.niter]
             if int(q_traj.shape[0]/5) != 0:
-                for l in range(1, q_traj.shape[0], int(q_traj.shape[0]/5)):
-                    X_iter = np.append(
-                        X_iter, [[q_traj[l], v_traj[l]]], axis=0)
-                    y_iter = np.append(y_iter, 1)
+                for l in range(2, q_traj.shape[0], int(q_traj.shape[0]/5)):
+                    # X_iter = np.append(X_iter, [[q_traj[l], v_traj[l]]], axis=0)
+                    X_traj = np.append(X_traj, [[q_traj[l], v_traj[l]]], axis=0)
+                    # y_iter = np.append(y_iter, 1)
+                    y_traj = np.append(y_traj, 1)
+                    y_traj_plot = np.append(y_traj_plot, 2)
 
     Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
+    X_conc = np.concatenate([X_iter, X_traj])
+    y_conc = np.concatenate([y_iter, y_traj])
 
     # Re-fit the model with the new selected X_iter:
-    clf.fit(X_iter, y_iter)
+    clf.fit(X_conc, y_conc)
     print("CLASSIFIER", k+1, "TRAINED")
 
     # Model Accuracy (calculated on the training set):
-    print("Accuracy:", metrics.accuracy_score(y_iter, clf.predict(X_iter)))
+    print("Accuracy:", metrics.accuracy_score(y_conc, clf.predict(X_conc)))
 
     k += 1
 
@@ -239,17 +254,19 @@ while True:
 
 # Plot of the labeled data and classifier:
 plt.figure()
-#x_min, x_max = X_iter[:,0].min(), X_iter[:,0].max()
-#y_min, y_max = X_iter[:,1].min(), X_iter[:,1].max()
+# x_min, x_max = X_iter[:,0].min(), X_iter[:,0].max()
+# y_min, y_max = X_iter[:,1].min(), X_iter[:,1].max()
 x_min, x_max = 0., np.pi/2
 y_min, y_max = -10., 10.
-h = 0.02
+h = 0.01
 xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+out = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
+out = out.reshape(xx.shape)
 Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
 Z = Z.reshape(xx.shape)
-
 plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-scatter = plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter,
+plt.contour(xx, yy, out, levels=[0], linewidths=(2,), colors=('k',))
+scatter = plt.scatter(X_conc[:, 0], X_conc[:, 1], c=np.concatenate([y_iter, y_traj_plot]),
                       marker=".", alpha=0.5, cmap=plt.cm.Paired)
 plt.xlim([0., np.pi/2 - 0.02])
 plt.ylim([-10., 10.])
@@ -257,12 +274,22 @@ plt.xlabel('Initial position [rad]')
 plt.ylabel('Initial velocity [rad/s]')
 plt.title('Classifier')
 hand = scatter.legend_elements()[0]
-plt.legend(handles=hand, labels=("Unfeasible", "Feasible"))
+plt.legend(handles=hand, labels=("Unfeasible", "Feasible (tested)", "Feasible (intermediate results)"))
+
+# Plot of the decision function:
+plt.figure()
+levels = np.linspace(out.min(), out.max(), 10)
+plt.contourf(xx, yy, out, levels=levels)
+this = plt.contour(xx, yy, out, levels=levels, colors=('k',), linewidths=(1,))
+plt.clabel(this, fmt='%2.1f', colors='w', fontsize=11)
+plt.xlabel('Initial position [rad]')
+plt.ylabel('Initial velocity [rad/s]')
+plt.title('Decision function')
 
 # Plot of the support vectors:
 sup = clf.support_
-sup_X = X_iter[sup]
-sup_y = y_iter[sup]
+sup_X = X_conc[sup]
+sup_y = y_conc[sup]
 
 plt.figure()
 plt.scatter(sup_X[:, 0], sup_X[:, 1], c=sup_y,
@@ -270,16 +297,6 @@ plt.scatter(sup_X[:, 0], sup_X[:, 1], c=sup_y,
 plt.xlabel('Initial position [rad]')
 plt.ylabel('Initial velocity [rad/s]')
 plt.title('Support vectors')
-
-# Plot of the decision function:
-out = clf.decision_function(data)
-
-plt.figure()
-plt.scatter(data[:, 0], data[:, 1], c=out,
-            marker=".", alpha=0.5, cmap=plt.cm.Paired)
-plt.xlabel('Initial position [rad]')
-plt.ylabel('Initial velocity [rad/s]')
-plt.title('Decision function')
 
 plt.show()
 

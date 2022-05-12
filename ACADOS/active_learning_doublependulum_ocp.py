@@ -26,20 +26,26 @@ with cProfile.Profile() as pr:
     q_min = ocp.thetamin
 
     # Initialization of the SVM classifier:
-    clf = svm.SVC(C=1000, kernel='rbf', probability=True, class_weight={1: 1, 0: 100})
+    clf = svm.SVC(C=1000, kernel='rbf', probability=True,
+                  class_weight={1: 1, 0: 100}, cache_size=1000)
 
     # Active learning parameters:
-    N_init = pow(10, ocp_dim)  # size of initial labeled set
-    B = pow(10, ocp_dim)  # batch size
-    etp_stop = 0.5  # active learning stopping condition
+    N_init = pow(5, ocp_dim)  # size of initial labeled set
+    B = pow(5, ocp_dim)  # batch size
+    etp_stop = 0.2  # active learning stopping condition
     etp_ref = 1e-4
 
-    # Generate low-discrepancy unlabeled samples:
-    sampler = qmc.Halton(d=4, scramble=False)
-    sample = sampler.random(n=pow(50, ocp_dim))
-    l_bounds = [q_min, q_min, v_min, v_min]
-    u_bounds = [q_max, q_max, v_max, v_max]
-    data = qmc.scale(sample, l_bounds, u_bounds)
+    # # Generate low-discrepancy unlabeled samples:
+    # sampler = qmc.Halton(d=ocp_dim, scramble=False)
+    # sample = sampler.random(n=pow(50, ocp_dim))
+    # l_bounds = [q_min, q_min, v_min, v_min]
+    # u_bounds = [q_max, q_max, v_max, v_max]
+    # data = qmc.scale(sample, l_bounds, u_bounds)
+
+    # Generate random samples:
+    data_q = np.random.uniform(q_min, q_max, size=pow(50, ocp_dim))
+    data_v = np.random.uniform(v_min, v_max, size=pow(50, ocp_dim))
+    data = np.transpose(np.array([data_q[:], data_q[:], data_v[:], data_v[:]]))
 
     # Generate the initial set of labeled samples:
     X_iter = [[(q_max+q_min)/2, (q_max+q_min)/2, 0., 0.]]
@@ -50,7 +56,7 @@ with cProfile.Profile() as pr:
 
     # Training of an initial classifier:
     for n in range(N_init):
-        q0 = data[n, :2]
+        q0 = data[n, : 2]
         v0 = data[n, 2:]
 
         # Data testing:
@@ -62,11 +68,8 @@ with cProfile.Profile() as pr:
         if res == 1:
             for f in range(1, ocp.N, int(ocp.N/3)):
                 current_val = ocp.ocp_solver.get(f, "x")
-                if norm(current_val[2:]) > 0.01:
-                    X_iter = np.append(X_iter, [current_val], axis=0)
-                    y_iter = np.append(y_iter, 1)
-                else:
-                    break
+                X_iter = np.append(X_iter, [current_val], axis=0)
+                y_iter = np.append(y_iter, 1)
 
     # Delete tested data from the unlabeled set:
     Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
@@ -76,14 +79,55 @@ with cProfile.Profile() as pr:
 
     print("INITIAL CLASSIFIER TRAINED")
 
+    print('support vectors:', clf.support_.shape, 'X_iter:', X_iter.shape, 'Xu_iter:', Xu_iter.shape)
+
+    # Print statistics:
+    y_pred = clf.predict(X_iter)
+    # accuracy (calculated on the training set)
+    print("Accuracy:", metrics.accuracy_score(y_iter, y_pred))
+    print("False positives:", metrics.confusion_matrix(y_iter, y_pred)[0, 1])
+
+    # # Plot the results:
+    # plt.figure()
+    # h = 0.02
+    # xx, yy = np.meshgrid(np.arange(q_min, q_max, h), np.arange(v_min, v_max, h))
+    # xrav = xx.ravel()
+    # yrav = yy.ravel()
+    # Z = clf.predict(np.c_[q_min*np.ones(xrav.shape[0]), xrav,
+    #                 np.zeros(yrav.shape[0]), yrav])
+    # Z = Z.reshape(xx.shape)
+    # plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+    # Xit = [X_iter[0, :]]
+    # yit = y_iter[0]
+    # for i in range(X_iter.shape[0]):
+    #     # if X_iter[i, 0] < q_min + 1. and norm(X_iter[i, 2]) < 1.:
+    #     Xit = np.append(Xit, [X_iter[i, :]], axis=0)
+    #     yit = np.append(yit, y_iter[i])
+    # print(Xit, yit)
+    # plt.scatter(Xit[:, 1], Xit[:, 3], c=yit, marker=".", alpha=0.5, cmap=plt.cm.Paired)
+    # plt.xlim([q_min, q_max-0.01])
+    # plt.ylim([v_min, v_max])
+    # plt.grid()
+
+    # plt.show()
+
     # Active learning:
     k = 0  # iteration number
     etpmax = 1
+
+    et = entropy(clf.predict_proba(X_iter), axis=1)
+    # X_iter = X_iter[et > etp_ref]
+    # y_iter = y_iter[et > etp_ref]
+    et = [1 if x > etp_ref else x/etp_ref for x in et]
+    sel = [i for i in range(X_iter.shape[0]) if np.random.uniform() < et[i]]
+    X_iter = X_iter[sel]
+    y_iter = y_iter[sel]
 
     while True:
         # Stopping condition:
         xu_shape = Xu_iter.shape[0]
         if etpmax < etp_stop or xu_shape == 0:
+            print('etpmax:', etpmax, 'remaining points:', xu_shape)
             break
 
         if xu_shape < B:
@@ -98,7 +142,7 @@ with cProfile.Profile() as pr:
 
         # Add the B most uncertain samples to the labeled set:
         for x in range(B):
-            q0 = Xu_iter[maxindex[x], :2]
+            q0 = Xu_iter[maxindex[x], : 2]
             v0 = Xu_iter[maxindex[x], 2:]
 
             # Data testing:
@@ -121,7 +165,10 @@ with cProfile.Profile() as pr:
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
         etp = np.delete(etp, maxindex)
-        Xu_iter = Xu_iter[etp > etpmax*etp_ref]
+        # Xu_iter = Xu_iter[etp < etp_ref]
+        etp = [1 if x > etp_ref else x/etp_ref for x in etp]
+        sel = [i for i in range(Xu_iter.shape[0]) if np.random.uniform() < etp[i]]
+        Xu_iter = Xu_iter[sel]
 
         # Re-fit the model with the new selected X_iter:
         clf.fit(X_iter, y_iter)
@@ -130,32 +177,46 @@ with cProfile.Profile() as pr:
 
         print("CLASSIFIER", k, "TRAINED")
 
-    # # Print statistics:
-    # y_pred = clf.predict(X_iter)
-    # # accuracy (calculated on the training set)
-    # print("Accuracy:", metrics.accuracy_score(y_iter, y_pred))
-    # print("False positives:", metrics.confusion_matrix(y_iter, y_pred)[0, 1])
+        print('support vectors:', clf.support_.shape, 'X_iter:',
+              X_iter.shape, 'Xu_iter:', Xu_iter.shape)
 
-    # Plot the results:
-    plt.figure()
-    h = 0.02
-    xx, yy = np.meshgrid(np.arange(q_min, q_max, h), np.arange(v_min, v_max, h))
-    xrav = xx.ravel()
-    yrav = yy.ravel()
-    Z = clf.predict(np.c_[q_min*np.ones(xrav.shape[0]), xrav,
-                    np.zeros(yrav.shape[0]), yrav])
-    Z = Z.reshape(xx.shape)
-    plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    Xit = [X_iter[0, :]]
-    yit = y_iter[0]
-    for i in range(X_iter.shape[0]):
-        if X_iter[i, 0] < q_min + 0.1 and norm(X_iter[i, 2]) < 0.1:
-            Xit = np.append(Xit, [X_iter[i, :]], axis=0)
-            yit = np.append(yit, y_iter[i])
-    plt.scatter(Xit[:, 1], Xit[:, 3], c=yit, marker=".", alpha=0.5, cmap=plt.cm.Paired)
-    plt.xlim([q_min, q_max-0.01])
-    plt.ylim([v_min, v_max])
-    plt.grid()
+        # Print statistics:
+        y_pred = clf.predict(X_iter)
+        # accuracy (calculated on the training set)
+        print("Accuracy:", metrics.accuracy_score(y_iter, y_pred))
+        print("False positives:", metrics.confusion_matrix(y_iter, y_pred)[0, 1])
+
+        # # Plot the results:
+        # plt.figure()
+        # h = 0.02
+        # xx, yy = np.meshgrid(np.arange(q_min, q_max, h), np.arange(v_min, v_max, h))
+        # xrav = xx.ravel()
+        # yrav = yy.ravel()
+        # Z = clf.predict(np.c_[q_min*np.ones(xrav.shape[0]), xrav,
+        #                 np.zeros(yrav.shape[0]), yrav])
+        # Z = Z.reshape(xx.shape)
+        # plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        # Xit = [X_iter[0, :]]
+        # yit = y_iter[0]
+        # print(Xit, yit)
+        # for i in range(X_iter.shape[0]):
+        #     # if X_iter[i, 0] < q_min + 1. and norm(X_iter[i, 2]) < 1.:
+        #     Xit = np.append(Xit, [X_iter[i, :]], axis=0)
+        #     yit = np.append(yit, y_iter[i])
+        # plt.scatter(Xit[:, 1], Xit[:, 3], c=yit, marker=".", alpha=0.5, cmap=plt.cm.Paired)
+        # plt.xlim([q_min, q_max-0.01])
+        # plt.ylim([v_min, v_max])
+        # plt.grid()
+
+        # plt.show()
+
+        et = entropy(clf.predict_proba(X_iter), axis=1)
+        # X_iter = X_iter[et > etp_ref]
+        # y_iter = y_iter[et > etp_ref]
+        et = [1 if x > etp_ref else x/etp_ref for x in et]
+        sel = [i for i in range(X_iter.shape[0]) if np.random.uniform() < et[i]]
+        X_iter = X_iter[sel]
+        y_iter = y_iter[sel]
 
     print("Execution time: %s seconds" % (time.time() - start_time))
 

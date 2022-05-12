@@ -30,63 +30,18 @@ with cProfile.Profile() as pr:
                   class_weight={1: 1, 0: 100}, cache_size=1000)
 
     # Active learning parameters:
-    N_init = pow(5, ocp_dim)  # size of initial labeled set
+    N_init = pow(10, ocp_dim)  # size of initial labeled set
     B = pow(5, ocp_dim)  # batch size
     etp_stop = 0.2  # active learning stopping condition
-    etp_ref = 1e-4
+    etp_ref_x = 1e-4
+    etp_ref_xu = 1e-4
 
-    # Generate low-discrepancy unlabeled samples:
-    sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(50, ocp_dim))
-    l_bounds = [q_min, v_min]
-    u_bounds = [q_max, v_max]
-    data = qmc.scale(sample, l_bounds, u_bounds)
+    data_q = np.random.uniform(q_min, q_max, size=pow(50, ocp_dim))
+    data_v = np.random.uniform(v_min, v_max, size=pow(50, ocp_dim))
 
-    # # Generate random samples:
-    # data_q = np.random.uniform(q_min, q_max, size=pow(50, ocp_dim))
-    # data_v = np.random.uniform(v_min, v_max, size=pow(50, ocp_dim))
-    # data = np.transpose(np.array([data_q[:], data_v[:]]))
+    data = np.transpose(np.array([data_q[:], data_v[:]]))
 
-    Xu_iter = data  # Unlabeled set
-
-    # # Generate the initial set of labeled samples:
-    # X_iter = [[(q_max+q_min)/2, 0.]]
-    # y_iter = [ocp.compute_problem((q_max+q_min)/2, 0.)]
-    # y_weight = [1]
-
-    # # Check boundaries:
-    # for p in range(10):
-    #     v_test = v_min + p*(v_max - v_min)/10
-    #     X_iter = np.append(X_iter, [[q_min, v_test]], axis=0)
-    #     res = ocp.compute_problem(q_min, v_test)
-    #     y_iter = np.append(y_iter, res)
-    #     if res == 1:
-    #         y_weight = np.append(y_weight, 1)
-    #     else:
-    #         y_weight = np.append(y_weight, 10)
-    #     X_iter = np.append(X_iter, [[q_max, v_test]], axis=0)
-    #     res = ocp.compute_problem(q_max, v_test)
-    #     y_iter = np.append(y_iter, res)
-    #     if res == 1:
-    #         y_weight = np.append(y_weight, 1)
-    #     else:
-    #         y_weight = np.append(y_weight, 10)
-    # for p in range(10):
-    #     q_test = q_min + p*(q_max - q_min)/10
-    #     X_iter = np.append(X_iter, [[q_test, v_min]], axis=0)
-    #     res = ocp.compute_problem(q_test, v_min)
-    #     y_iter = np.append(y_iter, res)
-    #     if res == 1:
-    #         y_weight = np.append(y_weight, 1)
-    #     else:
-    #         y_weight = np.append(y_weight, 10)
-    #     X_iter = np.append(X_iter, [[q_test, v_max]], axis=0)
-    #     res = ocp.compute_problem(q_test, v_max)
-    #     y_iter = np.append(y_iter, res)
-    #     if res == 1:
-    #         y_weight = np.append(y_weight, 1)
-    #     else:
-    #         y_weight = np.append(y_weight, 10)
+    Xu_iter = data
 
     # Generate the initial set of labeled samples:
     X_iter = np.empty((ocp_dim * 2 * 10, ocp_dim))
@@ -126,11 +81,11 @@ with cProfile.Profile() as pr:
 
     print("INITIAL CLASSIFIER TRAINED")
 
-    # Print statistics:
-    y_pred = clf.predict(X_iter)
-    # accuracy (calculated on the training set)
-    print("Accuracy:", metrics.accuracy_score(y_iter, y_pred))
-    print("False positives:", metrics.confusion_matrix(y_iter, y_pred)[0, 1])
+    # # Print statistics:
+    # y_pred = clf.predict(X_iter)
+    # # accuracy (calculated on the training set)
+    # print("Accuracy:", metrics.accuracy_score(y_iter, y_pred))
+    # print("False positives:", metrics.confusion_matrix(y_iter, y_pred)[0, 1])
 
     # Plot the results:
     plt.figure()
@@ -150,13 +105,11 @@ with cProfile.Profile() as pr:
     etpmax = 1
 
     et = entropy(clf.predict_proba(X_iter), axis=1)
-    # X_iter = X_iter[et > etp_ref]
-    # y_iter = y_iter[et > etp_ref]
-    et = [1 if x > etp_ref else x/etp_ref for x in et]
-    sel = [i for i in range(X_iter.shape[0]) if np.random.uniform() < et[i]]
-    X_iter = X_iter[sel]
-    y_iter = y_iter[sel]
+    X_iter = X_iter[et > etp_ref_x]
+    y_iter = y_iter[et > etp_ref_x]
 
+    # plt.figure()
+    # plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter, marker=".", alpha=0.5, cmap=plt.cm.Paired)
     while True:
         # Stopping condition:
         xu_shape = Xu_iter.shape[0]
@@ -167,6 +120,7 @@ with cProfile.Profile() as pr:
             B = xu_shape
 
         # Compute the shannon entropy of the unlabeled samples:
+        # index = np.random.randint(Xu_iter.shape[1], size=Bu)
         prob_xu = clf.predict_proba(Xu_iter)
         etp = entropy(prob_xu, axis=1)
         maxindex = np.argpartition(etp, -B)[-B:]  # indexes of the uncertain samples
@@ -175,6 +129,7 @@ with cProfile.Profile() as pr:
         # plt.scatter(Xu_iter[:, 0], Xu_iter[:, 1], c=etp)
 
         etpmax = max(etp[maxindex])  # max entropy used for the stopping condition
+        print(etpmax)
 
         # Add the B most uncertain samples to the labeled set:
         for x in range(B):
@@ -192,7 +147,7 @@ with cProfile.Profile() as pr:
                     current_val = ocp.ocp_solver.get(f, "x")
                     prob_sample = clf.predict_proba([current_val])
                     etp_sample = entropy(prob_sample, axis=1)
-                    if etp_sample > etp_ref:
+                    if etp_sample > etp_ref_x:
                         X_iter = np.append(X_iter, [current_val], axis=0)
                         y_iter = np.append(y_iter, 1)
                     else:
@@ -200,11 +155,8 @@ with cProfile.Profile() as pr:
 
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
-        etp = np.delete(etp, maxindex)
-        # Xu_iter = Xu_iter[etp < etp_ref]
-        etp = [1 if x > etp_ref else x/etp_ref for x in etp]
-        sel = [i for i in range(Xu_iter.shape[0]) if np.random.uniform() < etp[i]]
-        Xu_iter = Xu_iter[sel]
+        # etp = np.delete(etp, maxindex)
+        # Xu_iter = Xu_iter[etp > etp_ref_xu]
 
         # Re-fit the model with the new selected X_iter:
         clf.fit(X_iter, y_iter)
@@ -213,11 +165,11 @@ with cProfile.Profile() as pr:
 
         print("CLASSIFIER", k, "TRAINED")
 
-        # Print statistics:
-        y_pred = clf.predict(X_iter)
-        # accuracy (calculated on the training set)
-        print("Accuracy:", metrics.accuracy_score(y_iter, y_pred))
-        print("False positives:", metrics.confusion_matrix(y_iter, y_pred)[0, 1])
+        # # Print statistics:
+        # y_pred = clf.predict(X_iter)
+        # # accuracy (calculated on the training set)
+        # print("Accuracy:", metrics.accuracy_score(y_iter, y_pred))
+        # print("False positives:", metrics.confusion_matrix(y_iter, y_pred)[0, 1])
 
         # Plot the results:
         plt.figure()
@@ -234,12 +186,11 @@ with cProfile.Profile() as pr:
         plt.grid()
 
         et = entropy(clf.predict_proba(X_iter), axis=1)
-        # X_iter = X_iter[et > etp_ref]
-        # y_iter = y_iter[et > etp_ref]
-        et = [1 if x > etp_ref else x/etp_ref for x in et]
-        sel = [i for i in range(X_iter.shape[0]) if np.random.uniform() < et[i]]
-        X_iter = X_iter[sel]
-        y_iter = y_iter[sel]
+        X_iter = X_iter[et > etp_ref_x]
+        y_iter = y_iter[et > etp_ref_x]
+
+        # plt.figure()
+        # plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter, marker=".", alpha=0.5, cmap=plt.cm.Paired)
 
     print("Execution time: %s seconds" % (time.time() - start_time))
 

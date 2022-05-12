@@ -2,7 +2,7 @@ import cProfile
 import numpy as np
 from scipy.stats import entropy, qmc
 import matplotlib.pyplot as plt
-from sklearn import svm
+from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn import metrics
 from numpy.linalg import norm as norm
 import time
@@ -26,8 +26,8 @@ with cProfile.Profile() as pr:
     q_min = ocp.thetamin
 
     # Initialization of the SVM classifier:
-    clf = svm.SVC(C=1000, kernel='rbf', probability=True,
-                  class_weight={1: 1, 0: 100}, cache_size=1000)
+    clf = GaussianProcessClassifier()
+    # clf = svm.SVC(C=1000, kernel='rbf', probability=True, class_weight={1: 1, 0: 100})
 
     # Active learning parameters:
     N_init = pow(5, ocp_dim)  # size of initial labeled set
@@ -36,18 +36,11 @@ with cProfile.Profile() as pr:
     etp_ref = 1e-4
 
     # Generate low-discrepancy unlabeled samples:
-    sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(50, ocp_dim))
+    sampler = qmc.Halton(d=2, scramble=False)
+    sample = sampler.random(n=pow(80, ocp_dim))
     l_bounds = [q_min, v_min]
     u_bounds = [q_max, v_max]
     data = qmc.scale(sample, l_bounds, u_bounds)
-
-    # # Generate random samples:
-    # data_q = np.random.uniform(q_min, q_max, size=pow(50, ocp_dim))
-    # data_v = np.random.uniform(v_min, v_max, size=pow(50, ocp_dim))
-    # data = np.transpose(np.array([data_q[:], data_v[:]]))
-
-    Xu_iter = data  # Unlabeled set
 
     # # Generate the initial set of labeled samples:
     # X_iter = [[(q_max+q_min)/2, 0.]]
@@ -90,16 +83,25 @@ with cProfile.Profile() as pr:
 
     # Generate the initial set of labeled samples:
     X_iter = np.empty((ocp_dim * 2 * 10, ocp_dim))
-    y_iter = np.zeros(ocp_dim * 2 * 10)
-
-    q_test = np.linspace(q_min, q_max, num=10)
-    v_test = np.linspace(v_min, v_max, num=10)
+    y_iter = np.empty(ocp_dim * 2 * 10)
 
     for p in range(10):
-        X_iter[p, :] = [q_min - 0.1, v_test[p]]
-        X_iter[p + 10, :] = [q_max + 0.1, v_test[p]]
-        X_iter[p + 20, :] = [q_test[p], v_min - 0.1]
-        X_iter[p + 30, :] = [q_test[p], v_max + 0.1]
+        v_test = v_min + p*(v_max - v_min)/10
+        q_test = q_min + p*(q_max - q_min)/10
+
+        X_iter[p, :] = [q_min - 0.1, v_test]
+        y_iter[p] = 0
+
+        X_iter[p + 10, :] = [q_max + 0.1, v_test]
+        y_iter[p + 10] = 0
+
+        X_iter[p + 20, :] = [q_test, v_min - 0.1]
+        y_iter[p + 20] = 0
+
+        X_iter[p + 30, :] = [q_test, v_max + 0.1]
+        y_iter[p + 30] = 0
+
+    Xu_iter = data  # Unlabeled set
 
     # Training of an initial classifier:
     for n in range(N_init):
@@ -115,8 +117,11 @@ with cProfile.Profile() as pr:
         if res == 1:
             for f in range(1, ocp.N, int(ocp.N/3)):
                 current_val = ocp.ocp_solver.get(f, "x")
-                X_iter = np.append(X_iter, [current_val], axis=0)
-                y_iter = np.append(y_iter, 1)
+                if norm(current_val[1]) > 0.01:
+                    X_iter = np.append(X_iter, [current_val], axis=0)
+                    y_iter = np.append(y_iter, 1)
+                else:
+                    break
 
     # Delete tested data from the unlabeled set:
     Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
@@ -149,15 +154,10 @@ with cProfile.Profile() as pr:
     k = 0  # iteration number
     etpmax = 1
 
-    et = entropy(clf.predict_proba(X_iter), axis=1)
-    # X_iter = X_iter[et > etp_ref]
-    # y_iter = y_iter[et > etp_ref]
-    et = [1 if x > etp_ref else x/etp_ref for x in et]
-    sel = [i for i in range(X_iter.shape[0]) if np.random.uniform() < et[i]]
-    X_iter = X_iter[sel]
-    y_iter = y_iter[sel]
+    k = 0
 
-    while True:
+    while k <= 10:
+        k += 1
         # Stopping condition:
         xu_shape = Xu_iter.shape[0]
         if etpmax < etp_stop or xu_shape == 0:
@@ -201,10 +201,7 @@ with cProfile.Profile() as pr:
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
         etp = np.delete(etp, maxindex)
-        # Xu_iter = Xu_iter[etp < etp_ref]
-        etp = [1 if x > etp_ref else x/etp_ref for x in etp]
-        sel = [i for i in range(Xu_iter.shape[0]) if np.random.uniform() < etp[i]]
-        Xu_iter = Xu_iter[sel]
+        Xu_iter = Xu_iter[etp > etpmax*etp_ref]
 
         # Re-fit the model with the new selected X_iter:
         clf.fit(X_iter, y_iter)
@@ -223,8 +220,11 @@ with cProfile.Profile() as pr:
         plt.figure()
         x_min, x_max = 0., np.pi/2
         y_min, y_max = -10., 10.
-        h = 0.02
+        h = .02
         xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+        out = clf.predict_proba(np.c_[xx.ravel(), yy.ravel()])
+        out = entropy(out, axis=1)
+        out = out.reshape(xx.shape)
         Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
         Z = Z.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
@@ -233,13 +233,15 @@ with cProfile.Profile() as pr:
         plt.ylim([-10., 10.])
         plt.grid()
 
-        et = entropy(clf.predict_proba(X_iter), axis=1)
-        # X_iter = X_iter[et > etp_ref]
-        # y_iter = y_iter[et > etp_ref]
-        et = [1 if x > etp_ref else x/etp_ref for x in et]
-        sel = [i for i in range(X_iter.shape[0]) if np.random.uniform() < et[i]]
-        X_iter = X_iter[sel]
-        y_iter = y_iter[sel]
+        # Plot of the decision function:
+        plt.figure()
+        levels = np.linspace(out.min(), out.max(), 10)
+        plt.contourf(xx, yy, out, levels=levels)
+        this = plt.contour(xx, yy, out, levels=levels, colors=('k',), linewidths=(1,))
+        plt.clabel(this, fmt='%2.1f', colors='w', fontsize=11)
+        plt.xlabel('Initial position [rad]')
+        plt.ylabel('Initial velocity [rad/s]')
+        plt.title('Decision function')
 
     print("Execution time: %s seconds" % (time.time() - start_time))
 

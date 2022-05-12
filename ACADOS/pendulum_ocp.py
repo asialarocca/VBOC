@@ -14,7 +14,7 @@ model_name = 'pendulum_ode'
 m = 0.4  # mass of the ball [kg]
 g = 9.81  # gravity constant [m/s^2]
 d = 0.8  # length of the rod [m]
-b = 0.1  # damping
+b = 0.  # damping
 
 # states
 theta = SX.sym('theta')
@@ -34,7 +34,7 @@ xdot = vertcat(theta_dot, dtheta_dot)
 p = []
 
 # dynamics
-f_expl = vertcat(dtheta, (g*sin(theta)+F/m-b*dtheta/m)/(d*d))
+f_expl = vertcat(dtheta, (g*sin(theta)+F/m)/(d*d))  # -b*dtheta/m
 f_impl = xdot - f_expl
 
 model = AcadosModel()
