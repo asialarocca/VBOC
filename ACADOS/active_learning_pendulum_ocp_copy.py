@@ -1,3 +1,6 @@
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearnex import patch_sklearn
 import cProfile
 import numpy as np
 from scipy.stats import entropy, qmc
@@ -7,8 +10,12 @@ from sklearn import metrics
 from numpy.linalg import norm as norm
 import time
 from pendulum_ocp_class import OCPpendulumINIT
+from sklearn.ensemble import BaggingClassifier
+from sklearn.multiclass import OneVsRestClassifier
 import warnings
 warnings.filterwarnings("ignore")
+
+patch_sklearn()
 
 with cProfile.Profile() as pr:
 
@@ -26,8 +33,13 @@ with cProfile.Profile() as pr:
     q_min = ocp.thetamin
 
     # Initialization of the SVM classifier:
-    clf = svm.SVC(C=1e3, kernel='rbf', probability=True,
-                  class_weight={1: 1, 0: 100}, cache_size=1000)
+    # clf = svm.SVC(C=1e4, kernel='rbf', probability=True,
+    #              class_weight={1: 1, 0: 100}, cache_size=1000)
+
+    clf = Pipeline([('scaler', StandardScaler()), ('svc', svm.SVC(
+        C=1e2, kernel='rbf', probability=True, class_weight={1: 1, 0: 100}, cache_size=1000))])
+
+    # OneVsRestClassifier(BaggingClassifier(svm.SVC(C=1e4, kernel='rbf', probability=True,class_weight={1: 1, 0: 100}, cache_size=1000), n_jobs=-1))
 
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set

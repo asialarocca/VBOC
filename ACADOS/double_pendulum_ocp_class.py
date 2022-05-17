@@ -45,7 +45,8 @@ class OCPdoublependulum:
 
         # dynamics
         f_expl = vertcat(dtheta1, dtheta2, (l1 ** 2 * l2 * m2 * dtheta1 ** 2 * sin(-2 * theta2 + 2 * theta1) + 2 * C2 * cos(-theta2 + theta1) * l1 + 2 * (g * sin(-2 * theta2 + theta1) * l1 * m2 / 2 + sin(-theta2 + theta1) * dtheta2 ** 2 * l1 * l2 * m2 + g * l1 * (m1 + m2 / 2) * sin(theta1) - C1) * l2) / l1 ** 2 / l2 / (m2 * cos(-2 * theta2 + 2 * theta1) - 2 * m1 - m2), (-g *
-                         l1 * l2 * m2 * (m1 + m2) * sin(-theta2 + 2 * theta1) - l1 * l2 ** 2 * m2 ** 2 * dtheta2 ** 2 * sin(-2 * theta2 + 2 * theta1) - 2 * dtheta1 ** 2 * l1 ** 2 * l2 * m2 * (m1 + m2) * sin(-theta2 + theta1) + 2 * C1 * cos(-theta2 + theta1) * l2 * m2 + l1 * (m1 + m2) * (sin(theta2) * g * l2 * m2 - 2 * C2)) / l2 ** 2 / l1 / m2 / (m2 * cos(-2 * theta2 + 2 * theta1) - 2 * m1 - m2))
+                                                                                                                                                                                                                                                                                                                                                                                     l1 * l2 * m2 * (m1 + m2) * sin(-theta2 + 2 * theta1) - l1 * l2 ** 2 * m2 ** 2 * dtheta2 ** 2 * sin(-2 * theta2 + 2 * theta1) - 2 * dtheta1 ** 2 * l1 ** 2 * l2 * m2 * (m1 + m2) * sin(-theta2 + theta1) + 2 * C1 * cos(-theta2 + theta1) * l2 * m2 + l1 * (m1 + m2) * (sin(theta2) * g * l2 * m2 - 2 * C2)) / l2 ** 2 / l1 / m2 / (m2 * cos(-2 * theta2 + 2 * theta1) - 2 * m1 - m2))
+
         f_impl = xdot - f_expl
 
         self.model = AcadosModel()
@@ -99,7 +100,7 @@ class OCPdoublependulum:
         self.Cmax = 10
         self.thetamax = np.pi/2 + np.pi
         self.thetamin = np.pi
-        self.dthetamax = 10.
+        self.dthetamax = 5.
 
         self.ocp.constraints.lbu = np.array([-self.Cmax, -self.Cmax])
         self.ocp.constraints.ubu = np.array([self.Cmax, self.Cmax])

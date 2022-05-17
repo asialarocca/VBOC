@@ -1,3 +1,6 @@
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearnex import patch_sklearn
 import cProfile
 import numpy as np
 from scipy.stats import entropy, qmc
@@ -10,6 +13,7 @@ from double_pendulum_ocp_class import OCPdoublependulumINIT
 import warnings
 warnings.filterwarnings("ignore")
 
+patch_sklearn()
 
 with cProfile.Profile() as pr:
 
@@ -27,12 +31,12 @@ with cProfile.Profile() as pr:
     q_min = ocp.thetamin
 
     # Initialization of the SVM classifier:
-    clf = svm.SVC(C=1e6, kernel='rbf', probability=True,
-                  class_weight='balanced', cache_size=1000)
+    clf = Pipeline([('scaler', StandardScaler()), ('svc', svm.SVC(
+        C=1e4, kernel='rbf', probability=True, class_weight={1: 1, 0: 100}, cache_size=1000))])
 
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
-    B = pow(5, ocp_dim)  # batch size
+    B = pow(10, ocp_dim)  # batch size
     etp_stop = 0.2  # active learning stopping condition
     etp_ref = 1e-4
 
@@ -82,7 +86,7 @@ with cProfile.Profile() as pr:
 
     print("INITIAL CLASSIFIER TRAINED")
 
-    print('support vectors:', clf.support_.shape, 'X_iter:', X_iter.shape, 'Xu_iter:', Xu_iter.shape)
+    # print('support vectors:', clf.support_.shape, 'X_iter:', X_iter.shape, 'Xu_iter:', Xu_iter.shape)
 
     # Print statistics:
     y_pred = clf.predict(X_iter)
@@ -90,46 +94,46 @@ with cProfile.Profile() as pr:
     print("Accuracy:", metrics.accuracy_score(y_iter, y_pred))
     print("False positives:", metrics.confusion_matrix(y_iter, y_pred)[0, 1])
 
-    # # Plot the results:
-    # plt.figure()
-    # h = 0.02
-    # xx, yy = np.meshgrid(np.arange(q_min, q_max, h), np.arange(v_min, v_max, h))
-    # xrav = xx.ravel()
-    # yrav = yy.ravel()
-    # Z = clf.predict(np.c_[q_min*np.ones(xrav.shape[0]), xrav,
-    #                 np.zeros(yrav.shape[0]), yrav])
-    # Z = Z.reshape(xx.shape)
-    # plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    # Xit = [X_iter[0, :]]
-    # yit = y_iter[0]
-    # for i in range(X_iter.shape[0]):
-    #     if X_iter[i, 0] < q_min + 0.1 and norm(X_iter[i, 2]) < 0.1:
-    #         Xit = np.append(Xit, [X_iter[i, :]], axis=0)
-    #         yit = np.append(yit, y_iter[i])
-    # plt.scatter(Xit[:, 1], Xit[:, 3], c=yit, marker=".", alpha=0.5, cmap=plt.cm.Paired)
-    # plt.xlim([q_min, q_max-0.01])
-    # plt.ylim([v_min, v_max])
-    # plt.grid()
-    # plt.title('Second actuator')
-    # # plt.show()
-
-    # plt.figure()
-    # Z = clf.predict(np.c_[xrav, q_min*np.ones(xrav.shape[0]), yrav,
-    #                 np.zeros(yrav.shape[0])])
-    # Z = Z.reshape(xx.shape)
-    # plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    # Xit = [X_iter[0, :]]
-    # yit = y_iter[0]
-    # for i in range(X_iter.shape[0]):
-    #     if X_iter[i, 1] < q_min + 0.1 and norm(X_iter[i, 3]) < 0.1:
-    #         Xit = np.append(Xit, [X_iter[i, :]], axis=0)
-    #         yit = np.append(yit, y_iter[i])
-    # plt.scatter(Xit[:, 0], Xit[:, 2], c=yit, marker=".", alpha=0.5, cmap=plt.cm.Paired)
-    # plt.xlim([q_min, q_max-0.01])
-    # plt.ylim([v_min, v_max])
-    # plt.grid()
-    # plt.title('First actuator')
+    # Plot the results:
+    plt.figure()
+    h = 0.02
+    xx, yy = np.meshgrid(np.arange(q_min, q_max, h), np.arange(v_min, v_max, h))
+    xrav = xx.ravel()
+    yrav = yy.ravel()
+    Z = clf.predict(np.c_[q_min*np.ones(xrav.shape[0]), xrav,
+                    np.zeros(yrav.shape[0]), yrav])
+    Z = Z.reshape(xx.shape)
+    plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+    Xit = [X_iter[0, :]]
+    yit = y_iter[0]
+    for i in range(X_iter.shape[0]):
+        if X_iter[i, 0] < q_min + 0.1 and norm(X_iter[i, 2]) < 0.1:
+            Xit = np.append(Xit, [X_iter[i, :]], axis=0)
+            yit = np.append(yit, y_iter[i])
+    plt.scatter(Xit[:, 1], Xit[:, 3], c=yit, marker=".", alpha=0.5, cmap=plt.cm.Paired)
+    plt.xlim([q_min, q_max-0.01])
+    plt.ylim([v_min, v_max])
+    plt.grid()
+    plt.title('Second actuator')
     # plt.show()
+
+    plt.figure()
+    Z = clf.predict(np.c_[xrav, q_min*np.ones(xrav.shape[0]), yrav,
+                    np.zeros(yrav.shape[0])])
+    Z = Z.reshape(xx.shape)
+    plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+    Xit = [X_iter[0, :]]
+    yit = y_iter[0]
+    for i in range(X_iter.shape[0]):
+        if X_iter[i, 1] < q_min + 0.1 and norm(X_iter[i, 3]) < 0.1:
+            Xit = np.append(Xit, [X_iter[i, :]], axis=0)
+            yit = np.append(yit, y_iter[i])
+    plt.scatter(Xit[:, 0], Xit[:, 2], c=yit, marker=".", alpha=0.5, cmap=plt.cm.Paired)
+    plt.xlim([q_min, q_max-0.01])
+    plt.ylim([v_min, v_max])
+    plt.grid()
+    plt.title('First actuator')
+    plt.show()
 
     # Active learning:
     k = 0  # iteration number
@@ -221,8 +225,8 @@ with cProfile.Profile() as pr:
 
         print("CLASSIFIER", k, "TRAINED")
 
-        print('support vectors:', clf.support_.shape, 'X_iter:',
-              X_iter.shape, 'Xu_iter:', Xu_iter.shape)
+        # print('support vectors:', clf.support_.shape, 'X_iter:',
+        #      X_iter.shape, 'Xu_iter:', Xu_iter.shape)
         print('etpmax:', etpmax)
 
         # Print statistics:
@@ -231,46 +235,46 @@ with cProfile.Profile() as pr:
         print("Accuracy:", metrics.accuracy_score(y_iter, y_pred))
         print("False positives:", metrics.confusion_matrix(y_iter, y_pred)[0, 1])
 
-        # # Plot the results:
-        # plt.figure()
-        # h = 0.02
-        # xx, yy = np.meshgrid(np.arange(q_min, q_max, h), np.arange(v_min, v_max, h))
-        # xrav = xx.ravel()
-        # yrav = yy.ravel()
-        # Z = clf.predict(np.c_[q_min*np.ones(xrav.shape[0]), xrav,
-        #                 np.zeros(yrav.shape[0]), yrav])
-        # Z = Z.reshape(xx.shape)
-        # plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # Xit = [X_iter[0, :]]
-        # yit = y_iter[0]
-        # for i in range(X_iter.shape[0]):
-        #     if X_iter[i, 0] < q_min + 0.1 and norm(X_iter[i, 2]) < 0.1:
-        #         Xit = np.append(Xit, [X_iter[i, :]], axis=0)
-        #         yit = np.append(yit, y_iter[i])
-        # plt.scatter(Xit[:, 1], Xit[:, 3], c=yit, marker=".", alpha=0.5, cmap=plt.cm.Paired)
-        # plt.xlim([q_min, q_max-0.01])
-        # plt.ylim([v_min, v_max])
-        # plt.grid()
-        # plt.title('Second actuator')
-        # # plt.show()
-
-        # plt.figure()
-        # Z = clf.predict(np.c_[xrav, q_min*np.ones(xrav.shape[0]), yrav,
-        #                 np.zeros(yrav.shape[0])])
-        # Z = Z.reshape(xx.shape)
-        # plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # Xit = [X_iter[0, :]]
-        # yit = y_iter[0]
-        # for i in range(X_iter.shape[0]):
-        #     if X_iter[i, 1] < q_min + 0.1 and norm(X_iter[i, 3]) < 0.1:
-        #         Xit = np.append(Xit, [X_iter[i, :]], axis=0)
-        #         yit = np.append(yit, y_iter[i])
-        # plt.scatter(Xit[:, 0], Xit[:, 2], c=yit, marker=".", alpha=0.5, cmap=plt.cm.Paired)
-        # plt.xlim([q_min, q_max-0.01])
-        # plt.ylim([v_min, v_max])
-        # plt.grid()
-        # plt.title('First actuator')
+        # Plot the results:
+        plt.figure()
+        h = 0.02
+        xx, yy = np.meshgrid(np.arange(q_min, q_max, h), np.arange(v_min, v_max, h))
+        xrav = xx.ravel()
+        yrav = yy.ravel()
+        Z = clf.predict(np.c_[q_min*np.ones(xrav.shape[0]), xrav,
+                              np.zeros(yrav.shape[0]), yrav])
+        Z = Z.reshape(xx.shape)
+        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        Xit = [X_iter[0, :]]
+        yit = y_iter[0]
+        for i in range(X_iter.shape[0]):
+            if X_iter[i, 0] < q_min + 0.1 and norm(X_iter[i, 2]) < 0.1:
+                Xit = np.append(Xit, [X_iter[i, :]], axis=0)
+                yit = np.append(yit, y_iter[i])
+        plt.scatter(Xit[:, 1], Xit[:, 3], c=yit, marker=".", alpha=0.5, cmap=plt.cm.Paired)
+        plt.xlim([q_min, q_max-0.01])
+        plt.ylim([v_min, v_max])
+        plt.grid()
+        plt.title('Second actuator')
         # plt.show()
+
+        plt.figure()
+        Z = clf.predict(np.c_[xrav, q_min*np.ones(xrav.shape[0]), yrav,
+                              np.zeros(yrav.shape[0])])
+        Z = Z.reshape(xx.shape)
+        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        Xit = [X_iter[0, :]]
+        yit = y_iter[0]
+        for i in range(X_iter.shape[0]):
+            if X_iter[i, 1] < q_min + 0.1 and norm(X_iter[i, 3]) < 0.1:
+                Xit = np.append(Xit, [X_iter[i, :]], axis=0)
+                yit = np.append(yit, y_iter[i])
+        plt.scatter(Xit[:, 0], Xit[:, 2], c=yit, marker=".", alpha=0.5, cmap=plt.cm.Paired)
+        plt.xlim([q_min, q_max-0.01])
+        plt.ylim([v_min, v_max])
+        plt.grid()
+        plt.title('First actuator')
+        plt.show()
 
         et = entropy(clf.predict_proba(X_iter), axis=1)
         # X_iter = X_iter[et > etp_ref]

@@ -90,6 +90,9 @@ thetamax = np.pi/2
 thetamin = 0.0
 dthetamax = 10.
 
+# Calculate max torque to sustain the gravity force:
+# print(sin(thetamax)*9.81*d)
+
 ocp.constraints.lbu = np.array([-Fmax])
 ocp.constraints.ubu = np.array([+Fmax])
 ocp.constraints.idxbu = np.array([0])

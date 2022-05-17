@@ -95,7 +95,7 @@ ocp.cost.yref_e = np.zeros((ny_e, ))
 Cmax = 10
 thetamax = np.pi/2 + np.pi
 thetamin = np.pi
-dthetamax = 10.
+dthetamax = 2.
 
 ocp.constraints.lbu = np.array([-Cmax, -Cmax])
 ocp.constraints.ubu = np.array([Cmax, Cmax])

@@ -538,10 +538,10 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     ubx[0] = 4.71238898038469;
     lbx[1] = 3.141592653589793;
     ubx[1] = 4.71238898038469;
-    lbx[2] = -10;
-    ubx[2] = 10;
-    lbx[3] = -10;
-    ubx[3] = 10;
+    lbx[2] = -5;
+    ubx[2] = 5;
+    lbx[3] = -5;
+    ubx[3] = 5;
 
     for (int i = 1; i < N; i++)
     {
