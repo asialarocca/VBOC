@@ -114,7 +114,7 @@ plt.xlabel('Initial position [rad]')
 plt.ylabel('Initial velocity [rad/s]')
 plt.title('Classifier')
 hand = scatter.legend_elements()[0]
-plt.legend(handles=hand, labels=("Unfeasible", "Feasible (tested)", "Feasible (intermediate results)"))
+plt.legend(handles=hand, labels=("Non viable", "Viable (tested)", "Viable (intermediate results)"))
 
 # Plot of the decision function:
 plt.figure()
@@ -274,7 +274,7 @@ plt.xlabel('Initial position [rad]')
 plt.ylabel('Initial velocity [rad/s]')
 plt.title('Classifier')
 hand = scatter.legend_elements()[0]
-plt.legend(handles=hand, labels=("Unfeasible", "Feasible (tested)", "Feasible (intermediate results)"))
+plt.legend(handles=hand, labels=("Non viable", "Viable (tested)", "Viable (intermediate results)"))
 
 # Plot of the decision function:
 plt.figure()

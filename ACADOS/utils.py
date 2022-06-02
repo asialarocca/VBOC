@@ -72,7 +72,7 @@ def plot_pendulum(shooting_nodes, u_max, U, X_true, X_est=None, Y_measured=None,
         plt.ylabel(states_lables[i])
         plt.xlabel('$t$')
         plt.grid()
-        plt.legend(loc=1)
+        # plt.legend(loc=1)
 
     plt.subplots_adjust(left=None, bottom=None, right=None, top=None, hspace=0.4)
 

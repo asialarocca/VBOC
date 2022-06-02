@@ -14,10 +14,10 @@ class OCPpendulum:
         model_name = 'pendulum_ode'
 
         # constants
-        m = 0.4  # mass of the ball [kg]
+        m = 0.5  # mass of the ball [kg]
         g = 9.81  # gravity constant [m/s^2]
-        d = 0.8  # length of the rod [m]
-        b = 0.1  # damping
+        d = 0.3  # length of the rod [m]
+        b = 0.01  # damping
 
         # states
         theta = SX.sym('theta')
@@ -37,7 +37,7 @@ class OCPpendulum:
         p = []
 
         # dynamics
-        f_expl = vertcat(dtheta, (g*sin(theta)+F/m-b*dtheta/m)/(d*d))
+        f_expl = vertcat(dtheta, (m*g*d*sin(theta)+F-b*dtheta)/(d*d*m))
         f_impl = xdot - f_expl
 
         self.model = AcadosModel()
@@ -56,7 +56,7 @@ class OCPpendulum:
         self.ocp = AcadosOcp()
 
         # times
-        Tf = 0.1
+        Tf = 1.
         self.Tf = Tf
         self.N = int(100*Tf)
 
@@ -72,7 +72,7 @@ class OCPpendulum:
         self.ocp.dims.N = self.N
 
         # cost
-        Q = 2*np.diag([0.0, 1e-2])
+        Q = 2*np.diag([0.0, 1e-1])
         R = 2*np.diag([0.0])
 
         self.ocp.cost.W_e = Q
@@ -93,7 +93,7 @@ class OCPpendulum:
         self.ocp.cost.yref_e = np.zeros((ny_e, ))
 
         # constraints
-        self.Fmax = 10
+        self.Fmax = 3
         self.thetamax = np.pi/2
         self.thetamin = 0.0
         self.dthetamax = 10.
@@ -130,6 +130,13 @@ class OCPpendulum:
             self.ocp_solver.set(i, 'x', x0)
 
         status = self.ocp_solver.solve()
+
+        # if status == 0:
+        #     return 1
+        # elif status == 4:
+        #     return 0
+        # else:
+        #     return 2
 
         if status != 0:
             return 0

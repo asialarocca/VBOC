@@ -11,10 +11,10 @@ start_time = time.time()
 model_name = 'pendulum_ode'
 
 # constants
-m = 0.4  # mass of the ball [kg]
+m = 0.5  # mass of the ball [kg]
 g = 9.81  # gravity constant [m/s^2]
-d = 0.8  # length of the rod [m]
-b = 0.  # damping
+d = 0.3  # length of the rod [m]
+b = 0.1  # damping
 
 # states
 theta = SX.sym('theta')
@@ -34,7 +34,7 @@ xdot = vertcat(theta_dot, dtheta_dot)
 p = []
 
 # dynamics
-f_expl = vertcat(dtheta, (g*sin(theta)+F/m)/(d*d))  # -b*dtheta/m
+f_expl = vertcat(dtheta, (m*g*d*sin(theta)+F-b*dtheta)/(d*d*m))
 f_impl = xdot - f_expl
 
 model = AcadosModel()
@@ -53,7 +53,7 @@ ocp = AcadosOcp()
 # ocp model
 ocp.model = model
 
-Tf = 0.1
+Tf = 1.
 nx = model.x.size()[0]
 nu = model.u.size()[0]
 ny = nx + nu
@@ -85,13 +85,13 @@ ocp.cost.yref = np.zeros((ny, ))
 ocp.cost.yref_e = np.zeros((ny_e, ))
 
 # set constraints
-Fmax = 10
+Fmax = 3
 thetamax = np.pi/2
 thetamin = 0.0
 dthetamax = 10.
 
 # Calculate max torque to sustain the gravity force:
-# print(sin(thetamax)*9.81*d)
+print('Max torque to sustain the gravity force:', m*sin(thetamax)*9.81*d)
 
 ocp.constraints.lbu = np.array([-Fmax])
 ocp.constraints.ubu = np.array([+Fmax])
@@ -108,15 +108,15 @@ ocp.constraints.idxbx_e = np.array([0, 1])
 ocp.solver_options.nlp_solver_type = 'SQP'
 
 # Initial cnditions
-ocp.constraints.x0 = np.array([0.1, 0.001])
+ocp.constraints.x0 = np.array([1., 6.])
 
 # Solver
 ocp_solver = AcadosOcpSolver(ocp, json_file='acados_ocp.json')
 
 ocp_solver.reset()
 
-ocp_solver.constraints_set(0, "lbu", 0.)
-ocp_solver.constraints_set(0, "ubu", 0.)
+# ocp_solver.constraints_set(0, "lbu", 0.)
+# ocp_solver.constraints_set(0, "ubu", 0.)
 
 status = ocp_solver.solve()
 

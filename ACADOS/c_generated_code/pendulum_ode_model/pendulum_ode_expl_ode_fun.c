@@ -50,22 +50,19 @@ static const casadi_int casadi_s2[3] = {0, 0, 0};
 
 /* pendulum_ode_expl_ode_fun:(i0[2],i1,i2[])->(o0[2]) */
 static int casadi_f0(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem) {
-  casadi_real a0, a1, a2, a3;
+  casadi_real a0, a1, a2;
   a0=arg[0]? arg[0][1] : 0;
   if (res[0]!=0) res[0][0]=a0;
-  a1=9.8100000000000005e+00;
+  a1=1.4715000000000000e+00;
   a2=arg[0]? arg[0][0] : 0;
   a2=sin(a2);
   a1=(a1*a2);
   a2=arg[1]? arg[1][0] : 0;
-  a3=4.0000000000000002e-01;
-  a2=(a2/a3);
   a1=(a1+a2);
-  a2=1.0000000000000001e-01;
+  a2=1.0000000000000000e-02;
   a2=(a2*a0);
-  a2=(a2/a3);
   a1=(a1-a2);
-  a2=6.4000000000000012e-01;
+  a2=4.4999999999999998e-02;
   a1=(a1/a2);
   if (res[0]!=0) res[0][1]=a1;
   return 0;
