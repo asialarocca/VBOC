@@ -8,6 +8,7 @@ from numpy.linalg import norm as norm
 import time
 from pendulum_ocp_class import OCPpendulumINIT
 import warnings
+
 warnings.filterwarnings("ignore")
 
 print_stats = 0
@@ -15,8 +16,8 @@ show_plots = 1
 print_cprof = 0
 
 if show_plots:
-    x_min, x_max = 0., np.pi/2
-    y_min, y_max = -10., 10.
+    x_min, x_max = 0.0, np.pi / 2
+    y_min, y_max = -10.0, 10.0
     h = 0.01
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
 
@@ -31,13 +32,14 @@ with cProfile.Profile() as pr:
 
     # Position and velocity bounds:
     v_max = ocp.dthetamax
-    v_min = - ocp.dthetamax
+    v_min = -ocp.dthetamax
     q_max = ocp.thetamax
     q_min = ocp.thetamin
 
     # Initialization of the SVM classifier:
-    clf = svm.SVC(C=1e5, kernel='rbf', probability=True,
-                  class_weight='balanced', cache_size=1000)
+    clf = svm.SVC(
+        C=1e5, kernel="rbf", probability=True, class_weight="balanced", cache_size=1000
+    )
 
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
@@ -59,9 +61,9 @@ with cProfile.Profile() as pr:
     Xu_iter = data  # Unlabeled set
 
     # Generate the initial set of labeled samples:
-    res = ocp.compute_problem((q_max+q_min)/2, 0.)
+    res = ocp.compute_problem((q_max + q_min) / 2, 0.0)
     if res != 2:
-        X_iter = np.double([[(q_max+q_min)/2, 0.]])
+        X_iter = np.double([[(q_max + q_min) / 2, 0.0]])
         y_iter = np.byte([res])
     else:
         raise Exception("Max iteration reached")
@@ -93,7 +95,7 @@ with cProfile.Profile() as pr:
 
         # Add intermediate states of succesfull initial conditions
         if res == 1:
-            for f in range(1, ocp.N, int(ocp.N/3)):
+            for f in range(1, ocp.N, int(ocp.N / 3)):
                 current_val = ocp.ocp_solver.get(f, "x")
                 X_iter = np.append(X_iter, [current_val], axis=0)
                 y_iter = np.append(y_iter, 1)
@@ -121,14 +123,20 @@ with cProfile.Profile() as pr:
         Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
         Z = Z.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        plt.contour(xx, yy, out, levels=[0], linewidths=(2,), colors=('k',))
-        scatter = plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter,
-                              marker=".", alpha=0.5, cmap=plt.cm.Paired)
-        plt.xlim([0., np.pi/2 - 0.01])
-        plt.ylim([-10., 10.])
-        plt.xlabel('Initial position [rad]')
-        plt.ylabel('Initial velocity [rad/s]')
-        plt.title('Classifier')
+        plt.contour(xx, yy, out, levels=[0], linewidths=(2,), colors=("k",))
+        scatter = plt.scatter(
+            X_iter[:, 0],
+            X_iter[:, 1],
+            c=y_iter,
+            marker=".",
+            alpha=0.5,
+            cmap=plt.cm.Paired,
+        )
+        plt.xlim([0.0, np.pi / 2 - 0.01])
+        plt.ylim([-10.0, 10.0])
+        plt.xlabel("Initial position [rad]")
+        plt.ylabel("Initial velocity [rad/s]")
+        plt.title("Classifier")
         hand = scatter.legend_elements()[0]
         plt.legend(handles=hand, labels=("Non viable", "Viable"))
 
@@ -139,11 +147,11 @@ with cProfile.Profile() as pr:
         out = out.reshape(xx.shape)
         levels = np.linspace(out.min(), out.max(), 10)
         plt.contourf(xx, yy, out, levels=levels)
-        this = plt.contour(xx, yy, out, levels=levels, colors=('k',), linewidths=(1,))
-        plt.clabel(this, fmt='%2.1f', colors='w', fontsize=11)
-        plt.xlabel('Initial position [rad]')
-        plt.ylabel('Initial velocity [rad/s]')
-        plt.title('Decision function')
+        this = plt.contour(xx, yy, out, levels=levels, colors=("k",), linewidths=(1,))
+        plt.clabel(this, fmt="%2.1f", colors="w", fontsize=11)
+        plt.xlabel("Initial position [rad]")
+        plt.ylabel("Initial velocity [rad/s]")
+        plt.title("Decision function")
 
     performance_history = [1]
 
@@ -178,7 +186,7 @@ with cProfile.Profile() as pr:
 
             # Add intermediate states of succesfull initial conditions:
             if res == 1:
-                for f in range(1, ocp.N, int(ocp.N/3)):
+                for f in range(1, ocp.N, int(ocp.N / 3)):
                     current_val = ocp.ocp_solver.get(f, "x")
                     prob_sample = clf.predict_proba([current_val])
                     etp_sample = entropy(prob_sample, axis=1)
@@ -202,49 +210,55 @@ with cProfile.Profile() as pr:
             print("Accuracy:", metrics.accuracy_score(y_iter, y_pred))
             print("False positives:", metrics.confusion_matrix(y_iter, y_pred)[0, 1])
 
-        if show_plots:
-            # Plot the results:
-            plt.figure()
-            out = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
-            out = out.reshape(xx.shape)
-            Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
-            Z = Z.reshape(xx.shape)
-            plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-            plt.contour(xx, yy, out, levels=[0], linewidths=(2,), colors=('k',))
-            scatter = plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter,
-                                  marker=".", alpha=0.5, cmap=plt.cm.Paired)
-            plt.xlim([0., np.pi/2 - 0.01])
-            plt.ylim([-10., 10.])
-            plt.xlabel('Initial position [rad]')
-            plt.ylabel('Initial velocity [rad/s]')
-            plt.title('Classifier')
-            hand = scatter.legend_elements()[0]
-            plt.legend(handles=hand, labels=("Non viable", "Viable"))
+    if show_plots:
+        # Plot the results:
+        plt.figure()
+        out = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
+        out = out.reshape(xx.shape)
+        Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
+        Z = Z.reshape(xx.shape)
+        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        plt.contour(xx, yy, out, levels=[0], linewidths=(2,), colors=("k",))
+        scatter = plt.scatter(
+            X_iter[:, 0],
+            X_iter[:, 1],
+            c=y_iter,
+            marker=".",
+            alpha=0.5,
+            cmap=plt.cm.Paired,
+        )
+        plt.xlim([0.0, np.pi / 2 - 0.01])
+        plt.ylim([-10.0, 10.0])
+        plt.xlabel("Initial position [rad]")
+        plt.ylabel("Initial velocity [rad/s]")
+        plt.title("Classifier")
+        hand = scatter.legend_elements()[0]
+        plt.legend(handles=hand, labels=("Non viable", "Viable"))
 
-        if show_plots:
-            # Plot of the entropy:
-            plt.figure()
-            out = entropy(clf.predict_proba(np.c_[xx.ravel(), yy.ravel()]), axis=1)
-            out = out.reshape(xx.shape)
-            levels = np.linspace(out.min(), out.max(), 10)
-            plt.contourf(xx, yy, out, levels=levels)
-            this = plt.contour(xx, yy, out, levels=levels, colors=('k',), linewidths=(1,))
-            plt.clabel(this, fmt='%2.1f', colors='w', fontsize=11)
-            plt.xlabel('Initial position [rad]')
-            plt.ylabel('Initial velocity [rad/s]')
-            plt.title('Decision function')
+    if show_plots:
+        # Plot of the entropy:
+        plt.figure()
+        out = entropy(clf.predict_proba(np.c_[xx.ravel(), yy.ravel()]), axis=1)
+        out = out.reshape(xx.shape)
+        levels = np.linspace(out.min(), out.max(), 10)
+        plt.contourf(xx, yy, out, levels=levels)
+        this = plt.contour(xx, yy, out, levels=levels, colors=("k",), linewidths=(1,))
+        plt.clabel(this, fmt="%2.1f", colors="w", fontsize=11)
+        plt.xlabel("Initial position [rad]")
+        plt.ylabel("Initial velocity [rad/s]")
+        plt.title("Decision function")
 
 print("Execution time: %s seconds" % (time.time() - start_time))
 
 if print_cprof:
-    pr.print_stats(sort='cumtime')
+    pr.print_stats(sort="cumtime")
 
 if show_plots:
     plt.figure()
     plt.plot(performance_history[1:])
     plt.scatter(range(len(performance_history[1:])), performance_history[1:])
-    plt.xlabel('Iteration number')
-    plt.ylabel('Maximum entropy')
-    plt.title('Maximum entropy evolution')
+    plt.xlabel("Iteration number")
+    plt.ylabel("Maximum entropy")
+    plt.title("Maximum entropy evolution")
 
     plt.show()

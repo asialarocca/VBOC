@@ -56,7 +56,7 @@ class OCPpendulum:
         self.ocp = AcadosOcp()
 
         # times
-        Tf = 1.
+        Tf = 1
         self.Tf = Tf
         self.N = int(100*Tf)
 
