@@ -7,9 +7,11 @@ from sklearn import metrics
 from numpy.linalg import norm as norm
 import time
 from double_pendulum_ocp_class import OCPdoublependulumINIT
+import random
 import warnings
 import torch
 import torch.nn as nn
+import queue
 from my_nn import NeuralNet
 
 warnings.filterwarnings("ignore")
@@ -32,7 +34,7 @@ with cProfile.Profile() as pr:
 
     # Hyper-parameters for nn:
     input_size = ocp_dim
-    hidden_size = ocp_dim * 10
+    hidden_size = ocp_dim * 20
     output_size = 2
     learning_rate = 0.01
 
@@ -48,8 +50,10 @@ with cProfile.Profile() as pr:
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
     B = pow(10, ocp_dim)  # batch size
-    etp_stop = 0.2  # active learning stopping condition
-    loss_stop = 0.1  # nn training stopping condition
+    etp_stop = 0.1  # active learning stopping condition
+    loss_stop = 0.08  # nn training stopping condition
+    beta = 0.8
+    n_minibatch = 256
     # etp_ref = 1e-4
 
     # # Generate low-discrepancy unlabeled samples:
@@ -101,16 +105,39 @@ with cProfile.Profile() as pr:
     # Delete tested data from the unlabeled set:
     Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
 
-    X_iter_tensor = torch.from_numpy(X_iter.astype(np.float32))
-    y_iter_tensor = torch.from_numpy(y_iter.astype(np.float32))
-    X_iter_tensor = (X_iter_tensor - mean) / std
+    print("INITIAL CLASSIFIER IN TRAINING")
 
-    size = X_iter.shape[0]
+    # X_iter_tensor = torch.from_numpy(X_iter.astype(np.float32))
+    # y_iter_tensor = torch.from_numpy(y_iter.astype(np.float32))
+    # X_iter_tensor = (X_iter_tensor - mean) / std
 
     val = 1
 
+    # # Train the model
+    # while val > loss_stop:
+    #     # Forward pass
+    #     outputs = model(X_iter_tensor)
+    #     loss = criterion(outputs, y_iter_tensor)
+
+    #     # Backward and optimize
+    #     for param in model.parameters():
+    #         param.grad = None
+
+    #     loss.backward()
+    #     optimizer.step()
+
+    #     val = loss.item()
+
+    q = queue.Queue()
+
     # Train the model
     while val > loss_stop:
+
+        ind = random.sample(range(X_iter.shape[0]), n_minibatch)
+        X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
+        y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
+        X_iter_tensor = (X_iter_tensor - mean) / std
+
         # Forward pass
         outputs = model(X_iter_tensor)
         loss = criterion(outputs, y_iter_tensor)
@@ -122,7 +149,15 @@ with cProfile.Profile() as pr:
         loss.backward()
         optimizer.step()
 
-        val = loss.item()
+        val = beta * val + (1 - beta) * loss.item()
+
+        q.put(val)
+
+        if q.qsize() >= 100:
+            st = q.get()
+            if st == val:
+                print("Iteration skipped")
+                continue
 
     print("INITIAL CLASSIFIER TRAINED")
 
@@ -259,22 +294,47 @@ with cProfile.Profile() as pr:
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
 
-        selec = [i for i in range(X_iter.shape[0] - B) if np.random.uniform() <= 1 / k]
-        selec.extend([i for i in range(X_iter.shape[0] - B, X_iter.shape[0])])
+        # selec = [i for i in range(X_iter.shape[0] - B) if np.random.uniform() <= 1 / k]
+        # selec.extend([i for i in range(X_iter.shape[0] - B, X_iter.shape[0])])
 
-        print(len(selec))
-        print(X_iter.shape[0])
+        # X_iter_tensor = torch.from_numpy(X_iter[selec].astype(np.float32))
+        # X_iter_tensor = (X_iter_tensor - mean) / std
+        # y_iter_tensor = torch.from_numpy(y_iter[selec].astype(np.float32))
 
-        X_iter_tensor = torch.from_numpy(X_iter[selec].astype(np.float32))
-        X_iter_tensor = (X_iter_tensor - mean) / std
-        y_iter_tensor = torch.from_numpy(y_iter[selec].astype(np.float32))
-
-        size = X_iter.shape[0]
+        print("CLASSIFIER", k, "IN TRAINING")
 
         val = 1
 
+        # # Train the model
+        # while val > loss_stop:
+        #     # Forward pass
+        #     outputs = model(X_iter_tensor)
+        #     loss = criterion(outputs, y_iter_tensor)
+
+        #     # Backward and optimize
+        #     for param in model.parameters():
+        #         param.grad = None
+
+        #     loss.backward()
+        #     optimizer.step()
+
+        #     val = loss.item()
+
+        q = queue.Queue()
+
         # Train the model
         while val > loss_stop:
+
+            ind = random.sample(range(X_iter.shape[0] - B), int(n_minibatch / 2))
+            ind.extend(
+                random.sample(
+                    range(X_iter.shape[0] - B, X_iter.shape[0]), int(n_minibatch / 2)
+                )
+            )
+            X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
+            y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
+            X_iter_tensor = (X_iter_tensor - mean) / std
+
             # Forward pass
             outputs = model(X_iter_tensor)
             loss = criterion(outputs, y_iter_tensor)
@@ -286,7 +346,15 @@ with cProfile.Profile() as pr:
             loss.backward()
             optimizer.step()
 
-            val = loss.item()
+            val = beta * val + (1 - beta) * loss.item()
+
+            q.put(val)
+
+            if q.qsize() >= 100:
+                st = q.get()
+                if st == val:
+                    print("Iteration skipped")
+                    continue
 
         print("CLASSIFIER", k, "TRAINED")
 
@@ -385,7 +453,12 @@ with cProfile.Profile() as pr:
                 else:
                     yit = np.append(yit, 1)
         plt.scatter(
-            Xit[1:, 0], Xit[1:, 2], c=yit[1:], marker=".", alpha=0.5, cmap=plt.cm.Paired
+            Xit[1:, 0],
+            Xit[1:, 2],
+            c=yit[1:],
+            marker=".",
+            alpha=0.5,
+            cmap=plt.cm.Paired,
         )
         plt.xlim([q_min, q_max - 0.01])
         plt.ylim([v_min, v_max])

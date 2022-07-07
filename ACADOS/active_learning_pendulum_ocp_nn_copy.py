@@ -5,16 +5,9 @@ import matplotlib.pyplot as plt
 import time
 from pendulum_ocp_class import OCPpendulumINIT
 import warnings
-import random
-import queue
 import torch
 import torch.nn as nn
-from torch.utils.data import TensorDataset, DataLoader
 from my_nn import NeuralNet
-from my_nn import NNTrain
-
-# import queue
-# import time
 
 warnings.filterwarnings("ignore")
 
@@ -35,7 +28,7 @@ with cProfile.Profile() as pr:
 
     # Hyper-parameters for nn:
     input_size = ocp_dim
-    hidden_size = ocp_dim * 20
+    hidden_size = ocp_dim * 10
     output_size = 2
     learning_rate = 0.01
 
@@ -52,10 +45,8 @@ with cProfile.Profile() as pr:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
     B = pow(10, ocp_dim)  # batch size
     etp_stop = 0.1  # active learning stopping condition
-    loss_stop = 0.08  # nn training stopping condition
-    beta = 0.8
-    n_minibatch = 32
-    n_epoch = 100
+    loss_stop = 0.1  # nn training stopping condition
+    # etp_ref = 1e-4
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
@@ -75,21 +66,10 @@ with cProfile.Profile() as pr:
     v_test = np.linspace(v_min, v_max, num=10)
 
     for p in range(10):
-        X_iter[p, :] = [q_min - 0.1, v_test[p]]
-        X_iter[p + 10, :] = [q_max + 0.1, v_test[p]]
-        X_iter[p + 20, :] = [q_test[p], v_min - 1]
-        X_iter[p + 30, :] = [q_test[p], v_max + 1]
-
-    # # Generate the initial set of labeled samples:
-    # res = ocp.compute_problem((q_max + q_min) / 2, 0.0)
-    # if res != 2:
-    #     X_iter = np.double([[(q_max + q_min) / 2, 0.0]])
-    #     if res == 1:
-    #         y_iter = [[0, 1]]
-    #     else:
-    #         y_iter = [[1, 0]]
-    # else:
-    #     raise Exception("Max iteration reached")
+        X_iter[p, :] = [q_min - 0.01, v_test[p]]
+        X_iter[p + 10, :] = [q_max + 0.01, v_test[p]]
+        X_iter[p + 20, :] = [q_test[p], v_min - 0.1]
+        X_iter[p + 30, :] = [q_test[p], v_max + 0.1]
 
     # Training of an initial classifier:
     for n in range(N_init):
@@ -117,70 +97,26 @@ with cProfile.Profile() as pr:
     # Delete tested data from the unlabeled set:
     Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
 
-    val = 1
-
     X_iter_tensor = torch.from_numpy(X_iter.astype(np.float32))
     y_iter_tensor = torch.from_numpy(y_iter.astype(np.float32))
     X_iter_tensor = (X_iter_tensor - mean) / std
 
-    my_dataset = TensorDataset(X_iter_tensor, y_iter_tensor)
-    my_dataloader = DataLoader(my_dataset, batch_size=n_minibatch, shuffle=True)
+    val = 1
 
-    NNTrain(my_dataloader, optimizer, model, criterion, n_epoch, val, beta, loss_stop)
+    # Train the model
+    while val > loss_stop:
+        # Forward pass
+        outputs = model(X_iter_tensor)
+        loss = criterion(outputs, y_iter_tensor)
 
-    # X_iter_tensor = torch.from_numpy(X_iter.astype(np.float32))
-    # y_iter_tensor = torch.from_numpy(y_iter.astype(np.float32))
-    # X_iter_tensor = (X_iter_tensor - mean) / std
+        # Backward and optimize
+        for param in model.parameters():
+            param.grad = None
 
-    # q = queue.Queue()
+        loss.backward()
+        optimizer.step()
 
-    # it = 0
-
-    # # Train the model
-    # while val > loss_stop and it <= 1000:
-    #     it += 1
-
-    #     # Forward pass
-    #     outputs = model(X_iter_tensor)
-    #     loss = criterion(outputs, y_iter_tensor)
-
-    #     # Backward and optimize
-    #     for param in model.parameters():
-    #         param.grad = None
-
-    #     loss.backward()
-    #     optimizer.step()
-
-    #     val = loss.item()
-
-    #     if q.qsize() >= 100:
-    #         st = q.get()
-    #         if round(st, 3) == round(val, 3):
-    #             print("Iteration skipped")
-    #             continue
-
-    # it = 0
-
-    # # Train the model
-    # while val > loss_stop and it <= 1000:
-
-    #     ind = random.sample(range(X_iter.shape[0]), n_minibatch)
-    #     X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
-    #     y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
-    #     X_iter_tensor = (X_iter_tensor - mean) / std
-
-    #     # Forward pass
-    #     outputs = model(X_iter_tensor)
-    #     loss = criterion(outputs, y_iter_tensor)
-
-    #     # Backward and optimize
-    #     loss.backward()
-    #     optimizer.step()
-    #     optimizer.zero_grad()
-
-    #     val = beta * val + (1 - beta) * loss.item()
-
-    #     it += 1
+        val = loss.item()
 
     print("INITIAL CLASSIFIER TRAINED")
 
@@ -228,6 +164,24 @@ with cProfile.Profile() as pr:
         # plt.ylabel("Initial velocity [rad/s]")
         # plt.title("Entropy")
 
+        # # Delete certain data from the labeled set:
+        # sigmoid = nn.Sigmoid()
+        # x_prob = sigmoid(X_iter_tensor).numpy()
+        # etx = entropy(x_prob, axis=1)
+        # etx = [1 if x > etp_ref else x / etp_ref for x in etx]
+        # sel = [i for i in range(X_iter.shape[0]) if np.random.uniform() < etx[i]]
+        # X_iter = X_iter[sel]
+        # y_iter = y_iter[sel]
+
+        # # Delete certain data from the unlabeled set:
+        # Xu_iter_tensor = torch.from_numpy(Xu_iter.astype(np.float32))
+        # Xu_iter_tensor = (Xu_iter_tensor - mean) / std
+        # xu_prob = sigmoid(Xu_iter_tensor).numpy()
+        # etxu = entropy(xu_prob, axis=1)
+        # etxu = [1 if x > etp_ref else x / etp_ref for x in etxu]
+        # sel = [i for i in range(Xu_iter.shape[0]) if np.random.uniform() < etxu[i]]
+        # Xu_iter = Xu_iter[sel]
+
     # Active learning:
     k = 0  # iteration number
     etpmax = 1
@@ -271,91 +225,66 @@ with cProfile.Profile() as pr:
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
 
-        val = 1
-
         selec = [i for i in range(X_iter.shape[0] - B) if np.random.uniform() <= 1 / k]
         selec.extend([i for i in range(X_iter.shape[0] - B, X_iter.shape[0])])
+
+        # print(len(selec))
+        # print(X_iter.shape[0])
 
         X_iter_tensor = torch.from_numpy(X_iter[selec].astype(np.float32))
         X_iter_tensor = (X_iter_tensor - mean) / std
         y_iter_tensor = torch.from_numpy(y_iter[selec].astype(np.float32))
 
-        my_dataset = TensorDataset(X_iter_tensor, y_iter_tensor)
-        my_dataloader = DataLoader(my_dataset, batch_size=n_minibatch, shuffle=True)
+        val = 1
 
-        NNTrain(
-            my_dataloader, optimizer, model, criterion, n_epoch, val, beta, loss_stop
-        )
+        # Train the model
+        while val > loss_stop:
+            # Forward pass
+            outputs = model(X_iter_tensor)
+            loss = criterion(outputs, y_iter_tensor)
 
-        # selec = [i for i in range(X_iter.shape[0] - B) if np.random.uniform() <= 1 / k]
-        # selec.extend([i for i in range(X_iter.shape[0] - B, X_iter.shape[0])])
+            # Backward and optimize
+            for param in model.parameters():
+                param.grad = None
 
-        # X_iter_tensor = torch.from_numpy(X_iter[selec].astype(np.float32))
-        # X_iter_tensor = (X_iter_tensor - mean) / std
-        # y_iter_tensor = torch.from_numpy(y_iter[selec].astype(np.float32))
+            loss.backward()
+            optimizer.step()
 
-        # q = queue.Queue()
-
-        # it = 0
-
-        # # Train the model
-        # while val > loss_stop and it <= 1000:
-        #     it += 1
-
-        #     # Forward pass
-        #     outputs = model(X_iter_tensor)
-        #     loss = criterion(outputs, y_iter_tensor)
-
-        #     # Backward and optimize
-        #     for param in model.parameters():
-        #         param.grad = None
-
-        #     loss.backward()
-        #     optimizer.step()
-
-        #     val = loss.item()
-
-        #     q.put(val)
-
-        #     if q.qsize() >= 100:
-        #         st = q.get()
-        #         if round(st, 3) == round(val, 3):
-        #             print("Iteration skipped")
-        #             continue
-
-        # it = 0
-
-        # # Train the model
-        # while val > loss_stop and it <= 1000:
-
-        #     ind = random.sample(range(X_iter.shape[0] - B), int(n_minibatch / 2))
-        #     ind.extend(
-        #         random.sample(
-        #             range(X_iter.shape[0] - B, X_iter.shape[0]), int(n_minibatch / 2)
-        #         )
-        #     )
-        #     X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
-        #     y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
-        #     X_iter_tensor = (X_iter_tensor - mean) / std
-
-        #     # Forward pass
-        #     outputs = model(X_iter_tensor)
-        #     loss = criterion(outputs, y_iter_tensor)
-
-        #     # Backward and optimize
-        #     loss.backward()
-        #     optimizer.step()
-        #     optimizer.zero_grad()
-
-        #     val = beta * val + (1 - beta) * loss.item()
-
-        #     it += 1
+            val = loss.item()
 
         print("CLASSIFIER", k, "TRAINED")
+
+        # with torch.no_grad():
+        #     # Delete certain data from the labeled set:
+        #     x_prob = sigmoid(X_iter_tensor).numpy()
+        #     etx = entropy(x_prob, axis=1)
+        #     etx = [1 if x > etp_ref else x / etp_ref for x in etx]
+        #     sel = [
+        #         i
+        #         for i in range(X_iter_tensor.numpy().shape[0])
+        #         if np.random.uniform() < etx[i]
+        #     ]
+        #     X_iter = X_iter[sel]
+        #     y_iter = y_iter[sel]
+
+        #     # Delete certain data from the unlabeled set:
+        #     Xu_iter_tensor = torch.from_numpy(Xu_iter.astype(np.float32))
+        #     Xu_iter_tensor = (Xu_iter_tensor - mean) / std
+        #     xu_prob = sigmoid(Xu_iter_tensor).numpy()
+        #     etxu = entropy(xu_prob, axis=1)
+        #     etxu = [1 if x > etp_ref else x / etp_ref for x in etxu]
+        #     sel = [
+        #         i
+        #         for i in range(Xu_iter_tensor.numpy().shape[0])
+        #         if np.random.uniform() < etxu[i]
+        #     ]
+        #     Xu_iter = Xu_iter[sel]
 
     with torch.no_grad():
         # Plot the results:
         plt.figure()
+        inp = torch.from_numpy(np.c_[xx.ravel(), yy.ravel()].astype(np.float32))
+        inp = (inp - mean) / std
         out = model(inp)
         y_pred = np.argmax(out.numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)

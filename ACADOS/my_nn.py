@@ -16,3 +16,24 @@ class NeuralNet(nn.Module):
     def forward(self, x):
         out = self.linear_relu_stack(x)
         return out
+
+
+def NNTrain(my_dataloader, optimizer, model, criterion, n_epoch, val, beta, loss_stop):
+    for it in range(n_epoch):  # loop over the dataset multiple times
+
+        for i, data in enumerate(my_dataloader):
+            inputs, labels = data
+
+            # zero the parameter gradients
+            optimizer.zero_grad()
+
+            # forward + backward + optimize
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            val = beta * val + (1 - beta) * loss.item()
+
+            if val <= loss_stop:
+                return

@@ -51,10 +51,10 @@ with cProfile.Profile() as pr:
 
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
-    B = pow(5, ocp_dim)  # batch size
+    B = pow(10, ocp_dim)  # batch size
     etp_stop = 0.2  # active learning stopping condition
     etp_ref = 1e-4
-    xu_size = pow(20, ocp_dim)
+    xu_size = pow(50, ocp_dim)
 
     # # Generate low-discrepancy unlabeled samples:
     # sampler = qmc.Halton(d=ocp_dim, scramble=False)
