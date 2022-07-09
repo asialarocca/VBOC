@@ -33,30 +33,30 @@
 
 cimport acados_solver_common
 
-cdef extern from "acados_solver_pendulum_ode.h":
-    ctypedef struct nlp_solver_capsule "pendulum_ode_solver_capsule":
+cdef extern from "acados_solver_double_pendulum_ode.h":
+    ctypedef struct nlp_solver_capsule "double_pendulum_ode_solver_capsule":
         pass
 
-    nlp_solver_capsule * acados_create_capsule "pendulum_ode_acados_create_capsule"()
-    int acados_free_capsule "pendulum_ode_acados_free_capsule"(nlp_solver_capsule *capsule)
+    nlp_solver_capsule * acados_create_capsule "double_pendulum_ode_acados_create_capsule"()
+    int acados_free_capsule "double_pendulum_ode_acados_free_capsule"(nlp_solver_capsule *capsule)
 
-    int acados_create "pendulum_ode_acados_create"(nlp_solver_capsule * capsule)
+    int acados_create "double_pendulum_ode_acados_create"(nlp_solver_capsule * capsule)
 
-    int acados_create_with_discretization "pendulum_ode_acados_create_with_discretization"(nlp_solver_capsule * capsule, int n_time_steps, double* new_time_steps)
-    int acados_update_time_steps "pendulum_ode_acados_update_time_steps"(nlp_solver_capsule * capsule, int N, double* new_time_steps)
-    int acados_update_qp_solver_cond_N "pendulum_ode_acados_update_qp_solver_cond_N"(nlp_solver_capsule * capsule, int qp_solver_cond_N)
+    int acados_create_with_discretization "double_pendulum_ode_acados_create_with_discretization"(nlp_solver_capsule * capsule, int n_time_steps, double* new_time_steps)
+    int acados_update_time_steps "double_pendulum_ode_acados_update_time_steps"(nlp_solver_capsule * capsule, int N, double* new_time_steps)
+    int acados_update_qp_solver_cond_N "double_pendulum_ode_acados_update_qp_solver_cond_N"(nlp_solver_capsule * capsule, int qp_solver_cond_N)
 
-    int acados_update_params "pendulum_ode_acados_update_params"(nlp_solver_capsule * capsule, int stage, double *value, int np_)
-    int acados_solve "pendulum_ode_acados_solve"(nlp_solver_capsule * capsule)
-    int acados_reset "pendulum_ode_acados_reset"(nlp_solver_capsule * capsule)
-    int acados_free "pendulum_ode_acados_free"(nlp_solver_capsule * capsule)
-    void acados_print_stats "pendulum_ode_acados_print_stats"(nlp_solver_capsule * capsule)
+    int acados_update_params "double_pendulum_ode_acados_update_params"(nlp_solver_capsule * capsule, int stage, double *value, int np_)
+    int acados_solve "double_pendulum_ode_acados_solve"(nlp_solver_capsule * capsule)
+    int acados_reset "double_pendulum_ode_acados_reset"(nlp_solver_capsule * capsule)
+    int acados_free "double_pendulum_ode_acados_free"(nlp_solver_capsule * capsule)
+    void acados_print_stats "double_pendulum_ode_acados_print_stats"(nlp_solver_capsule * capsule)
 
-    acados_solver_common.ocp_nlp_in *acados_get_nlp_in "pendulum_ode_acados_get_nlp_in"(nlp_solver_capsule * capsule)
-    acados_solver_common.ocp_nlp_out *acados_get_nlp_out "pendulum_ode_acados_get_nlp_out"(nlp_solver_capsule * capsule)
-    acados_solver_common.ocp_nlp_out *acados_get_sens_out "pendulum_ode_acados_get_sens_out"(nlp_solver_capsule * capsule)
-    acados_solver_common.ocp_nlp_solver *acados_get_nlp_solver "pendulum_ode_acados_get_nlp_solver"(nlp_solver_capsule * capsule)
-    acados_solver_common.ocp_nlp_config *acados_get_nlp_config "pendulum_ode_acados_get_nlp_config"(nlp_solver_capsule * capsule)
-    void *acados_get_nlp_opts "pendulum_ode_acados_get_nlp_opts"(nlp_solver_capsule * capsule)
-    acados_solver_common.ocp_nlp_dims *acados_get_nlp_dims "pendulum_ode_acados_get_nlp_dims"(nlp_solver_capsule * capsule)
-    acados_solver_common.ocp_nlp_plan *acados_get_nlp_plan "pendulum_ode_acados_get_nlp_plan"(nlp_solver_capsule * capsule)
+    acados_solver_common.ocp_nlp_in *acados_get_nlp_in "double_pendulum_ode_acados_get_nlp_in"(nlp_solver_capsule * capsule)
+    acados_solver_common.ocp_nlp_out *acados_get_nlp_out "double_pendulum_ode_acados_get_nlp_out"(nlp_solver_capsule * capsule)
+    acados_solver_common.ocp_nlp_out *acados_get_sens_out "double_pendulum_ode_acados_get_sens_out"(nlp_solver_capsule * capsule)
+    acados_solver_common.ocp_nlp_solver *acados_get_nlp_solver "double_pendulum_ode_acados_get_nlp_solver"(nlp_solver_capsule * capsule)
+    acados_solver_common.ocp_nlp_config *acados_get_nlp_config "double_pendulum_ode_acados_get_nlp_config"(nlp_solver_capsule * capsule)
+    void *acados_get_nlp_opts "double_pendulum_ode_acados_get_nlp_opts"(nlp_solver_capsule * capsule)
+    acados_solver_common.ocp_nlp_dims *acados_get_nlp_dims "double_pendulum_ode_acados_get_nlp_dims"(nlp_solver_capsule * capsule)
+    acados_solver_common.ocp_nlp_plan *acados_get_nlp_plan "double_pendulum_ode_acados_get_nlp_plan"(nlp_solver_capsule * capsule)

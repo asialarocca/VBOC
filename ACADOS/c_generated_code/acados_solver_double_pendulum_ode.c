@@ -142,7 +142,7 @@ void double_pendulum_ode_acados_create_1_set_plan(ocp_nlp_plan_t* nlp_solver_pla
     ************************************************/
     nlp_solver_plan->nlp_solver = SQP;
 
-    nlp_solver_plan->ocp_qp_solver_plan.qp_solver = FULL_CONDENSING_QPOASES;
+    nlp_solver_plan->ocp_qp_solver_plan.qp_solver = PARTIAL_CONDENSING_HPIPM;
 
     nlp_solver_plan->nlp_cost[0] = LINEAR_LS;
     for (int i = 1; i < N; i++)
@@ -613,7 +613,22 @@ void double_pendulum_ode_acados_create_6_set_opts(double_pendulum_ode_solver_cap
     ************************************************/
 
 
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "globalization", "fixed_step");int full_step_dual = 0;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "globalization", "merit_backtracking");
+
+    double alpha_min = 0.05;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "alpha_min", &alpha_min);
+
+    double alpha_reduction = 0.7;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "alpha_reduction", &alpha_reduction);
+
+    int line_search_use_sufficient_descent = 0;
+    ocp_nlp_solver_opts_set(nlp_config, capsule->nlp_opts, "line_search_use_sufficient_descent", &line_search_use_sufficient_descent);
+
+    int globalization_use_SOC = 0;
+    ocp_nlp_solver_opts_set(nlp_config, capsule->nlp_opts, "globalization_use_SOC", &globalization_use_SOC);
+
+    double eps_sufficient_descent = 0.0001;
+    ocp_nlp_solver_opts_set(nlp_config, capsule->nlp_opts, "eps_sufficient_descent", &eps_sufficient_descent);int full_step_dual = 0;
     ocp_nlp_solver_opts_set(nlp_config, capsule->nlp_opts, "full_step_dual", &full_step_dual);
 
     // set collocation type (relevant for implicit integrators)
@@ -650,29 +665,35 @@ void double_pendulum_ode_acados_create_6_set_opts(double_pendulum_ode_solver_cap
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "levenberg_marquardt", &levenberg_marquardt);
 
     /* options QP solver */
+    int qp_solver_cond_N;
+
+    
+    // NOTE: there is no condensing happening here!
+    qp_solver_cond_N = N;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_cond_N", &qp_solver_cond_N);
 
 
 
     // set SQP specific options
-    double nlp_solver_tol_stat = 0.01;
+    double nlp_solver_tol_stat = 0.001;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_stat", &nlp_solver_tol_stat);
 
-    double nlp_solver_tol_eq = 0.01;
+    double nlp_solver_tol_eq = 0.001;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_eq", &nlp_solver_tol_eq);
 
-    double nlp_solver_tol_ineq = 0.01;
+    double nlp_solver_tol_ineq = 0.001;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_ineq", &nlp_solver_tol_ineq);
 
-    double nlp_solver_tol_comp = 0.01;
+    double nlp_solver_tol_comp = 0.001;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_comp", &nlp_solver_tol_comp);
 
-    int nlp_solver_max_iter = 200;
+    int nlp_solver_max_iter = 1000;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "max_iter", &nlp_solver_max_iter);
 
     int initialize_t_slacks = 0;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "initialize_t_slacks", &initialize_t_slacks);
 
-    int qp_solver_iter_max = 50;
+    int qp_solver_iter_max = 1000;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_iter_max", &qp_solver_iter_max);
 
 int print_level = 0;
@@ -795,10 +816,22 @@ int double_pendulum_ode_acados_create_with_discretization(double_pendulum_ode_so
  */
 int double_pendulum_ode_acados_update_qp_solver_cond_N(double_pendulum_ode_solver_capsule* capsule, int qp_solver_cond_N)
 {
-    printf("\nacados_update_qp_solver_cond_N() failed, since no partial condensing solver is used!\n\n");
-    // Todo: what is an adequate behavior here?
-    exit(1);
-    return -1;
+    // 1) destroy solver
+    ocp_nlp_solver_destroy(capsule->nlp_solver);
+
+    // 2) set new value for "qp_cond_N"
+    const int N = capsule->nlp_solver_plan->N;
+    if(qp_solver_cond_N > N)
+        printf("Warning: qp_solver_cond_N = %d > N = %d\n", qp_solver_cond_N, N);
+    ocp_nlp_solver_opts_set(capsule->nlp_config, capsule->nlp_opts, "qp_cond_N", &qp_solver_cond_N);
+
+    // 3) continue with the remaining steps from double_pendulum_ode_acados_create_with_discretization(...):
+    // -> 8) create solver
+    capsule->nlp_solver = ocp_nlp_solver_create(capsule->nlp_config, capsule->nlp_dims, capsule->nlp_opts);
+
+    // -> 9) do precomputations
+    int status = double_pendulum_ode_acados_create_9_precompute(capsule);
+    return status;
 }
 
 
@@ -912,7 +945,7 @@ void double_pendulum_ode_acados_print_stats(double_pendulum_ode_solver_capsule* 
     ocp_nlp_get(capsule->nlp_config, capsule->nlp_solver, "stat_m", &stat_m);
 
     
-    double stat[2400];
+    double stat[12000];
     ocp_nlp_get(capsule->nlp_config, capsule->nlp_solver, "statistics", stat);
 
     int nrow = sqp_iter+1 < stat_m ? sqp_iter+1 : stat_m;
