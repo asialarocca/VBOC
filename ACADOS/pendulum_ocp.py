@@ -53,12 +53,12 @@ ocp = AcadosOcp()
 # ocp model
 ocp.model = model
 
-Tf = 1.
+Tf = 0.1
 nx = model.x.size()[0]
 nu = model.u.size()[0]
 ny = nx + nu
 ny_e = nx
-N = 10
+N = int(100 * Tf)
 
 # set dimensions
 ocp.dims.N = N
@@ -78,7 +78,7 @@ ocp.cost.cost_type_e = 'LINEAR_LS'
 ocp.cost.Vx = np.zeros((ny, nx))
 ocp.cost.Vx[:nx, :nx] = np.eye(nx)
 ocp.cost.Vu = np.zeros((ny, nu))
-ocp.cost.Vu[nx:, :nu] = np.eye(nu)
+ocp.cost.Vu[2, 0] = 1.0
 ocp.cost.Vx_e = np.eye(nx)
 
 ocp.cost.yref = np.zeros((ny, ))
@@ -102,21 +102,33 @@ ocp.constraints.idxbx = np.array([0, 1])
 ocp.constraints.lbx_e = np.array([thetamin, -dthetamax])
 ocp.constraints.ubx_e = np.array([thetamax, dthetamax])
 ocp.constraints.idxbx_e = np.array([0, 1])
-#ocp.constraints.lh_e = np.array([-0.01])
-#ocp.constraints.uh_e = np.array([0.01])
+
+model.con_h_expr_e = nn_decisionfunction(
+    nn, x
+)
+ocp.constraints.lh_e = np.array([0.5])
+ocp.constraints.uh_e = np.array([1.0])
 
 ocp.solver_options.nlp_solver_type = 'SQP'
 
 # Initial cnditions
-ocp.constraints.x0 = np.array([1., 6.])
+q0 = 1.
+v0 = 6.
+ocp.constraints.x0 = np.array([q0,v0])
 
 # Solver
 ocp_solver = AcadosOcpSolver(ocp, json_file='acados_ocp.json')
 
 ocp_solver.reset()
 
-# ocp_solver.constraints_set(0, "lbu", 0.)
-# ocp_solver.constraints_set(0, "ubu", 0.)
+x_guess = np.array([q0, 0])
+u_guess = np.array([-10 * v0])
+
+for i in range(N + 1):
+    ocp_solver.set(i, "x", x_guess)
+
+for i in range(N):
+    ocp_solver.set(i, "u", u_guess)
 
 status = ocp_solver.solve()
 

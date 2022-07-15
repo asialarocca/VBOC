@@ -63,7 +63,7 @@
 #define PENDULUM_ODE_NY0    3
 #define PENDULUM_ODE_NY     3
 #define PENDULUM_ODE_NYN    2
-#define PENDULUM_ODE_N      50
+#define PENDULUM_ODE_N      100
 #define PENDULUM_ODE_NH     0
 #define PENDULUM_ODE_NPHI   0
 #define PENDULUM_ODE_NHN    0

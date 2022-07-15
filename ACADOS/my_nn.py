@@ -11,8 +11,10 @@ class NeuralNet(nn.Module):
             nn.Linear(hidden_size, hidden_size),
             nn.Tanh(),
             nn.Linear(hidden_size, output_size),
+            # nn.Sigmoid(),
         )
 
     def forward(self, x):
         out = self.linear_relu_stack(x)
+
         return out

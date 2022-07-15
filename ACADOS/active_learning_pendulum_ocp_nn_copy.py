@@ -5,9 +5,11 @@ import matplotlib.pyplot as plt
 import time
 from pendulum_ocp_class import OCPpendulumINIT
 import warnings
+import random
 import torch
 import torch.nn as nn
 from my_nn import NeuralNet
+import math
 
 warnings.filterwarnings("ignore")
 
@@ -28,7 +30,7 @@ with cProfile.Profile() as pr:
 
     # Hyper-parameters for nn:
     input_size = ocp_dim
-    hidden_size = ocp_dim * 10
+    hidden_size = ocp_dim * 20
     output_size = 2
     learning_rate = 0.01
 
@@ -46,7 +48,9 @@ with cProfile.Profile() as pr:
     B = pow(10, ocp_dim)  # batch size
     etp_stop = 0.1  # active learning stopping condition
     loss_stop = 0.1  # nn training stopping condition
-    # etp_ref = 1e-4
+    beta = 0.8
+    n_minibatch = 64
+    it_max = 1e2 * B / n_minibatch
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
@@ -60,16 +64,19 @@ with cProfile.Profile() as pr:
     mean, std = torch.mean(Xu_iter_tensor), torch.std(Xu_iter_tensor)
 
     # Generate the initial set of labeled samples:
-    X_iter = np.empty((10 * 2 * ocp_dim, ocp_dim))
-    y_iter = np.full((10 * 2 * ocp_dim, 2), [1, 0])
-    q_test = np.linspace(q_min, q_max, num=10)
-    v_test = np.linspace(v_min, v_max, num=10)
+    n = pow(10, ocp_dim)
+    X_iter = np.empty((n, ocp_dim))
+    y_iter = np.full((n, 2), [1, 0])
+    r = np.random.random(size=(n, ocp_dim - 1))
+    k = np.random.randint(ocp_dim, size=(n, 1))
+    j = np.random.randint(2, size=(n, 1))
+    x = np.zeros((n, ocp_dim))
+    for i in np.arange(n):
+        x[i, np.arange(ocp_dim)[np.arange(ocp_dim) != k[i]]] = r[i, :]
+        x[i, k[i]] = j[i]
 
-    for p in range(10):
-        X_iter[p, :] = [q_min - 0.01, v_test[p]]
-        X_iter[p + 10, :] = [q_max + 0.01, v_test[p]]
-        X_iter[p + 20, :] = [q_test[p], v_min - 0.1]
-        X_iter[p + 30, :] = [q_test[p], v_max + 0.1]
+    X_iter[:, 0] = x[:, 0] * (q_max + 0.1 - (q_min - 0.1)) + q_min - 0.1
+    X_iter[:, 1] = x[:, 1] * (v_max + 1 - (v_min - 1)) + v_min - 1
 
     # Training of an initial classifier:
     for n in range(N_init):
@@ -97,26 +104,36 @@ with cProfile.Profile() as pr:
     # Delete tested data from the unlabeled set:
     Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
 
-    X_iter_tensor = torch.from_numpy(X_iter.astype(np.float32))
-    y_iter_tensor = torch.from_numpy(y_iter.astype(np.float32))
-    X_iter_tensor = (X_iter_tensor - mean) / std
-
+    it = 0
     val = 1
 
     # Train the model
-    while val > loss_stop:
+    while val > loss_stop and it <= it_max:
+
+        ind = random.sample(range(X_iter.shape[0]), n_minibatch)
+        X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
+        y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
+        X_iter_tensor = (X_iter_tensor - mean) / std
+
         # Forward pass
         outputs = model(X_iter_tensor)
         loss = criterion(outputs, y_iter_tensor)
 
         # Backward and optimize
-        for param in model.parameters():
-            param.grad = None
-
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad()
 
-        val = loss.item()
+        ind = random.sample(range(X_iter.shape[0]), n_minibatch)
+        X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
+        y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
+        X_iter_tensor = (X_iter_tensor - mean) / std
+
+        vloss = criterion(model(X_iter_tensor), y_iter_tensor)
+
+        val = vloss.item()
+
+        it += 1
 
     print("INITIAL CLASSIFIER TRAINED")
 
@@ -147,40 +164,6 @@ with cProfile.Profile() as pr:
         plt.title("Classifier")
         hand = scatter.legend_elements()[0]
         plt.legend(handles=hand, labels=("Non viable", "Viable"))
-
-        # # Plot of the entropy:
-        # plt.figure()
-        # sigmoid = nn.Sigmoid()
-        # prob_xu = sigmoid(out).numpy()
-        # etp_xu = entropy(prob_xu, axis=1)
-        # out = etp_xu.reshape(xx.shape)
-        # levels = np.linspace(out.min(), out.max(), 10)
-        # plt.contourf(xx, yy, out, levels=levels)
-        # this = plt.contour(xx, yy, out, levels=levels, colors=("k",), linewidths=(1,))
-        # plt.clabel(this, fmt="%2.1f", colors="w", fontsize=11)
-        # plt.xlim([0.0, np.pi / 2 - 0.01])
-        # plt.ylim([-10.0, 10.0])
-        # plt.xlabel("Initial position [rad]")
-        # plt.ylabel("Initial velocity [rad/s]")
-        # plt.title("Entropy")
-
-        # # Delete certain data from the labeled set:
-        # sigmoid = nn.Sigmoid()
-        # x_prob = sigmoid(X_iter_tensor).numpy()
-        # etx = entropy(x_prob, axis=1)
-        # etx = [1 if x > etp_ref else x / etp_ref for x in etx]
-        # sel = [i for i in range(X_iter.shape[0]) if np.random.uniform() < etx[i]]
-        # X_iter = X_iter[sel]
-        # y_iter = y_iter[sel]
-
-        # # Delete certain data from the unlabeled set:
-        # Xu_iter_tensor = torch.from_numpy(Xu_iter.astype(np.float32))
-        # Xu_iter_tensor = (Xu_iter_tensor - mean) / std
-        # xu_prob = sigmoid(Xu_iter_tensor).numpy()
-        # etxu = entropy(xu_prob, axis=1)
-        # etxu = [1 if x > etp_ref else x / etp_ref for x in etxu]
-        # sel = [i for i in range(Xu_iter.shape[0]) if np.random.uniform() < etxu[i]]
-        # Xu_iter = Xu_iter[sel]
 
     # Active learning:
     k = 0  # iteration number
@@ -225,66 +208,48 @@ with cProfile.Profile() as pr:
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
 
-        selec = [i for i in range(X_iter.shape[0] - B) if np.random.uniform() <= 1 / k]
-        selec.extend([i for i in range(X_iter.shape[0] - B, X_iter.shape[0])])
-
-        # print(len(selec))
-        # print(X_iter.shape[0])
-
-        X_iter_tensor = torch.from_numpy(X_iter[selec].astype(np.float32))
-        X_iter_tensor = (X_iter_tensor - mean) / std
-        y_iter_tensor = torch.from_numpy(y_iter[selec].astype(np.float32))
-
+        it = 0
         val = 1
 
         # Train the model
-        while val > loss_stop:
+        while val > loss_stop and it <= it_max:
+
+            ind = random.sample(range(X_iter.shape[0] - B), int(n_minibatch / 2))
+            ind.extend(
+                random.sample(
+                    range(X_iter.shape[0] - B, X_iter.shape[0]),
+                    int(n_minibatch / 2),
+                )
+            )
+            X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
+            y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
+            X_iter_tensor = (X_iter_tensor - mean) / std
+
             # Forward pass
             outputs = model(X_iter_tensor)
             loss = criterion(outputs, y_iter_tensor)
 
             # Backward and optimize
-            for param in model.parameters():
-                param.grad = None
-
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad()
 
-            val = loss.item()
+            ind = random.sample(range(X_iter.shape[0]), 2 * n_minibatch)
+            X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
+            y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
+            X_iter_tensor = (X_iter_tensor - mean) / std
+
+            vloss = criterion(model(X_iter_tensor), y_iter_tensor)
+
+            val = vloss.item()
+
+            it += 1
 
         print("CLASSIFIER", k, "TRAINED")
-
-        # with torch.no_grad():
-        #     # Delete certain data from the labeled set:
-        #     x_prob = sigmoid(X_iter_tensor).numpy()
-        #     etx = entropy(x_prob, axis=1)
-        #     etx = [1 if x > etp_ref else x / etp_ref for x in etx]
-        #     sel = [
-        #         i
-        #         for i in range(X_iter_tensor.numpy().shape[0])
-        #         if np.random.uniform() < etx[i]
-        #     ]
-        #     X_iter = X_iter[sel]
-        #     y_iter = y_iter[sel]
-
-        #     # Delete certain data from the unlabeled set:
-        #     Xu_iter_tensor = torch.from_numpy(Xu_iter.astype(np.float32))
-        #     Xu_iter_tensor = (Xu_iter_tensor - mean) / std
-        #     xu_prob = sigmoid(Xu_iter_tensor).numpy()
-        #     etxu = entropy(xu_prob, axis=1)
-        #     etxu = [1 if x > etp_ref else x / etp_ref for x in etxu]
-        #     sel = [
-        #         i
-        #         for i in range(Xu_iter_tensor.numpy().shape[0])
-        #         if np.random.uniform() < etxu[i]
-        #     ]
-        #     Xu_iter = Xu_iter[sel]
 
     with torch.no_grad():
         # Plot the results:
         plt.figure()
-        inp = torch.from_numpy(np.c_[xx.ravel(), yy.ravel()].astype(np.float32))
-        inp = (inp - mean) / std
         out = model(inp)
         y_pred = np.argmax(out.numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)
@@ -308,21 +273,6 @@ with cProfile.Profile() as pr:
         plt.title("Classifier")
         hand = scatter.legend_elements()[0]
         plt.legend(handles=hand, labels=("Non viable", "Viable"))
-
-        # # Plot of the entropy:
-        # plt.figure()
-        # prob_xu = sigmoid(out).numpy()
-        # etxu = entropy(prob_xu, axis=1)
-        # out = etxu.reshape(xx.shape)
-        # levels = np.linspace(out.min(), out.max(), 10)
-        # plt.contourf(xx, yy, out, levels=levels)
-        # this = plt.contour(xx, yy, out, levels=levels, colors=("k",), linewidths=(1,))
-        # plt.clabel(this, fmt="%2.1f", colors="w", fontsize=11)
-        # plt.xlim([0.0, np.pi / 2 - 0.01])
-        # plt.ylim([-10.0, 10.0])
-        # plt.xlabel("Initial position [rad]")
-        # plt.ylabel("Initial velocity [rad/s]")
-        # plt.title("Entropy")
 
     plt.figure()
     plt.plot(performance_history[1:])

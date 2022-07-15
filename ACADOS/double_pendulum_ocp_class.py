@@ -4,6 +4,7 @@ import numpy as np
 from acados_template import AcadosModel
 from casadi import SX, vertcat, cos, sin, exp, norm_2
 import matplotlib.pyplot as plt
+import time
 
 
 class OCPdoublependulum:
@@ -98,7 +99,7 @@ class OCPdoublependulum:
         self.ocp = AcadosOcp()
 
         # dimensions
-        self.Tf = 0.05
+        self.Tf = 0.4
         self.ocp.solver_options.tf = self.Tf  # prediction horizon
 
         self.N = int(100 * self.Tf)
@@ -135,6 +136,15 @@ class OCPdoublependulum:
         self.thetamin = np.pi
         self.dthetamax = 5.0
 
+        self.normal = np.array(
+            [
+                self.thetamax - self.thetamin,
+                self.thetamax - self.thetamin,
+                2 * self.dthetamax,
+                2 * self.dthetamax,
+            ]
+        )
+
         self.ocp.constraints.lbu = np.array([-self.Cmax, -self.Cmax])
         self.ocp.constraints.ubu = np.array([self.Cmax, self.Cmax])
         self.ocp.constraints.idxbu = np.array([0, 1])
@@ -157,9 +167,6 @@ class OCPdoublependulum:
 
         # options
         self.ocp.solver_options.nlp_solver_type = "SQP"
-        self.ocp.solver_options.qp_solver = "PARTIAL_CONDENSING_HPIPM"
-        self.ocp.solver_options.nlp_solver_max_iter = 1000
-        self.ocp.solver_options.qp_solver_iter_max = 1000
         self.ocp.solver_options.tol = 1e-3
         self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"
         # -------------------------------------------------
@@ -174,21 +181,15 @@ class OCPdoublependulum:
         self.ocp_solver.constraints_set(0, "ubx", x0)
 
         x_guess = np.array([q0[0], q0[1], 0, 0])
-        u_guess = np.array([-v0[0], -v0[1]])
-
-        for i in range(self.N + 1):
-            self.ocp_solver.set(i, "x", x_guess)
 
         for i in range(self.N):
-            self.ocp_solver.set(i, "u", u_guess)
+            self.ocp_solver.set(i, "x", x_guess)
+
+        self.ocp_solver.set(self.N, "x", x_guess)
 
         status = self.ocp_solver.solve()
 
-        if status == 2:
-            return 2
-        elif status != 0:
-            return 0
-        else:
+        if status == 0:
             # # get solution
             # simX = np.ndarray((self.N+1, self.nx))
             # simU = np.ndarray((self.N, 2))
@@ -242,8 +243,47 @@ class OCPdoublependulum:
             # plt.xlabel('$t$')
             # plt.grid()
             # plt.show()
-
             return 1
+        elif status == 4:
+            return 0
+        else:
+            return 2
+
+    def compute_problem_withGUESS(self, q0, v0, simX_vec, simU_vec):
+
+        self.ocp_solver.reset()
+
+        x0 = np.array([q0[0], q0[1], v0[0], v0[1]])
+
+        self.ocp_solver.constraints_set(0, "lbx", x0)
+        self.ocp_solver.constraints_set(0, "ubx", x0)
+
+        dist_min = 1e3
+        # index = 0
+
+        for k in range(simX_vec.shape[0]):
+            # if np.sign(simX_vec[k, 0, 2]) == np.sign(v0[0]) and np.sign(simX_vec[k, 0, 3]) == np.sign(v0[1]):
+            dist = np.linalg.norm(x0 / self.normal - simX_vec[k, 0, :] / self.normal)
+            if dist < dist_min:
+                dist_min = dist
+                index = k
+
+        # print(x0, simX_vec[index, 0, :])
+
+        for i in range(self.N):
+            self.ocp_solver.set(i, "x", simX_vec[index, i, :])
+            # self.ocp_solver.set(i, "u", simU_vec[index, i, :])
+
+        self.ocp_solver.set(self.N, "x", simX_vec[index, self.N, :])
+
+        status = self.ocp_solver.solve()
+
+        if status == 0:
+            return 1
+        elif status == 4:
+            return 0
+        else:
+            return 2
 
 
 class OCPdoublependulumINIT(OCPdoublependulum):
