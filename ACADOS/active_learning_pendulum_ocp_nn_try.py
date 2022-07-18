@@ -4,7 +4,7 @@ from scipy.stats import entropy, qmc
 import matplotlib.pyplot as plt
 from utils import plot_pendulum
 import time
-from pendulum_ocp_class import OCPpendulumINIT
+from pendulum_ocp_class import OCPpendulumINIT, OCPpendulumNN
 import warnings
 import random
 import queue
@@ -14,6 +14,9 @@ from torch.utils.data import TensorDataset, DataLoader
 from my_nn import NeuralNet
 import math
 import sys
+from casadi import SX, MX, vertcat, sin, exp, norm_2, fmax, tanh
+from statistics import mean
+
 
 warnings.filterwarnings("ignore")
 
@@ -58,7 +61,7 @@ with cProfile.Profile() as pr:
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(50, ocp_dim))
+    sample = sampler.random(n=pow(100, ocp_dim))
     l_bounds = [q_min, v_min]
     u_bounds = [q_max, v_max]
     data = qmc.scale(sample, l_bounds, u_bounds)
@@ -68,28 +71,40 @@ with cProfile.Profile() as pr:
     # mean, std = torch.mean(Xu_iter_tensor), torch.std(Xu_iter_tensor)
 
     # Generate the initial set of labeled samples:
-    n = pow(10, ocp_dim)
-    X_iter = np.empty((n, ocp_dim), dtype="f")
-    y_iter = np.full((n, 2), [1, 0], dtype="f")
-    r = np.random.random(size=(n, ocp_dim - 1))
-    k = np.random.randint(ocp_dim, size=(n, 1))
-    j = np.random.randint(2, size=(n, 1))
-    x = np.zeros((n, ocp_dim))
-    for i in np.arange(n):
-        x[i, np.arange(ocp_dim)[np.arange(ocp_dim) != k[i]]] = r[i, :]
-        x[i, k[i]] = j[i]
+    res = ocp.compute_problem((q_max + q_min) / 2, 0.0)
+    if res != 2:
+        X_iter = np.array([[(q_max + q_min) / 2, 0.0]], dtype="f")
+        if res == 1:
+            y_iter = np.array([[0, 1]], dtype="f")
+        else:
+            y_iter = np.array([[1, 0]], dtype="f")
+    else:
+        raise Exception("Max iteration reached")
 
-    X_iter[:, 0] = np.float32(x[:, 0] * (q_max + 0.1 - (q_min - 0.1)) + q_min - 0.1)
-    X_iter[:, 1] = np.float32(x[:, 1] * (v_max + 1 - (v_min - 1)) + v_min - 1)
+    # # Generate the initial set of labeled samples:
+    # n = pow(10, ocp_dim)
+    # X_iter = np.empty((n, ocp_dim), dtype="f")
+    # y_iter = np.full((n, 2), [1, 0], dtype="f")
+    # r = np.random.random(size=(n, ocp_dim - 1))
+    # k = np.random.randint(ocp_dim, size=(n, 1))
+    # j = np.random.randint(2, size=(n, 1))
+    # x = np.zeros((n, ocp_dim))
+    # for i in np.arange(n):
+    #     x[i, np.arange(ocp_dim)[np.arange(ocp_dim) != k[i]]] = r[i, :]
+    #     x[i, k[i]] = j[i]
 
-    # Get solution of positive samples:
+    # X_iter[:, 0] = np.float32(x[:, 0] * (q_max + 0.1 - (q_min - 0.1)) + q_min - 0.1)
+    # X_iter[:, 1] = np.float32(x[:, 1] * (v_max + 1 - (v_min - 1)) + v_min - 1)
+
+    # # Get solution of positive samples:
     N = ocp.N
-    simX_vec = np.ndarray((1, N + 1, 2))
-    simX_vec.fill(0.0)
-    simU_vec = np.ndarray((1, N, 1))
-    simU_vec.fill(0.0)
-    simX = np.ndarray((N + 1, 2))
-    simU = np.ndarray((N, 1))
+    # simX_vec = np.ndarray((1, N + 1, 2))
+    # simX_vec.fill(0.0)
+    # simU_vec = np.ndarray((1, N, 1))
+    # simU_vec.fill(0.0)
+    # simX = np.ndarray((N + 1, 2))
+    # simU = np.ndarray((N, 1))
+    sqp_iter = []
 
     # Training of an initial classifier:
     for n in range(N_init):
@@ -97,7 +112,8 @@ with cProfile.Profile() as pr:
         v0 = Xu_iter[n, 1]
 
         # Data testing:
-        res = ocp.compute_problem(q0, v0)
+        res, n_it = ocp.compute_problem(q0, v0)
+        sqp_iter.append(n_it[0])
         if res != 2:
             X_iter = np.append(X_iter, [[q0, v0]], axis=0)
             if res == 1:
@@ -112,13 +128,13 @@ with cProfile.Profile() as pr:
                 X_iter = np.append(X_iter, [current_val], axis=0)
                 y_iter = np.append(y_iter, [[0, 1]], axis=0)
 
-                for i in range(N):
-                    simX[i, :] = ocp.ocp_solver.get(i, "x")
-                    simU[i] = ocp.ocp_solver.get(i, "u")
-                simX[N, :] = ocp.ocp_solver.get(N, "x")
+                # for i in range(N):
+                #     simX[i, :] = ocp.ocp_solver.get(i, "x")
+                #     simU[i] = ocp.ocp_solver.get(i, "u")
+                # simX[N, :] = ocp.ocp_solver.get(N, "x")
 
-                simX_vec = np.append(simX_vec, [simX], axis=0)
-                simU_vec = np.append(simU_vec, [simU], axis=0)
+                # simX_vec = np.append(simX_vec, [simX], axis=0)
+                # simU_vec = np.append(simU_vec, [simU], axis=0)
 
     # Delete tested data from the unlabeled set:
     Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
@@ -162,6 +178,7 @@ with cProfile.Profile() as pr:
         # inp = (inp - mean) / std
         out = model(inp)
         y_pred = np.argmax(out.numpy(), axis=1)
+        # y_pred = np.array([1 if out[x, 1] > 0.5 else 0 for x in range(out.shape[0])])
         Z = y_pred.reshape(xx.shape)
         z = [
             0 if np.array_equal(y_iter[x], [1, 0]) else 1
@@ -234,8 +251,10 @@ with cProfile.Profile() as pr:
             v0 = Xu_iter[maxindex[x], 1]
 
             # Data testing:
-            res = ocp.compute_problem_withGUESS(q0, v0, simX_vec, simU_vec)
-            # res = ocp.compute_problem(q0, v0)
+            # res = ocp.compute_problem_withGUESSPID(q0, v0)
+            # res = ocp.compute_problem_withGUESS(q0, v0, simX_vec, simU_vec)
+            res, n_it = ocp.compute_problem(q0, v0)
+            sqp_iter.append(n_it[0])
             if res != 2:
                 X_iter = np.append(X_iter, [[q0, v0]], axis=0)
                 if res == 1:
@@ -320,6 +339,63 @@ with cProfile.Profile() as pr:
         # plt.ylabel("Initial velocity [rad/s]")
         # plt.title("Entropy")
 
+    print(mean(sqp_iter))
+
+#     # def model_acados(model, x):
+#     #     it = 2
+#     #     out = SX(x)
+
+#     #     for param in model.parameters():
+#     #         param = SX(param.tolist())
+#     #         if it % 2 == 0:
+#     #             out = param @ out
+#     #         else:
+#     #             out = param + out
+
+#     #             if it == 3:
+#     #                 out = fmax(0.0, out)
+#     #             elif it == 5:
+#     #                 out = tanh(out)
+#     #             else:
+#     #                 out = 1 / (1 + exp(-out))
+#     #         it += 1
+
+#     #     if out[0] > out[1]:
+#     #         return 0
+#     #     else:
+#     #         return 1
+
+#     # with torch.no_grad():
+#     #     # Plot the results:
+#     #     plt.figure()
+#     #     h = 0.1
+#     #     xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+#     #     inp = np.c_[xx.ravel(), yy.ravel()]
+#     #     y_pred = np.empty((inp.shape[0]))
+#     #     for i in range(inp.shape[0]):
+#     #         y_pred[i] = model_acados(model, inp[i])
+#     #     Z = y_pred.reshape(xx.shape)
+#     #     z = [
+#     #         0 if np.array_equal(y_iter[x], [1, 0]) else 1
+#     #         for x in range(y_iter.shape[0])
+#     #     ]
+#     #     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+#     #     scatter = plt.scatter(
+#     #         X_iter[:, 0],
+#     #         X_iter[:, 1],
+#     #         c=z,
+#     #         marker=".",
+#     #         alpha=0.5,
+#     #         cmap=plt.cm.Paired,
+#     #     )
+#     #     plt.xlim([0.0, np.pi / 2 - 0.01])
+#     #     plt.ylim([-10.0, 10.0])
+#     #     plt.xlabel("Initial position [rad]")
+#     #     plt.ylabel("Initial velocity [rad/s]")
+#     #     plt.title("Classifier")
+#     #     hand = scatter.legend_elements()[0]
+#     #     plt.legend(handles=hand, labels=("Non viable", "Viable"))
+
 #     del (X_iter, y_iter, ocp)
 
 #     # Ocp initialization:
@@ -330,42 +406,33 @@ with cProfile.Profile() as pr:
 #     model = NeuralNet(input_size, hidden_size, output_size).to(device)
 
 #     # Loss and optimizer
-#     criterion = nn.BCELoss()
+#     criterion = nn.BCEWithLogitsLoss()
 #     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-
-#     # Active learning parameters:
-#     N_init = pow(10, ocp_dim)  # size of initial labeled set
-#     B = pow(10, ocp_dim)  # batch size
-#     loss_stop = 0.05  # nn training stopping condition
-#     beta = 0.8
-#     n_minibatch = 64
 
 #     # Generate low-discrepancy unlabeled samples:
 #     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-#     sample = sampler.random(n=pow(20, ocp_dim))
+#     sample = sampler.random(n=pow(100, ocp_dim))
 #     l_bounds = [q_min, v_min]
 #     u_bounds = [q_max, v_max]
-#     Xu_iter = qmc.scale(sample, l_bounds, u_bounds)
+#     data = qmc.scale(sample, l_bounds, u_bounds)
 
-#     Xu_iter_tensor = torch.from_numpy(Xu_iter.astype(np.float32))
+#     Xu_iter = np.float32(data)  # Unlabeled set
+#     Xu_iter_tensor = torch.from_numpy(Xu_iter)
+#     # mean, std = torch.mean(Xu_iter_tensor), torch.std(Xu_iter_tensor)
 
 #     # Generate the initial set of labeled samples:
-#     n = pow(10, ocp_dim)
-#     X_iter = np.empty((n, ocp_dim))
-#     y_iter = np.full((n, 1), [[0]])
-#     r = np.random.random(size=(n, ocp_dim - 1))
-#     k = np.random.randint(ocp_dim, size=(n, 1))
-#     j = np.random.randint(2, size=(n, 1))
-#     x = np.zeros((n, ocp_dim))
-#     for i in np.arange(n):
-#         x[i, np.arange(ocp_dim)[np.arange(ocp_dim) != k[i]]] = r[i, :]
-#         x[i, k[i]] = j[i]
-
-#     X_iter[:, 0] = x[:, 0] * (q_max + 0.1 - (q_min - 0.1)) + q_min - 0.1
-#     X_iter[:, 1] = x[:, 1] * (v_max + 1 - (v_min - 1)) + v_min - 1
+#     res = ocp.compute_problem((q_max + q_min) / 2, 0.0)
+#     if res != 2:
+#         X_iter = np.array([[(q_max + q_min) / 2, 0.0]], dtype="f")
+#         if res == 1:
+#             y_iter = np.array([[0, 1]], dtype="f")
+#         else:
+#             y_iter = np.array([[1, 0]], dtype="f")
+#     else:
+#         raise Exception("Max iteration reached")
 
 #     # Training of an initial classifier:
-#     for n in range(Xu_iter.shape[0]):
+#     for n in range(N_init):
 #         q0 = Xu_iter[n, 0]
 #         v0 = Xu_iter[n, 1]
 
@@ -373,17 +440,17 @@ with cProfile.Profile() as pr:
 #         res = ocp.compute_problem(q0, v0)
 #         if res != 2:
 #             X_iter = np.append(X_iter, [[q0, v0]], axis=0)
-#             y_iter = np.append(y_iter, [[res]], axis=0)
-#         else:
-#             raise Exception("Max iteration reached")
+#             if res == 1:
+#                 y_iter = np.append(y_iter, [[0, 1]], axis=0)
+#             else:
+#                 y_iter = np.append(y_iter, [[1, 0]], axis=0)
 
 #         # Add intermediate states of succesfull initial conditions
 #         if res == 1:
-#             for f in range(1, ocp.N, int(ocp.N / 3)):
-#                 current_val = ocp.ocp_solver.get(f, "x")
+#             for f in range(1, N, int(N / 3)):
+#                 current_val = np.float32(ocp.ocp_solver.get(f, "x"))
 #                 X_iter = np.append(X_iter, [current_val], axis=0)
-#                 y_iter = np.append(y_iter, [[1]], axis=0)
-
+#                 y_iter = np.append(y_iter, [[0, 1]], axis=0)
 #     val = 1
 
 #     # Train the model
@@ -396,6 +463,7 @@ with cProfile.Profile() as pr:
 
 #         # Forward pass
 #         outputs = model(X_iter_tensor)
+
 #         loss = criterion(outputs, y_iter_tensor)
 
 #         # Backward and optimize
@@ -410,25 +478,18 @@ with cProfile.Profile() as pr:
 #     with torch.no_grad():
 #         # Plot the results:
 #         plt.figure()
-#         x_min, x_max = 0.0, np.pi / 2
-#         y_min, y_max = -10.0, 10.0
-#         h = 0.02
-#         xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
-#         inp = torch.from_numpy(np.c_[xx.ravel(), yy.ravel()].astype(np.float32))
-#         # inp = (inp - mean) / std
 #         out = model(inp)
-#         out = out.numpy()
-#         out = out.reshape(xx.shape)
-
-#         def my_fun(x):
-#             return 1 if x >= 0.5 else 0
-
-#         out = np.vectorize(my_fun)(out)
-#         plt.contourf(xx, yy, out, cmap=plt.cm.coolwarm, alpha=0.8)
+#         y_pred = np.argmax(out.numpy(), axis=1)
+#         Z = y_pred.reshape(xx.shape)
+#         z = [
+#             0 if np.array_equal(y_iter[x], [1, 0]) else 1
+#             for x in range(y_iter.shape[0])
+#         ]
+#         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
 #         scatter = plt.scatter(
 #             X_iter[:, 0],
 #             X_iter[:, 1],
-#             c=y_iter,
+#             c=z,
 #             marker=".",
 #             alpha=0.5,
 #             cmap=plt.cm.Paired,
@@ -441,29 +502,129 @@ with cProfile.Profile() as pr:
 #         hand = scatter.legend_elements()[0]
 #         plt.legend(handles=hand, labels=("Non viable", "Viable"))
 
-#     print("Execution time: %s seconds" % (time.time() - start_time))
+#     # Active learning:
+#     k = 0  # iteration number
+#     etpmax = 1
+#     performance_history = [etpmax]
+
+#     while not (etpmax < etp_stop or Xu_iter.shape[0] == 0):
+
+#         if Xu_iter.shape[0] < B:
+#             B = Xu_iter.shape[0]
+
+#         with torch.no_grad():
+#             sigmoid = nn.Sigmoid()
+#             Xu_iter_tensor = torch.from_numpy(Xu_iter)
+#             # Xu_iter_tensor = (Xu_iter_tensor - mean) / std
+#             prob_xu = sigmoid(model(Xu_iter_tensor)).numpy()
+#             etp = entropy(prob_xu, axis=1)
+
+#         maxindex = np.argpartition(etp, -B)[-B:]  # indexes of the uncertain samples
+
+#         etpmax = max(etp)  # max entropy used for the stopping condition
+#         performance_history.append(etpmax)
+
+#         k += 1
+
+#         # Add the B most uncertain samples to the labeled set:
+#         for x in range(B):
+#             q0 = Xu_iter[maxindex[x], 0]
+#             v0 = Xu_iter[maxindex[x], 1]
+
+#             # Data testing:
+#             # res = ocp.compute_problem_withGUESS(q0, v0, simX_vec, simU_vec)
+#             res = ocp.compute_problem(q0, v0)
+#             if res != 2:
+#                 X_iter = np.append(X_iter, [[q0, v0]], axis=0)
+#                 if res == 1:
+#                     y_iter = np.append(y_iter, [[0, 1]], axis=0)
+#                 else:
+#                     y_iter = np.append(y_iter, [[1, 0]], axis=0)
+
+#         # Delete tested data from the unlabeled set:
+#         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
+
+#         it = 0
+#         val = 1
+
+#         # Train the model
+#         while val > loss_stop and it <= it_max:
+
+#             ind = random.sample(range(X_iter.shape[0] - B), int(n_minibatch / 2))
+#             ind.extend(
+#                 random.sample(
+#                     range(X_iter.shape[0] - B, X_iter.shape[0]),
+#                     int(n_minibatch / 2),
+#                 )
+#             )
+#             X_iter_tensor = torch.from_numpy(X_iter[ind])
+#             y_iter_tensor = torch.from_numpy(y_iter[ind])
+#             # X_iter_tensor = (X_iter_tensor - mean) / std
+
+#             # Forward pass
+#             outputs = model(X_iter_tensor)
+#             loss = criterion(outputs, y_iter_tensor)
+
+#             # Backward and optimize
+#             loss.backward()
+#             optimizer.step()
+#             optimizer.zero_grad()
+
+#             val = beta * val + (1 - beta) * loss.item()
+
+#             it += 1
+
+#         print("CLASSIFIER", k, "TRAINED")
+
+#     with torch.no_grad():
+#         # Plot the results:
+#         plt.figure()
+#         out = model(inp)
+#         y_pred = np.argmax(out.numpy(), axis=1)
+#         Z = y_pred.reshape(xx.shape)
+#         z = [
+#             0 if np.array_equal(y_iter[x], [1, 0]) else 1
+#             for x in range(y_iter.shape[0])
+#         ]
+#         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+#         scatter = plt.scatter(
+#             X_iter[:, 0],
+#             X_iter[:, 1],
+#             c=z,
+#             marker=".",
+#             alpha=0.5,
+#             cmap=plt.cm.Paired,
+#         )
+#         plt.xlim([0.0, np.pi / 2 - 0.01])
+#         plt.ylim([-10.0, 10.0])
+#         plt.xlabel("Initial position [rad]")
+#         plt.ylabel("Initial velocity [rad/s]")
+#         plt.title("Classifier")
+#         hand = scatter.legend_elements()[0]
+#         plt.legend(handles=hand, labels=("Non viable", "Viable"))
 
 pr.print_stats(sort="cumtime")
 
-# del ocp
-# ocp = OCPpendulumNN(model)
+# # del ocp
+# # ocp = OCPpendulumNN(model)
 
-# N = ocp.N
-# Tf = ocp.Tf
-# Fmax = ocp.Fmax
+# # N = ocp.N
+# # Tf = ocp.Tf
+# # Fmax = ocp.Fmax
 
-# ocp.compute_problem(1.4, -9.0)
+# # ocp.compute_problem(1.4, -9.0)
 
-# # get solution
-# simX = np.ndarray((N + 1, 2))
-# simU = np.ndarray((N, 1))
+# # # get solution
+# # simX = np.ndarray((N + 1, 2))
+# # simU = np.ndarray((N, 1))
 
-# for i in range(N):
-#     simX[i, :] = ocp.ocp_solver.get(i, "x")
-#     simU[i, :] = ocp.ocp_solver.get(i, "u")
-# simX[N, :] = ocp.ocp_solver.get(N, "x")
+# # for i in range(N):
+# #     simX[i, :] = ocp.ocp_solver.get(i, "x")
+# #     simU[i, :] = ocp.ocp_solver.get(i, "u")
+# # simX[N, :] = ocp.ocp_solver.get(N, "x")
 
-# ocp.ocp_solver.print_statistics()
+# # ocp.ocp_solver.print_statistics()
+
 print("Execution time: %s seconds" % (time.time() - start_time))
 
 # plot_pendulum(np.linspace(0, Tf, N + 1), Fmax, simU, simX, latexify=False)

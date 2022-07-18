@@ -4,6 +4,7 @@ import numpy as np
 from acados_template import AcadosModel
 from casadi import SX, vertcat, sin, exp, norm_2, fmax, tanh
 import time
+from scipy.integrate import odeint
 
 
 class OCPpendulum:
@@ -14,10 +15,10 @@ class OCPpendulum:
         model_name = "pendulum_ode"
 
         # constants
-        m = 0.5  # mass of the ball [kg]
-        g = 9.81  # gravity constant [m/s^2]
-        d = 0.3  # length of the rod [m]
-        b = 0.01  # damping
+        self.m = 0.5  # mass of the ball [kg]
+        self.g = 9.81  # gravity constant [m/s^2]
+        self.d = 0.3  # length of the rod [m]
+        self.b = 0.01  # damping
 
         # states
         theta = SX.sym("theta")
@@ -38,7 +39,9 @@ class OCPpendulum:
 
         # dynamics
         f_expl = vertcat(
-            dtheta, (m * g * d * sin(theta) + F - b * dtheta) / (d * d * m)
+            dtheta,
+            (self.m * self.g * self.d * sin(theta) + F - self.b * dtheta)
+            / (self.d * self.d * self.m),
         )
         f_impl = xdot - f_expl
 
@@ -74,7 +77,8 @@ class OCPpendulum:
         self.ocp.dims.N = self.N
 
         # cost
-        Q = 2 * np.diag([0.0, 1e-1])
+        Q = 2 * np.diag([0.0, 0.0])
+        # Q = 2 * np.diag([0.0, 1e-1])
         R = 2 * np.diag([0.0])
 
         self.ocp.cost.W_e = Q
@@ -116,11 +120,7 @@ class OCPpendulum:
         self.ocp.constraints.ubx_0 = np.array([0.0, 0.0])
 
         # options
-        self.ocp.solver_options.nlp_solver_type = "SQP"
-        # self.ocp.solver_options.qp_solver = "PARTIAL_CONDENSING_HPIPM"
-        # self.ocp.solver_options.nlp_solver_max_iter = 10000
-        # self.ocp.solver_options.qp_solver_iter_max = 10000
-        # self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"
+        # self.ocp.solver_options.nlp_solver_type = "SQP"
         # -------------------------------------------------
 
     def compute_problem(self, q0, v0):
@@ -142,15 +142,14 @@ class OCPpendulum:
         self.ocp_solver.set(self.N, "x", x_guess)
 
         status = self.ocp_solver.solve()
-
-        # self.ocp_solver.print_statistics()
+        it = self.ocp_solver.get_stats("sqp_iter")
 
         if status == 0:
-            return 1
+            return 1, it
         elif status == 4:
-            return 0
+            return 0, it
         else:
-            return 2
+            return 2, it
 
     def compute_problem_withGUESS(self, q0, v0, simX_vec, simU_vec):
 
@@ -186,6 +185,58 @@ class OCPpendulum:
             return 0
         else:
             return 2
+
+    def compute_problem_withGUESSPID(self, q0, v0):
+
+        self.ocp_solver.reset()
+
+        x0 = np.array([q0, v0])
+
+        self.ocp_solver.constraints_set(0, "lbx", x0)
+        self.ocp_solver.constraints_set(0, "ubx", x0)
+
+        times = np.linspace(0, self.Tf, self.N + 1)
+        simX = odeint(self.model_pid, [q0, v0], times)
+
+        simX[:, 0] = [
+            np.sign(simX[i, 0]) * self.thetamax
+            if abs(simX[i, 0]) > self.thetamax
+            else simX[i, 0]
+            for i in range(self.N + 1)
+        ]
+        simX[:, 1] = [
+            np.sign(simX[i, 1]) * self.dthetamax
+            if abs(simX[i, 1]) > self.dthetamax
+            else simX[i, 1]
+            for i in range(self.N + 1)
+        ]
+
+        for i in range(self.N + 1):
+            self.ocp_solver.set(i, "x", simX[i, :])
+
+        status = self.ocp_solver.solve()
+
+        if status == 0:
+            return 1
+        elif status == 4:
+            return 0
+        else:
+            return 2
+
+    def model_pid(self, x, t):
+        y = x[0]
+        dydt = x[1]
+        u = -10 * dydt
+
+        if u >= self.Fmax:
+            u = self.Fmax
+        elif u <= -self.Fmax:
+            u = -self.Fmax
+
+        dy2dt2 = (self.m * self.g * self.d * sin(y) + u - self.b * dydt) / (
+            self.d * self.d * self.m
+        )
+        return [dydt, dy2dt2]
 
 
 class OCPpendulumINIT(OCPpendulum):
@@ -248,7 +299,7 @@ class OCPpendulumNN(OCPpendulum):
             nn, self.x
         )  # mean, std, self.x)
         self.ocp.constraints.lh_e = np.array([0.5])
-        self.ocp.constraints.uh_e = np.array([1.0])
+        self.ocp.constraints.uh_e = np.array([1.1])
 
         self.ocp.constraints.lbx_e = np.array([self.thetamin, -self.dthetamax])
         self.ocp.constraints.ubx_e = np.array([self.thetamax, self.dthetamax])
@@ -272,15 +323,11 @@ class OCPpendulumNN(OCPpendulum):
                 out = param + out
 
                 if it == 3:
-                    for i in range(out.shape[0]):
-                        out[i] = fmax(0.0, out[i])
+                    out = fmax(0.0, out)
                 elif it == 5:
-                    for i in range(out.shape[0]):
-                        out[i] = tanh(out[i])
+                    out = tanh(out)
                 else:
-                    for i in range(out.shape[0]):
-                        out[i] = 1 / (1 + exp(-out[i]))
-
+                    out = 1 / (1 + exp(-out))
             it += 1
 
-        return out
+        return out[1]

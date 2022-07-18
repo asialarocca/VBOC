@@ -297,7 +297,7 @@
             [
                 0.0,
                 0.0,
-                0.02,
+                0.0,
                 0.0,
                 0.0,
                 0.0
@@ -306,7 +306,7 @@
                 0.0,
                 0.0,
                 0.0,
-                0.02,
+                0.0,
                 0.0,
                 0.0
             ],
@@ -347,7 +347,7 @@
             [
                 0.0,
                 0.0,
-                0.02,
+                0.0,
                 0.0,
                 0.0,
                 0.0
@@ -356,7 +356,7 @@
                 0.0,
                 0.0,
                 0.0,
-                0.02,
+                0.0,
                 0.0,
                 0.0
             ],
@@ -393,14 +393,14 @@
             [
                 0.0,
                 0.0,
-                0.02,
+                0.0,
                 0.0
             ],
             [
                 0.0,
                 0.0,
                 0.0,
-                0.02
+                0.0
             ]
         ],
         "Zl": [],
@@ -540,7 +540,7 @@
         "exact_hess_dyn": 1,
         "ext_cost_num_hess": 0,
         "full_step_dual": 0,
-        "globalization": "MERIT_BACKTRACKING",
+        "globalization": "FIXED_STEP",
         "globalization_use_SOC": 0,
         "hessian_approx": "GAUSS_NEWTON",
         "initialize_t_slacks": 0,
@@ -551,11 +551,11 @@
         "model_external_shared_lib_name": null,
         "nlp_solver_max_iter": 100,
         "nlp_solver_step_length": 1.0,
-        "nlp_solver_tol_comp": 0.001,
-        "nlp_solver_tol_eq": 0.001,
-        "nlp_solver_tol_ineq": 0.001,
-        "nlp_solver_tol_stat": 0.001,
-        "nlp_solver_type": "SQP",
+        "nlp_solver_tol_comp": 1e-06,
+        "nlp_solver_tol_eq": 1e-06,
+        "nlp_solver_tol_ineq": 1e-06,
+        "nlp_solver_tol_stat": 1e-06,
+        "nlp_solver_type": "SQP_RTI",
         "print_level": 0,
         "qp_solver": "PARTIAL_CONDENSING_HPIPM",
         "qp_solver_cond_N": null,

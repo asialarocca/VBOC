@@ -432,245 +432,164 @@ with cProfile.Profile() as pr:
         hand = scatter.legend_elements()[0]
         plt.legend(handles=hand, labels=("Non viable", "Viable"))
 
-        # # Plot of the entropy:
-        # plt.figure()
-        # prob_xu = sigmoid(out).numpy()
-        # etxu = entropy(prob_xu, axis=1)
-        # out = etxu.reshape(xx.shape)
-        # levels = np.linspace(out.min(), out.max(), 10)
-        # plt.contourf(xx, yy, out, levels=levels)
-        # this = plt.contour(xx, yy, out, levels=levels, colors=("k",), linewidths=(1,))
-        # plt.clabel(this, fmt="%2.1f", colors="w", fontsize=11)
-        # plt.xlim([0.0, np.pi / 2 - 0.01])
-        # plt.ylim([-10.0, 10.0])
-        # plt.xlabel("Initial position [rad]")
-        # plt.ylabel("Initial velocity [rad/s]")
-        # plt.title("Entropy")
+        # Plot of the entropy:
+        plt.figure()
+        prob_xu = sigmoid(out).numpy()
+        etxu = entropy(prob_xu, axis=1)
+        out = etxu.reshape(xx.shape)
+        levels = np.linspace(out.min(), out.max(), 10)
+        plt.contourf(xx, yy, out, levels=levels)
+        this = plt.contour(xx, yy, out, levels=levels, colors=("k",), linewidths=(1,))
+        plt.clabel(this, fmt="%2.1f", colors="w", fontsize=11)
+        plt.xlim([0.0, np.pi / 2 - 0.01])
+        plt.ylim([-10.0, 10.0])
+        plt.xlabel("Initial position [rad]")
+        plt.ylabel("Initial velocity [rad/s]")
+        plt.title("Entropy")
 
-    # rad_q = (q_max - q_min) / 10
-    # rad_v = (v_max - v_min) / 10
+    rad_q = (q_max - q_min) / 10
+    rad_v = (v_max - v_min) / 10
 
-    # n_points = pow(3, ocp_dim)
+    n_points = pow(2, ocp_dim)
 
-    # with torch.no_grad():
-    #     sigmoid = nn.Sigmoid()
-    #     X_tensor = torch.from_numpy(X_iter.astype(np.float32))
-    #     X_tensor = (X_tensor - mean) / std
-    #     prob_x = sigmoid(model(X_tensor)).numpy()
-    #     etp = entropy(prob_x, axis=1)
+    with torch.no_grad():
+        sigmoid = nn.Sigmoid()
+        X_tensor = torch.from_numpy(X_iter.astype(np.float32))
+        X_tensor = (X_tensor - mean) / std
+        prob_x = sigmoid(model(X_tensor)).numpy()
+        etp = entropy(prob_x, axis=1)
+        etmax = max(etp)
 
-    # xu = X_iter[etp > etp_stop]
+    xu = X_iter[etp > etpmax / 10]
 
-    # Xu_it = np.empty((xu.shape[0], n_points, ocp_dim))
+    Xu_it = np.empty((xu.shape[0], n_points, ocp_dim))
 
-    # # Generate other random samples:
-    # for i in range(xu.shape[0]):
-    #     for n in range(n_points):
-    #         # random angle
-    #         alpha = 2 * math.pi * random.random()
-    #         # random radius
-    #         tmp = math.sqrt(random.random())
-    #         r_x = rad_q * tmp
-    #         r_y = rad_v * tmp
-    #         # calculating coordinates
-    #         x = r_x * math.cos(alpha) + xu[i, 0]
-    #         y = r_y * math.sin(alpha) + xu[i, 1]
-    #         Xu_it[i, n, :] = [x, y]
+    # Generate other random samples:
+    for i in range(xu.shape[0]):
+        for n in range(n_points):
+            # random angle
+            alpha = 2 * math.pi * random.random()
+            # random radius
+            tmp = math.sqrt(random.random())
+            r_x = rad_q * tmp
+            r_y = rad_v * tmp
+            # calculating coordinates
+            x = r_x * math.cos(alpha) + xu[i, 0]
+            y = r_y * math.sin(alpha) + xu[i, 1]
+            Xu_it[i, n, :] = [x, y]
 
-    # Xu_it.shape = (xu.shape[0] * n_points, ocp_dim)
+    Xu_it.shape = (xu.shape[0] * n_points, ocp_dim)
     # data = np.concatenate([data, Xu_it])
     # Xu_iter = np.concatenate([Xu_iter, Xu_it])
+    Xu_iter = Xu_it
 
-    # plt.figure()
-    # plt.xlim([0.0, np.pi / 2 - 0.01])
-    # plt.ylim([-10.0, 10.0])
-    # plt.scatter(data[:, 0], data[:, 1], marker=".", alpha=0.5, cmap=plt.cm.Paired)
-    # plt.xlabel("Initial position [rad]")
-    # plt.ylabel("Initial velocity [rad/s]")
-    # plt.title("New unlabeled set")
+    plt.figure()
+    plt.xlim([0.0, np.pi / 2 - 0.01])
+    plt.ylim([-10.0, 10.0])
+    plt.scatter(Xu_iter[:, 0], Xu_iter[:, 1], marker=".", alpha=0.5, cmap=plt.cm.Paired)
+    plt.xlabel("Initial position [rad]")
+    plt.ylabel("Initial velocity [rad/s]")
+    plt.title("New unlabeled set")
 
-    # # Active learning:
-    # etpmax = performance_history[1]
+    # Active learning:
+    etpmax = performance_history[1]
 
-    # while not (etpmax < etp_stop or Xu_iter.shape[0] == 0):
+    while not (etpmax < etp_stop or Xu_iter.shape[0] == 0):
 
-    #     if Xu_iter.shape[0] < B:
-    #         B = Xu_iter.shape[0]
+        if Xu_iter.shape[0] < B:
+            B = Xu_iter.shape[0]
 
-    #     with torch.no_grad():
-    #         sigmoid = nn.Sigmoid()
-    #         Xu_iter_tensor = torch.from_numpy(Xu_iter.astype(np.float32))
-    #         Xu_iter_tensor = (Xu_iter_tensor - mean) / std
-    #         prob_xu = sigmoid(model(Xu_iter_tensor)).numpy()
-    #         etp = entropy(prob_xu, axis=1)
+        with torch.no_grad():
+            sigmoid = nn.Sigmoid()
+            Xu_iter_tensor = torch.from_numpy(Xu_iter.astype(np.float32))
+            Xu_iter_tensor = (Xu_iter_tensor - mean) / std
+            prob_xu = sigmoid(model(Xu_iter_tensor)).numpy()
+            etp = entropy(prob_xu, axis=1)
 
-    #     maxindex = np.argpartition(etp, -B)[-B:]  # indexes of the uncertain samples
+        maxindex = np.argpartition(etp, -B)[-B:]  # indexes of the uncertain samples
 
-    #     etpmax = max(etp)  # max entropy used for the stopping condition
-    #     performance_history.append(etpmax)
+        etpmax = max(etp)  # max entropy used for the stopping condition
+        performance_history.append(etpmax)
 
-    #     k += 1
+        k += 1
 
-    #     # Add the B most uncertain samples to the labeled set:
-    #     for x in range(B):
-    #         q0 = Xu_iter[maxindex[x], 0]
-    #         v0 = Xu_iter[maxindex[x], 1]
+        # Add the B most uncertain samples to the labeled set:
+        for x in range(B):
+            q0 = Xu_iter[maxindex[x], 0]
+            v0 = Xu_iter[maxindex[x], 1]
 
-    #         # Data testing:
-    #         res = ocp.compute_problem(q0, v0)
-    #         if res != 2:
-    #             X_iter = np.append(X_iter, [[q0, v0]], axis=0)
-    #             if res == 1:
-    #                 y_iter = np.append(y_iter, [[0, 1]], axis=0)
-    #             else:
-    #                 y_iter = np.append(y_iter, [[1, 0]], axis=0)
-    #         else:
-    #             raise Exception("Max iteration reached")
+            # Data testing:
+            res = ocp.compute_problem(q0, v0)
+            if res != 2:
+                X_iter = np.append(X_iter, [[q0, v0]], axis=0)
+                if res == 1:
+                    y_iter = np.append(y_iter, [[0, 1]], axis=0)
+                else:
+                    y_iter = np.append(y_iter, [[1, 0]], axis=0)
+            else:
+                raise Exception("Max iteration reached")
 
-    #     # Delete tested data from the unlabeled set:
-    #     Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
+        # Delete tested data from the unlabeled set:
+        Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
 
-    #     # val = 1
+        it = 0
+        val = 1
 
-    #     # selec = [i for i in range(X_iter.shape[0] - B) if np.random.uniform() <= 1 / k]
-    #     # selec.extend([i for i in range(X_iter.shape[0] - B, X_iter.shape[0])])
+        # Train the model
+        while val > loss_stop and it <= it_max:
 
-    #     # X_iter_tensor = torch.from_numpy(X_iter[selec].astype(np.float32))
-    #     # X_iter_tensor = (X_iter_tensor - mean) / std
-    #     # y_iter_tensor = torch.from_numpy(y_iter[selec].astype(np.float32))
+            ind = random.sample(range(X_iter.shape[0] - B), int(n_minibatch / 2))
+            ind.extend(
+                random.sample(
+                    range(X_iter.shape[0] - B, X_iter.shape[0]),
+                    int(n_minibatch / 2),
+                )
+            )
+            X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
+            y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
+            X_iter_tensor = (X_iter_tensor - mean) / std
 
-    #     # my_dataset = TensorDataset(X_iter_tensor, y_iter_tensor)
-    #     # my_dataloader = DataLoader(my_dataset, batch_size=n_minibatch, shuffle=True)
+            # Forward pass
+            outputs = model(X_iter_tensor)
+            loss = criterion(outputs, y_iter_tensor)
 
-    #     #     for i, data in enumerate(my_dataloader):
-    #     #         inputs, labels = data
+            # Backward and optimize
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
 
-    #     #         # zero the parameter gradients
-    #     #         optimizer.zero_grad()
+            val = beta * val + (1 - beta) * loss.item()
 
-    #     #         # forward + backward + optimize
-    #     #         outputs = model(inputs)
-    #     #         loss = criterion(outputs, labels)
-    #     #         loss.backward()
-    #     #         optimizer.step()
+            it += 1
 
-    #     #         val = beta * val + (1 - beta) * loss.item()
+        print("CLASSIFIER", k, "TRAINED")
 
-    #     #         if val <= loss_stop:
-    #     #             break
-
-    #     #     if val <= loss_stop:
-    #     #         break
-
-    #     # selec = [i for i in range(X_iter.shape[0] - B) if np.random.uniform() <= 1 / k]
-    #     # selec.extend([i for i in range(X_iter.shape[0] - B, X_iter.shape[0])])
-
-    #     # X_iter_tensor = torch.from_numpy(X_iter[selec].astype(np.float32))
-    #     # X_iter_tensor = (X_iter_tensor - mean) / std
-    #     # y_iter_tensor = torch.from_numpy(y_iter[selec].astype(np.float32))
-
-    #     # q = queue.Queue()
-
-    #     # it = 0
-
-    #     # # Train the model
-    #     # while val > loss_stop and it <= 1000:
-    #     #     it += 1
-
-    #     #     # Forward pass
-    #     #     outputs = model(X_iter_tensor)
-    #     #     loss = criterion(outputs, y_iter_tensor)
-
-    #     #     # Backward and optimize
-    #     #     for param in model.parameters():
-    #     #         param.grad = None
-
-    #     #     loss.backward()
-    #     #     optimizer.step()
-
-    #     #     val = loss.item()
-
-    #     #     q.put(val)
-
-    #     #     if q.qsize() >= 100:
-    #     #         st = q.get()
-    #     #         if round(st, 3) == round(val, 3):
-    #     #             print("Iteration skipped")
-    #     #             continue
-
-    #     it = 0
-    #     val = 1
-
-    #     # Train the model
-    #     while val > loss_stop and it <= it_max:
-
-    #         ind = random.sample(range(X_iter.shape[0] - B), int(n_minibatch / 2))
-    #         ind.extend(
-    #             random.sample(
-    #                 range(X_iter.shape[0] - B, X_iter.shape[0]),
-    #                 int(n_minibatch / 2),
-    #             )
-    #         )
-    #         X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
-    #         y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
-    #         X_iter_tensor = (X_iter_tensor - mean) / std
-
-    #         # Forward pass
-    #         outputs = model(X_iter_tensor)
-    #         loss = criterion(outputs, y_iter_tensor)
-
-    #         # Backward and optimize
-    #         loss.backward()
-    #         optimizer.step()
-    #         optimizer.zero_grad()
-
-    #         val = beta * val + (1 - beta) * loss.item()
-
-    #         it += 1
-
-    #     print("CLASSIFIER", k, "TRAINED")
-
-    # with torch.no_grad():
-    #     # Plot the results:
-    #     plt.figure()
-    #     out = model(inp)
-    #     y_pred = np.argmax(out.numpy(), axis=1)
-    #     Z = y_pred.reshape(xx.shape)
-    #     z = [
-    #         0 if np.array_equal(y_iter[x], [1, 0]) else 1
-    #         for x in range(y_iter.shape[0])
-    #     ]
-    #     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    #     scatter = plt.scatter(
-    #         X_iter[:, 0],
-    #         X_iter[:, 1],
-    #         c=z,
-    #         marker=".",
-    #         alpha=0.5,
-    #         cmap=plt.cm.Paired,
-    #     )
-    #     plt.xlim([0.0, np.pi / 2 - 0.01])
-    #     plt.ylim([-10.0, 10.0])
-    #     plt.xlabel("Initial position [rad]")
-    #     plt.ylabel("Initial velocity [rad/s]")
-    #     plt.title("Classifier")
-    #     hand = scatter.legend_elements()[0]
-    #     plt.legend(handles=hand, labels=("Non viable", "Viable"))
-
-    #     # # Plot of the entropy:
-    #     # plt.figure()
-    #     # prob_xu = sigmoid(out).numpy()
-    #     # etxu = entropy(prob_xu, axis=1)
-    #     # out = etxu.reshape(xx.shape)
-    #     # levels = np.linspace(out.min(), out.max(), 10)
-    #     # plt.contourf(xx, yy, out, levels=levels)
-    #     # this = plt.contour(xx, yy, out, levels=levels, colors=("k",), linewidths=(1,))
-    #     # plt.clabel(this, fmt="%2.1f", colors="w", fontsize=11)
-    #     # plt.xlim([0.0, np.pi / 2 - 0.01])
-    #     # plt.ylim([-10.0, 10.0])
-    #     # plt.xlabel("Initial position [rad]")
-    #     # plt.ylabel("Initial velocity [rad/s]")
-    #     # plt.title("Entropy")
+    with torch.no_grad():
+        # Plot the results:
+        plt.figure()
+        out = model(inp)
+        y_pred = np.argmax(out.numpy(), axis=1)
+        Z = y_pred.reshape(xx.shape)
+        z = [
+            0 if np.array_equal(y_iter[x], [1, 0]) else 1
+            for x in range(y_iter.shape[0])
+        ]
+        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        scatter = plt.scatter(
+            X_iter[:, 0],
+            X_iter[:, 1],
+            c=z,
+            marker=".",
+            alpha=0.5,
+            cmap=plt.cm.Paired,
+        )
+        plt.xlim([0.0, np.pi / 2 - 0.01])
+        plt.ylim([-10.0, 10.0])
+        plt.xlabel("Initial position [rad]")
+        plt.ylabel("Initial velocity [rad/s]")
+        plt.title("Classifier")
+        hand = scatter.legend_elements()[0]
+        plt.legend(handles=hand, labels=("Non viable", "Viable"))
 
     plt.figure()
     plt.plot(performance_history[1:])

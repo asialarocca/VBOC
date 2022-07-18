@@ -2,9 +2,11 @@ import scipy.linalg as lin
 from acados_template import AcadosOcp, AcadosOcpSolver
 import numpy as np
 from acados_template import AcadosModel
-from casadi import SX, vertcat, cos, sin, exp, norm_2
+from casadi import SX, vertcat, cos, sin, exp, norm_2, fmax, tanh
 import matplotlib.pyplot as plt
 import time
+from scipy.integrate import odeint
+from scipy.optimize import fsolve
 
 
 class OCPdoublependulum:
@@ -15,11 +17,11 @@ class OCPdoublependulum:
         model_name = "double_pendulum_ode"
 
         # constants
-        m1 = 0.4  # mass of the first link [kg]
-        m2 = 0.4  # mass of the second link [kg]
-        g = 9.81  # gravity constant [m/s^2]
-        l1 = 0.8  # length of the first link [m]
-        l2 = 0.8  # length of the second link [m]
+        self.m1 = 0.4  # mass of the first link [kself.g]
+        self.m2 = 0.4  # mass of the second link [kself.g]
+        self.g = 9.81  # self.gravity constant [m/s^2]
+        self.l1 = 0.8  # lenself.gth of the first link [m]
+        self.l2 = 0.8  # lenself.gth of the second link [m]
 
         # states
         theta1 = SX.sym("theta1")
@@ -48,37 +50,52 @@ class OCPdoublependulum:
             dtheta1,
             dtheta2,
             (
-                l1**2 * l2 * m2 * dtheta1**2 * sin(-2 * theta2 + 2 * theta1)
-                + 2 * C2 * cos(-theta2 + theta1) * l1
+                self.l1**2
+                * self.l2
+                * self.m2
+                * dtheta1**2
+                * sin(-2 * theta2 + 2 * theta1)
+                + 2 * C2 * cos(-theta2 + theta1) * self.l1
                 + 2
                 * (
-                    g * sin(-2 * theta2 + theta1) * l1 * m2 / 2
-                    + sin(-theta2 + theta1) * dtheta2**2 * l1 * l2 * m2
-                    + g * l1 * (m1 + m2 / 2) * sin(theta1)
+                    self.g * sin(-2 * theta2 + theta1) * self.l1 * self.m2 / 2
+                    + sin(-theta2 + theta1) * dtheta2**2 * self.l1 * self.l2 * self.m2
+                    + self.g * self.l1 * (self.m1 + self.m2 / 2) * sin(theta1)
                     - C1
                 )
-                * l2
+                * self.l2
             )
-            / l1**2
-            / l2
-            / (m2 * cos(-2 * theta2 + 2 * theta1) - 2 * m1 - m2),
+            / self.l1**2
+            / self.l2
+            / (self.m2 * cos(-2 * theta2 + 2 * theta1) - 2 * self.m1 - self.m2),
             (
-                -g * l1 * l2 * m2 * (m1 + m2) * sin(-theta2 + 2 * theta1)
-                - l1 * l2**2 * m2**2 * dtheta2**2 * sin(-2 * theta2 + 2 * theta1)
+                -self.g
+                * self.l1
+                * self.l2
+                * self.m2
+                * (self.m1 + self.m2)
+                * sin(-theta2 + 2 * theta1)
+                - self.l1
+                * self.l2**2
+                * self.m2**2
+                * dtheta2**2
+                * sin(-2 * theta2 + 2 * theta1)
                 - 2
                 * dtheta1**2
-                * l1**2
-                * l2
-                * m2
-                * (m1 + m2)
+                * self.l1**2
+                * self.l2
+                * self.m2
+                * (self.m1 + self.m2)
                 * sin(-theta2 + theta1)
-                + 2 * C1 * cos(-theta2 + theta1) * l2 * m2
-                + l1 * (m1 + m2) * (sin(theta2) * g * l2 * m2 - 2 * C2)
+                + 2 * C1 * cos(-theta2 + theta1) * self.l2 * self.m2
+                + self.l1
+                * (self.m1 + self.m2)
+                * (sin(theta2) * self.g * self.l2 * self.m2 - 2 * C2)
             )
-            / l2**2
-            / l1
-            / m2
-            / (m2 * cos(-2 * theta2 + 2 * theta1) - 2 * m1 - m2),
+            / self.l2**2
+            / self.l1
+            / self.m2
+            / (self.m2 * cos(-2 * theta2 + 2 * theta1) - 2 * self.m1 - self.m2),
         )
 
         f_impl = xdot - f_expl
@@ -98,6 +115,13 @@ class OCPdoublependulum:
         # -------------------------------------------------
         self.ocp = AcadosOcp()
 
+        # # options
+        # self.ocp.solver_options.nlp_solver_type = "SQP"
+        # self.ocp.solver_options.tol = 1e-3
+        # self.ocp.solver_options.line_search_use_sufficient_descent = 1
+        # self.ocp.solver_options.nlp_solver_max_iter = 50
+        # self.ocp.solver_options.qp_solver_warm_start = 2
+
         # dimensions
         self.Tf = 0.4
         self.ocp.solver_options.tf = self.Tf  # prediction horizon
@@ -111,7 +135,8 @@ class OCPdoublependulum:
         ny_e = self.nx
 
         # cost
-        Q = 2 * np.diag([0.0, 0.0, 1e-2, 1e-2])
+        Q = 2 * np.diag([0.0, 0.0, 0.0, 0.0])
+        # Q = 2 * np.diag([0.0, 0.0, 1e-2, 1e-2])
         R = 2 * np.diag([0.0, 0.0])
 
         self.ocp.cost.W_e = Q
@@ -165,10 +190,6 @@ class OCPdoublependulum:
 
         self.ocp.constraints.x0 = np.array([self.thetamin, self.thetamin, 0.0, 0.0])
 
-        # options
-        self.ocp.solver_options.nlp_solver_type = "SQP"
-        self.ocp.solver_options.tol = 1e-3
-        self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"
         # -------------------------------------------------
 
     def compute_problem(self, q0, v0):
@@ -182,26 +203,24 @@ class OCPdoublependulum:
 
         x_guess = np.array([q0[0], q0[1], 0, 0])
 
-        for i in range(self.N):
+        for i in range(self.N + 1):
             self.ocp_solver.set(i, "x", x_guess)
-
-        self.ocp_solver.set(self.N, "x", x_guess)
 
         status = self.ocp_solver.solve()
 
         if status == 0:
-            # # get solution
+            # # self.get simX
             # simX = np.ndarray((self.N+1, self.nx))
             # simU = np.ndarray((self.N, 2))
 
-            # for i in range(self.N):
-            #     simX[i, :] = self.ocp_solver.get(i, "x")
-            #     simU[i, :] = self.ocp_solver.get(i, "u")
-            # simX[self.N, :] = self.ocp_solver.get(self.N, "x")
+            # for i in ranself.ge(self.N):
+            #     simX[i, :] = self.ocp_solver.self.get(i, "x")
+            #     simU[i, :] = self.ocp_solver.self.get(i, "u")
+            # simX[self.N, :] = self.ocp_solver.self.get(self.N, "x")
 
             # t = np.linspace(0, self.Tf, self.N+1)
 
-            # plt.figure()
+            # plt.fiself.gure()
             # plt.subplot(2, 1, 1)
             # line, = plt.step(t, np.append([simU[0, 0]], simU[:, 0]))
             # plt.ylabel('$C1$')
@@ -210,7 +229,7 @@ class OCPdoublependulum:
             # plt.hlines(-self.Cmax, t[0], t[-1], linestyles='dashed', alpha=0.7)
             # plt.ylim([-1.2*self.Cmax, 1.2*self.Cmax])
             # plt.title('Controls')
-            # plt.grid()
+            # plt.self.grid()
             # plt.subplot(2, 1, 2)
             # line, = plt.step(t, np.append([simU[0, 1]], simU[:, 1]))
             # plt.ylabel('$C2$')
@@ -218,30 +237,30 @@ class OCPdoublependulum:
             # plt.hlines(self.Cmax, t[0], t[-1], linestyles='dashed', alpha=0.7)
             # plt.hlines(-self.Cmax, t[0], t[-1], linestyles='dashed', alpha=0.7)
             # plt.ylim([-1.2*self.Cmax, 1.2*self.Cmax])
-            # plt.grid()
+            # plt.self.grid()
 
-            # plt.figure()
+            # plt.fiself.gure()
             # plt.subplot(4, 1, 1)
             # line, = plt.plot(t, simX[:, 0])
             # plt.ylabel('$theta1$')
             # plt.xlabel('$t$')
             # plt.title('States')
-            # plt.grid()
+            # plt.self.grid()
             # plt.subplot(4, 1, 2)
             # line, = plt.plot(t, simX[:, 1])
             # plt.ylabel('$theta2$')
             # plt.xlabel('$t$')
-            # plt.grid()
+            # plt.self.grid()
             # plt.subplot(4, 1, 3)
             # line, = plt.plot(t, simX[:, 2])
             # plt.ylabel('$dtheta1$')
             # plt.xlabel('$t$')
-            # plt.grid()
+            # plt.self.grid()
             # plt.subplot(4, 1, 4)
             # line, = plt.plot(t, simX[:, 3])
             # plt.ylabel('$dtheta2$')
             # plt.xlabel('$t$')
-            # plt.grid()
+            # plt.self.grid()
             # plt.show()
             return 1
         elif status == 4:
@@ -262,7 +281,7 @@ class OCPdoublependulum:
         # index = 0
 
         for k in range(simX_vec.shape[0]):
-            # if np.sign(simX_vec[k, 0, 2]) == np.sign(v0[0]) and np.sign(simX_vec[k, 0, 3]) == np.sign(v0[1]):
+            # if np.siself.gn(simX_vec[k, 0, 2]) == np.siself.gn(v0[0]) and np.siself.gn(simX_vec[k, 0, 3]) == np.siself.gn(v0[1]):
             dist = np.linalg.norm(x0 / self.normal - simX_vec[k, 0, :] / self.normal)
             if dist < dist_min:
                 dist_min = dist
@@ -284,6 +303,164 @@ class OCPdoublependulum:
             return 0
         else:
             return 2
+
+    def compute_problem_withGUESSPID(self, q0, v0):
+
+        self.ocp_solver.reset()
+
+        x0 = np.array([q0[0], q0[1], v0[0], v0[1]])
+
+        self.ocp_solver.constraints_set(0, "lbx", x0)
+        self.ocp_solver.constraints_set(0, "ubx", x0)
+
+        times = np.linspace(0, self.Tf, self.N + 1)
+        simX = odeint(self.model_pid, x0, times)
+
+        simX[:, 0] = [
+            self.thetamax if simX[i, 0] > self.thetamax else simX[i, 0]
+            for i in range(self.N + 1)
+        ]
+        simX[:, 0] = [
+            self.thetamin if simX[i, 0] < self.thetamin else simX[i, 0]
+            for i in range(self.N + 1)
+        ]
+        simX[:, 1] = [
+            self.thetamax if simX[i, 1] > self.thetamax else simX[i, 1]
+            for i in range(self.N + 1)
+        ]
+        simX[:, 1] = [
+            self.thetamin if simX[i, 1] < self.thetamin else simX[i, 1]
+            for i in range(self.N + 1)
+        ]
+        simX[:, 2] = [
+            np.sign(simX[i, 2]) * self.dthetamax
+            if abs(simX[i, 2]) > self.dthetamax
+            else simX[i, 2]
+            for i in range(self.N + 1)
+        ]
+        simX[:, 3] = [
+            np.sign(simX[i, 3]) * self.dthetamax
+            if abs(simX[i, 3]) > self.dthetamax
+            else simX[i, 3]
+            for i in range(self.N + 1)
+        ]
+
+        for i in range(self.N + 1):
+            self.ocp_solver.set(i, "x", simX[i, :])
+
+        status = self.ocp_solver.solve()
+
+        if status == 0:
+            return 1
+        elif status == 4:
+            return 0
+        else:
+            return 2
+
+    def model_pid(self, x, t):
+        # c1, c2 = fsolve(self.gravity_comp, (0.0, 0.0), args=x)
+
+        y1 = x[0]
+        y2 = x[1]
+        dy1dt = x[2]
+        dy2dt = x[3]
+        u1 = -100 * dy1dt  # + c1
+        u2 = -10 * dy2dt  # + c2
+
+        if u1 >= self.Cmax:
+            u1 = self.Cmax
+        elif u1 <= -self.Cmax:
+            u1 = -self.Cmax
+        if u2 >= self.Cmax:
+            u2 = self.Cmax
+        elif u2 <= -self.Cmax:
+            u2 = -self.Cmax
+
+        dy12dt2 = (
+            (
+                self.l1**2 * self.l2 * self.m2 * dy1dt**2 * sin(-2 * y2 + 2 * y1)
+                + 2 * u2 * cos(-y2 + y1) * self.l1
+                + 2
+                * (
+                    self.g * sin(-2 * y2 + y1) * self.l1 * self.m2 / 2
+                    + sin(-y2 + y1) * dy2dt**2 * self.l1 * self.l2 * self.m2
+                    + self.g * self.l1 * (self.m1 + self.m2 / 2) * sin(y1)
+                    - u1
+                )
+                * self.l2
+            )
+            / self.l1**2
+            / self.l2
+            / (self.m2 * cos(-2 * y2 + 2 * y1) - 2 * self.m1 - self.m2)
+        )
+        dy22dt2 = (
+            (
+                -self.g
+                * self.l1
+                * self.l2
+                * self.m2
+                * (self.m1 + self.m2)
+                * sin(-y2 + 2 * y1)
+                - self.l1
+                * self.l2**2
+                * self.m2**2
+                * dy2dt**2
+                * sin(-2 * y2 + 2 * y1)
+                - 2
+                * dy1dt**2
+                * self.l1**2
+                * self.l2
+                * self.m2
+                * (self.m1 + self.m2)
+                * sin(-y2 + y1)
+                + 2 * u1 * cos(-y2 + y1) * self.l2 * self.m2
+                + self.l1
+                * (self.m1 + self.m2)
+                * (sin(y2) * self.g * self.l2 * self.m2 - 2 * u2)
+            )
+            / self.l2**2
+            / self.l1
+            / self.m2
+            / (self.m2 * cos(-2 * y2 + 2 * y1) - 2 * self.m1 - self.m2)
+        )
+        return [dy1dt, dy2dt, dy12dt2, dy22dt2]
+
+    def gravity_comp(self, C, x0):
+        y1 = x0[0]
+        y2 = x0[1]
+        u1, u2 = C
+
+        return (
+            (
+                2 * u2 * cos(-y2 + y1) * self.l1
+                + 2
+                * (
+                    self.g * sin(-2 * y2 + y1) * self.l1 * self.m2 / 2
+                    + self.g * self.l1 * (self.m1 + self.m2 / 2) * sin(y1)
+                    - u1
+                )
+                * self.l2
+            )
+            / self.l1**2
+            / self.l2
+            / (self.m2 * cos(-2 * y2 + 2 * y1) - 2 * self.m1 - self.m2),
+            (
+                -self.g
+                * self.l1
+                * self.l2
+                * self.m2
+                * (self.m1 + self.m2)
+                * sin(-y2 + 2 * y1)
+                + 2 * u1 * cos(-y2 + y1) * self.l2 * self.m2
+                + self.l1
+                * (self.m1 + self.m2)
+                * (sin(y2) * self.g * self.l2 * self.m2 - 2 * u2)
+            )
+            / self.l2**2
+            / self.l1
+            / self.m2
+            / (self.m2 * cos(-2 * y2 + 2 * y1) - 2 * self.m1 - self.m2),
+        )
 
 
 class OCPdoublependulumINIT(OCPdoublependulum):
@@ -335,3 +512,50 @@ class OCPdoublependulumSVM(OCPdoublependulum):
         output += const
 
         return vertcat(output)
+
+
+class OCPdoublependulumNN(OCPdoublependulum):
+    def __init__(self, nn):
+
+        # inherit initialization
+        super().__init__()
+
+        # nonlinear terminal constraints (svm)
+        self.model.con_h_expr_e = self.nn_decisionfunction(nn, self.x)
+        self.ocp.constraints.lh_e = np.array([0.5])
+        self.ocp.constraints.uh_e = np.array([1.1])
+
+        self.ocp.constraints.lbx_e = np.array(
+            [self.thetamin, self.thetamin, -self.dthetamax, -self.dthetamax]
+        )
+        self.ocp.constraints.ubx_e = np.array(
+            [self.thetamax, self.thetamax, self.dthetamax, self.dthetamax]
+        )
+
+        # ocp model
+        self.ocp.model = self.model
+
+        # solver
+        self.ocp_solver = AcadosOcpSolver(self.ocp, json_file="acados_ocp.json")
+
+    def nn_decisionfunction(self, nn, x):
+
+        out = x  # (x - mean) / std
+        it = 2
+
+        for param in nn.parameters():
+            param = SX(param.tolist())
+            if it % 2 == 0:
+                out = param @ out
+            else:
+                out = param + out
+
+                if it == 3:
+                    out = fmax(0.0, out)
+                elif it == 5:
+                    out = tanh(out)
+                else:
+                    out = 1 / (1 + exp(-out))
+            it += 1
+
+        return out[1]
