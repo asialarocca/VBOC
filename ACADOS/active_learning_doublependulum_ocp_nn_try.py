@@ -36,7 +36,7 @@ with cProfile.Profile() as pr:
 
     # Hyper-parameters for nn:
     input_size = ocp_dim
-    hidden_size = ocp_dim * 50
+    hidden_size = ocp_dim * 20
     output_size = 2
     learning_rate = 0.01
 
@@ -50,8 +50,8 @@ with cProfile.Profile() as pr:
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     # Active learning parameters:
-    N_init = pow(5, ocp_dim)  # size of initial labeled set
-    B = pow(5, ocp_dim)  # batch size
+    N_init = pow(10, ocp_dim)  # size of initial labeled set
+    B = pow(10, ocp_dim)  # batch size
     etp_stop = 0.1  # active learning stopping condition
     loss_stop = 0.1  # nn training stopping condition
     beta = 0.8
@@ -60,7 +60,7 @@ with cProfile.Profile() as pr:
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(10, ocp_dim))
+    sample = sampler.random(n=pow(50, ocp_dim))
     l_bounds = [q_min, q_min, v_min, v_min]
     u_bounds = [q_max, q_max, v_max, v_max]
     Xu_iter = qmc.scale(sample, l_bounds, u_bounds).tolist()
@@ -93,7 +93,7 @@ with cProfile.Profile() as pr:
     # else:
     #     y_iter = [[1, 0]]
 
-    Xu_iter_tensor = torch.Tensor(Xu_iter)
+    # Xu_iter_tensor = torch.Tensor(Xu_iter)
     # mean, std = torch.mean(Xu_iter_tensor), torch.std(Xu_iter_tensor)
 
     # # Get solution of positive samples:
@@ -156,7 +156,9 @@ with cProfile.Profile() as pr:
         # Backward and optimize
         loss.backward()
         optimizer.step()
-        optimizer.zero_grad()
+
+        for param in model.parameters():
+            param.grad = None
 
         # ind = random.sample(range(X_iter.shape[0]), n_minibatch)
         # X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
@@ -313,7 +315,10 @@ with cProfile.Profile() as pr:
             prob_xu = sigmoid(model(Xu_iter_tensor))
             etp = entropy(prob_xu, axis=1)
 
-        maxindex = np.argpartition(etp, -B)[-B:]  # indexes of the uncertain samples
+        maxindex = np.argpartition(etp, -B)[
+            -B:
+        ].tolist()  # indexes of the uncertain samples
+        maxindex.sort(reverse=True)
 
         etpmax = max(etp[maxindex])  # max entropy used for the stopping condition
         performance_history.append(etpmax)
@@ -323,8 +328,9 @@ with cProfile.Profile() as pr:
 
         # Add the B most uncertain samples to the labeled set:
         for x in range(B):
-            q0 = Xu_iter[maxindex[x]][:2]
-            v0 = Xu_iter[maxindex[x]][2:]
+            x0 = Xu_iter.pop(maxindex[x])
+            q0 = x0[:2]
+            v0 = x0[2:]
 
             # Data testing:
             res = ocp.compute_problem(q0, v0)
@@ -347,9 +353,9 @@ with cProfile.Profile() as pr:
 
             #     count += 1
 
-        # Delete tested data from the unlabeled set:
-        for i in sorted(maxindex, reverse=True):
-            del Xu_iter[i]
+        # # Delete tested data from the unlabeled set:
+        # for i in sorted(maxindex, reverse=True):
+        #     del Xu_iter[i]
 
         print("CLASSIFIER", k, "IN TRAINING")
 
@@ -378,7 +384,9 @@ with cProfile.Profile() as pr:
             # Backward and optimize
             loss.backward()
             optimizer.step()
-            optimizer.zero_grad()
+
+            for param in model.parameters():
+                param.grad = None
 
             # ind = random.sample(range(X_iter.shape[0]), n_minibatch)
             # X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
