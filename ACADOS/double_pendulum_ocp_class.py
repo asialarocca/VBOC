@@ -120,7 +120,7 @@ class OCPdoublependulum:
         # self.ocp.solver_options.tol = 1e-3
         # self.ocp.solver_options.line_search_use_sufficient_descent = 1
         # self.ocp.solver_options.nlp_solver_max_iter = 50
-        # self.ocp.solver_options.qp_solver_warm_start = 2
+        self.ocp.solver_options.qp_solver_warm_start = 2
 
         # dimensions
         self.Tf = 0.4
@@ -134,26 +134,26 @@ class OCPdoublependulum:
         ny = self.nx + nu
         ny_e = self.nx
 
-        # cost
-        Q = 2 * np.diag([0.0, 0.0, 0.0, 0.0])
-        # Q = 2 * np.diag([0.0, 0.0, 1e-2, 1e-2])
-        R = 2 * np.diag([0.0, 0.0])
+        # # cost
+        # Q = 2 * np.diag([0.0, 0.0, 0.0, 0.0])
+        # # Q = 2 * np.diag([0.0, 0.0, 1e-2, 1e-2])
+        # R = 2 * np.diag([0.0, 0.0])
 
-        self.ocp.cost.W_e = Q
-        self.ocp.cost.W = lin.block_diag(Q, R)
+        # self.ocp.cost.W_e = Q
+        # self.ocp.cost.W = lin.block_diag(Q, R)
 
-        self.ocp.cost.cost_type = "LINEAR_LS"
-        self.ocp.cost.cost_type_e = "LINEAR_LS"
+        # self.ocp.cost.cost_type = "LINEAR_LS"
+        # self.ocp.cost.cost_type_e = "LINEAR_LS"
 
-        self.ocp.cost.Vx = np.zeros((ny, self.nx))
-        self.ocp.cost.Vx[: self.nx, : self.nx] = np.eye(self.nx)
-        self.ocp.cost.Vu = np.zeros((ny, nu))
-        self.ocp.cost.Vu[self.nx :, :nu] = np.eye(nu)
-        self.ocp.cost.Vx_e = np.eye(self.nx)
+        # self.ocp.cost.Vx = np.zeros((ny, self.nx))
+        # self.ocp.cost.Vx[: self.nx, : self.nx] = np.eye(self.nx)
+        # self.ocp.cost.Vu = np.zeros((ny, nu))
+        # self.ocp.cost.Vu[self.nx :, :nu] = np.eye(nu)
+        # self.ocp.cost.Vx_e = np.eye(self.nx)
 
-        # reference
-        self.ocp.cost.yref = np.zeros((ny,))
-        self.ocp.cost.yref_e = np.zeros((ny_e,))
+        # # reference
+        # self.ocp.cost.yref = np.zeros((ny,))
+        # self.ocp.cost.yref_e = np.zeros((ny_e,))
 
         # set constraints
         self.Cmax = 10
@@ -161,14 +161,14 @@ class OCPdoublependulum:
         self.thetamin = np.pi
         self.dthetamax = 5.0
 
-        self.normal = np.array(
-            [
-                self.thetamax - self.thetamin,
-                self.thetamax - self.thetamin,
-                2 * self.dthetamax,
-                2 * self.dthetamax,
-            ]
-        )
+        # self.normal = np.array(
+        #     [
+        #         self.thetamax - self.thetamin,
+        #         self.thetamax - self.thetamin,
+        #         2 * self.dthetamax,
+        #         2 * self.dthetamax,
+        #     ]
+        # )
 
         self.ocp.constraints.lbu = np.array([-self.Cmax, -self.Cmax])
         self.ocp.constraints.ubu = np.array([self.Cmax, self.Cmax])
@@ -201,7 +201,7 @@ class OCPdoublependulum:
         self.ocp_solver.constraints_set(0, "lbx", x0)
         self.ocp_solver.constraints_set(0, "ubx", x0)
 
-        x_guess = np.array([q0[0], q0[1], 0, 0])
+        x_guess = np.array([q0[0], q0[1], 0.0, 0.0])
 
         for i in range(self.N + 1):
             self.ocp_solver.set(i, "x", x_guess)

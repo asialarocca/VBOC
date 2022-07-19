@@ -16,6 +16,9 @@ from my_nn import NeuralNet
 from torch.utils.data import TensorDataset, DataLoader
 from statistics import mean
 
+torch.backends.cudnn.benchmark = True
+sigmoid = nn.Sigmoid()
+
 warnings.filterwarnings("ignore")
 
 
@@ -36,39 +39,39 @@ with cProfile.Profile() as pr:
 
     # Hyper-parameters for nn:
     input_size = ocp_dim
-    hidden_size = ocp_dim * 20
+    hidden_size = ocp_dim * 50
     output_size = 2
-    learning_rate = 0.01
+    learning_rate = 0.001
 
     # Device configuration
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = NeuralNet(input_size, hidden_size, output_size).to(device)
 
+    # Active learning parameters:
+    N_init = pow(5, ocp_dim)  # size of initial labeled set
+    B = pow(5, ocp_dim)  # batch size
+    etp_stop = 0.1  # active learning stopping condition
+    loss_stop = 0.1  # nn training stopping condition
+    beta = 0.8
+    n_minibatch = 512
+    it_max = int(100 * B / n_minibatch)
+
     # Loss and optimizer
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    # Active learning parameters:
-    N_init = pow(10, ocp_dim)  # size of initial labeled set
-    B = pow(10, ocp_dim)  # batch size
-    etp_stop = 0.1  # active learning stopping condition
-    loss_stop = 0.1  # nn training stopping condition
-    beta = 0.8
-    n_minibatch = 1024
-    it_max = 100 * B / n_minibatch
-
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(50, ocp_dim))
+    sample = sampler.random(n=pow(10, ocp_dim))
     l_bounds = [q_min, q_min, v_min, v_min]
     u_bounds = [q_max, q_max, v_max, v_max]
     Xu_iter = qmc.scale(sample, l_bounds, u_bounds).tolist()
 
     # Generate the initial set of labeled samples:
     n = pow(10, ocp_dim)
-    X_iter = np.empty((n, ocp_dim), dtype="f")
-    y_iter = np.full((n, 2), [1, 0], dtype="f")
+    X_iter = np.empty((n, ocp_dim))
+    y_iter = np.full((n, 2), [1, 0])
     r = np.random.random(size=(n, ocp_dim - 1))
     k = np.random.randint(ocp_dim, size=(n, 1))
     j = np.random.randint(2, size=(n, 1))
@@ -93,8 +96,8 @@ with cProfile.Profile() as pr:
     # else:
     #     y_iter = [[1, 0]]
 
-    # Xu_iter_tensor = torch.Tensor(Xu_iter)
-    # mean, std = torch.mean(Xu_iter_tensor), torch.std(Xu_iter_tensor)
+    Xu_iter_tensor = torch.Tensor(Xu_iter)
+    mean, std = torch.mean(Xu_iter_tensor), torch.std(Xu_iter_tensor)
 
     # # Get solution of positive samples:
     # N = ocp.N
@@ -144,10 +147,17 @@ with cProfile.Profile() as pr:
     while val > loss_stop and it <= it_max:
 
         ind = random.sample(range(len(X_iter)), n_minibatch)
+        # ind = np.random.default_rng().choice(
+        #     range(len(X_iter)), n_minibatch, replace=False
+        # )
 
         X_iter_tensor = torch.Tensor([X_iter[i] for i in ind])
         y_iter_tensor = torch.Tensor([y_iter[i] for i in ind])
-        # X_iter_tensor = (X_iter_tensor - mean) / std
+        X_iter_tensor = (X_iter_tensor - mean) / std
+
+        # Zero the gradients
+        for param in model.parameters():
+            param.grad = None
 
         # Forward pass
         outputs = model(X_iter_tensor)
@@ -157,25 +167,15 @@ with cProfile.Profile() as pr:
         loss.backward()
         optimizer.step()
 
-        for param in model.parameters():
-            param.grad = None
-
-        # ind = random.sample(range(X_iter.shape[0]), n_minibatch)
-        # X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
-        # y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
-        # X_iter_tensor = (X_iter_tensor - mean) / std
-
-        # loss = criterion(model(X_iter_tensor), y_iter_tensor)
-
         val = beta * val + (1 - beta) * loss.item()
 
         it += 1
 
     # val = 1
 
-    # X_iter_tensor = torch.from_numpy(X_iter.astype(np.float32))
-    # y_iter_tensor = torch.from_numpy(y_iter.astype(np.float32))
-    # X_iter_tensor = (X_iter_tensor - mean) / std
+    # X_iter_tensor = torch.Tensor(X_iter)
+    # y_iter_tensor = torch.Tensor(y_iter)
+    # # X_iter_tensor = (X_iter_tensor - mean) / std
 
     # my_dataset = TensorDataset(X_iter_tensor, y_iter_tensor)
     # my_dataloader = DataLoader(my_dataset, batch_size=n_minibatch, shuffle=True)
@@ -223,7 +223,7 @@ with cProfile.Profile() as pr:
                 ]
             )
         )
-        # inp = (inp - mean) / std
+        inp = (inp - mean) / std
         out = model(inp)
         y_pred = np.argmax(out.numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)
@@ -266,7 +266,7 @@ with cProfile.Profile() as pr:
                 ]
             )
         )
-        # inp = (inp - mean) / std
+        inp = (inp - mean) / std
         out = model(inp)
         y_pred = np.argmax(out.numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)
@@ -309,9 +309,8 @@ with cProfile.Profile() as pr:
             B = len(Xu_iter)
 
         with torch.no_grad():
-            sigmoid = nn.Sigmoid()
             Xu_iter_tensor = torch.Tensor(Xu_iter)
-            # Xu_iter_tensor = (Xu_iter_tensor - mean) / std
+            Xu_iter_tensor = (Xu_iter_tensor - mean) / std
             prob_xu = sigmoid(model(Xu_iter_tensor))
             etp = entropy(prob_xu, axis=1)
 
@@ -365,6 +364,30 @@ with cProfile.Profile() as pr:
         # Train the model
         while val > loss_stop and it <= it_max:
 
+            #v = [w / (len(X_iter) - B) for w in range(len(X_iter) - B)]
+            #summ = sum(v)
+            #prob = [i / summ for i in v]
+
+            #ind = (
+            #    np.random.default_rng()
+            #    .choice(
+            #        range(len(X_iter) - B),
+            #        n_minibatch,
+            #        replace=False,
+            #        p=prob,
+            #    )
+            #    .tolist()
+            #)
+            #ind.extend(
+            #    np.random.default_rng()
+            #    .choice(
+            #        range(len(X_iter) - B, len(X_iter)),
+            #        int(n_minibatch / 2),
+            #        replace=False,
+            #    )
+            #    .tolist()
+            #)
+
             ind = random.sample(range(len(X_iter) - B), int(n_minibatch / 2))
             ind.extend(
                 random.sample(
@@ -375,7 +398,11 @@ with cProfile.Profile() as pr:
 
             X_iter_tensor = torch.Tensor([X_iter[i] for i in ind])
             y_iter_tensor = torch.Tensor([y_iter[i] for i in ind])
-            # X_iter_tensor = (X_iter_tensor - mean) / std
+            X_iter_tensor = (X_iter_tensor - mean) / std
+
+            # Zero the gradients
+            for param in model.parameters():
+                param.grad = None
 
             # Forward pass
             outputs = model(X_iter_tensor)
@@ -384,16 +411,6 @@ with cProfile.Profile() as pr:
             # Backward and optimize
             loss.backward()
             optimizer.step()
-
-            for param in model.parameters():
-                param.grad = None
-
-            # ind = random.sample(range(X_iter.shape[0]), n_minibatch)
-            # X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
-            # y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
-            # X_iter_tensor = (X_iter_tensor - mean) / std
-
-            # loss = criterion(model(X_iter_tensor), y_iter_tensor)
 
             val = beta * val + (1 - beta) * loss.item()
 
@@ -449,7 +466,7 @@ with cProfile.Profile() as pr:
                 ]
             )
         )
-        # inp = (inp - mean) / std
+        inp = (inp - mean) / std
         out = model(inp)
         y_pred = np.argmax(out.numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)
@@ -492,7 +509,7 @@ with cProfile.Profile() as pr:
                 ]
             )
         )
-        # inp = (inp - mean) / std
+        inp = (inp - mean) / std
         out = model(inp)
         y_pred = np.argmax(out.numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)
