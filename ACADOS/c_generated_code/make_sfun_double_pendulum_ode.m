@@ -74,22 +74,22 @@ fprintf('\n\nNote: Usage of Sfunction is as follows:\n')
 input_note = 'Inputs are:\n';
 i_in = 1;
 input_note = strcat(input_note, num2str(i_in), ') lbx_0 - lower bound on x for stage 0,',...
-                    ' size [4]\n ');
+                    ' size [6]\n ');
 i_in = i_in + 1;
 input_note = strcat(input_note, num2str(i_in), ') ubx_0 - upper bound on x for stage 0,',...
-                    ' size [4]\n ');
+                    ' size [6]\n ');
 i_in = i_in + 1;
-input_note = strcat(input_note, num2str(i_in), ') lbx for shooting nodes 1 to N-1, size [156]\n ');
+input_note = strcat(input_note, num2str(i_in), ') lbx for shooting nodes 1 to N-1, size [54]\n ');
 i_in = i_in + 1;
-input_note = strcat(input_note, num2str(i_in), ') ubx for shooting nodes 1 to N-1, size [156]\n ');
+input_note = strcat(input_note, num2str(i_in), ') ubx for shooting nodes 1 to N-1, size [54]\n ');
 i_in = i_in + 1;
-input_note = strcat(input_note, num2str(i_in), ') lbx_e (lbx at shooting node N), size [4]\n ');
+input_note = strcat(input_note, num2str(i_in), ') lbx_e (lbx at shooting node N), size [6]\n ');
 i_in = i_in + 1;
-input_note = strcat(input_note, num2str(i_in), ') ubx_e (ubx at shooting node N), size [4]\n ');
+input_note = strcat(input_note, num2str(i_in), ') ubx_e (ubx at shooting node N), size [6]\n ');
 i_in = i_in + 1;
-input_note = strcat(input_note, num2str(i_in), ') lbu for shooting nodes 0 to N-1, size [80]\n ');
+input_note = strcat(input_note, num2str(i_in), ') lbu for shooting nodes 0 to N-1, size [30]\n ');
 i_in = i_in + 1;
-input_note = strcat(input_note, num2str(i_in), ') ubu for shooting nodes 0 to N-1, size [80]\n ');
+input_note = strcat(input_note, num2str(i_in), ') ubu for shooting nodes 0 to N-1, size [30]\n ');
 i_in = i_in + 1;
 
 fprintf(input_note)
@@ -99,7 +99,7 @@ disp(' ')
 output_note = 'Outputs are:\n';
 i_out = 0;
 i_out = i_out + 1;
-output_note = strcat(output_note, num2str(i_out), ') u0, control input at node 0, size [2]\n ');
+output_note = strcat(output_note, num2str(i_out), ') u0, control input at node 0, size [3]\n ');
 i_out = i_out + 1;
 output_note = strcat(output_note, num2str(i_out), ') acados solver status (0 = SUCCESS)\n ');
 i_out = i_out + 1;

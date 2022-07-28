@@ -37,9 +37,9 @@
 #include "acados_c/sim_interface.h"
 #include "acados_c/external_function_interface.h"
 
-#define DOUBLE_PENDULUM_ODE_NX     4
+#define DOUBLE_PENDULUM_ODE_NX     6
 #define DOUBLE_PENDULUM_ODE_NZ     0
-#define DOUBLE_PENDULUM_ODE_NU     2
+#define DOUBLE_PENDULUM_ODE_NU     3
 #define DOUBLE_PENDULUM_ODE_NP     0
 
 #ifdef __cplusplus

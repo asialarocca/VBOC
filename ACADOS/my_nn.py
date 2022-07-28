@@ -16,5 +16,4 @@ class NeuralNet(nn.Module):
 
     def forward(self, x):
         out = self.linear_relu_stack(x)
-
         return out

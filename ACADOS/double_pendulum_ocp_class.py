@@ -115,23 +115,22 @@ class OCPdoublependulum:
         # -------------------------------------------------
         self.ocp = AcadosOcp()
 
-        # # options
-        # self.ocp.solver_options.nlp_solver_type = "SQP"
-        # self.ocp.solver_options.tol = 1e-3
-        # self.ocp.solver_options.line_search_use_sufficient_descent = 1
-        # self.ocp.solver_options.nlp_solver_max_iter = 50
-        self.ocp.solver_options.qp_solver_warm_start = 2
-
         # dimensions
         self.Tf = 0.4
         self.ocp.solver_options.tf = self.Tf  # prediction horizon
 
-        self.N = int(100 * self.Tf)
+        self.N = int(1000 * self.Tf)
         self.ocp.dims.N = self.N
 
+        self.ocp.solver_options.qp_solver_cond_N = int(self.N / 4)
+        # self.ocp.solver_options.tol = 1e-3
+        # self.ocp.solver_options.sim_method_num_stages = 1
+        # self.ocp.solver_options.sim_method_jac_reuse = 1
+        # self.ocp.solver_options.qp_tol = 1e-3
+
         self.nx = self.model.x.size()[0]
-        nu = self.model.u.size()[0]
-        ny = self.nx + nu
+        self.nu = self.model.u.size()[0]
+        ny = self.nx + self.nu
         ny_e = self.nx
 
         # # cost
@@ -161,15 +160,6 @@ class OCPdoublependulum:
         self.thetamin = np.pi
         self.dthetamax = 5.0
 
-        # self.normal = np.array(
-        #     [
-        #         self.thetamax - self.thetamin,
-        #         self.thetamax - self.thetamin,
-        #         2 * self.dthetamax,
-        #         2 * self.dthetamax,
-        #     ]
-        # )
-
         self.ocp.constraints.lbu = np.array([-self.Cmax, -self.Cmax])
         self.ocp.constraints.ubu = np.array([self.Cmax, self.Cmax])
         self.ocp.constraints.idxbu = np.array([0, 1])
@@ -189,6 +179,15 @@ class OCPdoublependulum:
         self.ocp.constraints.idxbx_e = np.array([0, 1, 2, 3])
 
         self.ocp.constraints.x0 = np.array([self.thetamin, self.thetamin, 0.0, 0.0])
+
+        self.normal = np.array(
+            [
+                self.thetamax - self.thetamin,
+                self.thetamax - self.thetamin,
+                2 * self.dthetamax,
+                2 * self.dthetamax,
+            ]
+        )
 
         # -------------------------------------------------
 
@@ -278,7 +277,6 @@ class OCPdoublependulum:
         self.ocp_solver.constraints_set(0, "ubx", x0)
 
         dist_min = 1e3
-        # index = 0
 
         for k in range(simX_vec.shape[0]):
             # if np.siself.gn(simX_vec[k, 0, 2]) == np.siself.gn(v0[0]) and np.siself.gn(simX_vec[k, 0, 3]) == np.siself.gn(v0[1]):
@@ -291,7 +289,7 @@ class OCPdoublependulum:
 
         for i in range(self.N):
             self.ocp_solver.set(i, "x", simX_vec[index, i, :])
-            # self.ocp_solver.set(i, "u", simU_vec[index, i, :])
+            self.ocp_solver.set(i, "u", simU_vec[index, i, :])
 
         self.ocp_solver.set(self.N, "x", simX_vec[index, self.N, :])
 
@@ -515,13 +513,13 @@ class OCPdoublependulumSVM(OCPdoublependulum):
 
 
 class OCPdoublependulumNN(OCPdoublependulum):
-    def __init__(self, nn):
+    def __init__(self, nn, mean, std):
 
         # inherit initialization
         super().__init__()
 
-        # nonlinear terminal constraints (svm)
-        self.model.con_h_expr_e = self.nn_decisionfunction(nn, self.x)
+        # nonlinear terminal constraints
+        self.model.con_h_expr_e = self.nn_decisionfunction(nn, self.x, mean, std)
         self.ocp.constraints.lh_e = np.array([0.5])
         self.ocp.constraints.uh_e = np.array([1.1])
 
@@ -538,9 +536,9 @@ class OCPdoublependulumNN(OCPdoublependulum):
         # solver
         self.ocp_solver = AcadosOcpSolver(self.ocp, json_file="acados_ocp.json")
 
-    def nn_decisionfunction(self, nn, x):
+    def nn_decisionfunction(self, nn, x, mean, std):
 
-        out = x  # (x - mean) / std
+        out = (x-mean.item())/std.item()
         it = 2
 
         for param in nn.parameters():

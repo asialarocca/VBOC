@@ -224,7 +224,7 @@ ocp_nlp_dims* double_pendulum_ode_acados_create_2_create_and_set_dimensions(doub
     nbx[0]  = NBX0;
     nsbx[0] = 0;
     ns[0] = NS - NSBX;
-    nbxe[0] = 4;
+    nbxe[0] = 6;
     ny[0] = NY0;
 
     // terminal - common
@@ -396,6 +396,8 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     idxbx0[1] = 1;
     idxbx0[2] = 2;
     idxbx0[3] = 3;
+    idxbx0[4] = 4;
+    idxbx0[5] = 5;
 
     double* lubx0 = calloc(2*NBX0, sizeof(double));
     double* lbx0 = lubx0;
@@ -405,6 +407,8 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     ubx0[0] = 3.141592653589793;
     lbx0[1] = 3.141592653589793;
     ubx0[1] = 3.141592653589793;
+    lbx0[2] = 3.141592653589793;
+    ubx0[2] = 3.141592653589793;
 
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "idxbx", idxbx0);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "lbx", lbx0);
@@ -412,12 +416,14 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     free(idxbx0);
     free(lubx0);
     // idxbxe_0
-    int* idxbxe_0 = malloc(4 * sizeof(int));
+    int* idxbxe_0 = malloc(6 * sizeof(int));
     
     idxbxe_0[0] = 0;
     idxbxe_0[1] = 1;
     idxbxe_0[2] = 2;
     idxbxe_0[3] = 3;
+    idxbxe_0[4] = 4;
+    idxbxe_0[5] = 5;
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "idxbxe", idxbxe_0);
     free(idxbxe_0);
 
@@ -427,14 +433,17 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     
     idxbu[0] = 0;
     idxbu[1] = 1;
+    idxbu[2] = 2;
     double* lubu = calloc(2*NBU, sizeof(double));
     double* lbu = lubu;
     double* ubu = lubu + NBU;
     
-    lbu[0] = -10;
-    ubu[0] = 10;
-    lbu[1] = -10;
-    ubu[1] = 10;
+    lbu[0] = -12;
+    ubu[0] = 12;
+    lbu[1] = -12;
+    ubu[1] = 12;
+    lbu[2] = -12;
+    ubu[2] = 12;
 
     for (int i = 0; i < N; i++)
     {
@@ -459,6 +468,8 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     idxbx[1] = 1;
     idxbx[2] = 2;
     idxbx[3] = 3;
+    idxbx[4] = 4;
+    idxbx[5] = 5;
     double* lubx = calloc(2*NBX, sizeof(double));
     double* lbx = lubx;
     double* ubx = lubx + NBX;
@@ -467,10 +478,14 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     ubx[0] = 4.71238898038469;
     lbx[1] = 3.141592653589793;
     ubx[1] = 4.71238898038469;
-    lbx[2] = -5;
-    ubx[2] = 5;
+    lbx[2] = 3.141592653589793;
+    ubx[2] = 4.71238898038469;
     lbx[3] = -5;
     ubx[3] = 5;
+    lbx[4] = -5;
+    ubx[4] = 5;
+    lbx[5] = -5;
+    ubx[5] = 5;
 
     for (int i = 1; i < N; i++)
     {
@@ -497,6 +512,8 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     idxbx_e[1] = 1;
     idxbx_e[2] = 2;
     idxbx_e[3] = 3;
+    idxbx_e[4] = 4;
+    idxbx_e[5] = 5;
     double* lubx_e = calloc(2*NBXN, sizeof(double));
     double* lbx_e = lubx_e;
     double* ubx_e = lubx_e + NBXN;
@@ -505,6 +522,8 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     ubx_e[0] = 4.71238898038469;
     lbx_e[1] = 3.141592653589793;
     ubx_e[1] = 4.71238898038469;
+    lbx_e[2] = 3.141592653589793;
+    ubx_e[2] = 4.71238898038469;
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "idxbx", idxbx_e);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "lbx", lbx_e);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "ubx", ubx_e);
@@ -592,9 +611,7 @@ void double_pendulum_ode_acados_create_6_set_opts(double_pendulum_ode_solver_cap
     int qp_solver_iter_max = 50;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_iter_max", &qp_solver_iter_max);
 
-
-    int qp_solver_warm_start = 2;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_warm_start", &qp_solver_warm_start);int print_level = 0;
+int print_level = 0;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "print_level", &print_level);
 
 
@@ -620,6 +637,7 @@ void double_pendulum_ode_acados_create_7_set_nlp_out(double_pendulum_ode_solver_
     
     x0[0] = 3.141592653589793;
     x0[1] = 3.141592653589793;
+    x0[2] = 3.141592653589793;
 
 
     double* u0 = xu0 + NX;

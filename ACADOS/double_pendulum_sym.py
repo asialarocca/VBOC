@@ -1,7 +1,7 @@
 import time
 import scipy.linalg as lin
 import numpy as np
-from acados_template import AcadosOcp, AcadosOcpSolver
+from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSimSolver
 from acados_template import AcadosModel
 from casadi import SX, vertcat, sin, cos
 import matplotlib.pyplot as plt
@@ -9,6 +9,13 @@ from scipy.integrate import odeint
 from scipy.optimize import fsolve
 
 model_name = "double_pendulum_ode"
+
+ur5 = u2c.URDFparser()
+import os
+path_to_urdf = absPath = os.path.dirname(os.path.abspath(__file__)) + '/../urdf/ur5.urdf' 
+ur5.from_file(path_to_urdf)
+
+n_joints = ur5.get_n_joints(root, tip)
 
 # constants
 m1 = 0.4  # mass of the first link [kg]
@@ -235,36 +242,62 @@ def model_pid(x, t):
     return [dy1dt, dy2dt, dy12dt2, dy22dt2]
 
 
-times = np.linspace(0, Tf, int(100 * Tf))
-solution = odeint(model_pid, x0, times)
+times = np.linspace(0, Tf, N+1)
+#solution = odeint(model_pid, x0, times)
+
+solution = np.ndarray((N+1, nx))
+simU = np.ndarray((N, nu))
+
+acados_integrator = AcadosSimSolver(ocp, json_file="acados_ocp.json")
+
+xcurrent = x0
+solution[0,:] = xcurrent
+
+# closed loop
+for i in range(N):
+    u1 = - x0[2]
+    u2 = - x0[3]
+    simU[i,:] = [u1,u2]
+
+    # simulate system
+    acados_integrator.set("x", xcurrent)
+    acados_integrator.set("u", simU[i,:])
+
+    status = acados_integrator.solve()
+    if status != 0:
+        raise Exception('acados integrator returned status {}. Exiting.'.format(status))
+
+    # update state
+    xcurrent = acados_integrator.get("x")
+    solution[i+1,:] = xcurrent
 
 solution[:, 0] = [
     thetamax if solution[i, 0] > thetamax else solution[i, 0]
-    for i in range(int(100 * Tf))
+    for i in range(N+1)
 ]
 solution[:, 0] = [
     thetamin if solution[i, 0] < thetamin else solution[i, 0]
-    for i in range(int(100 * Tf))
+    for i in range(N+1)
 ]
 solution[:, 1] = [
     thetamax if solution[i, 1] > thetamax else solution[i, 1]
-    for i in range(int(100 * Tf))
+    for i in range(N+1)
 ]
 solution[:, 1] = [
     thetamin if solution[i, 1] < thetamin else solution[i, 1]
-    for i in range(int(100 * Tf))
+    for i in range(N+1)
 ]
 solution[:, 2] = [
     np.sign(solution[i, 2]) * dthetamax
     if abs(solution[i, 2]) > dthetamax
     else solution[i, 2]
-    for i in range(int(100 * Tf))
+    for i in range(N+1)
 ]
 solution[:, 3] = [
     np.sign(solution[i, 3]) * dthetamax
     if abs(solution[i, 3]) > dthetamax
     else solution[i, 3]
-    for i in range(int(100 * Tf))
+    for i in range(N+1)
 ]
 
 # Initial cnditions

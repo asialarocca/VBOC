@@ -37,7 +37,7 @@ with cProfile.Profile() as pr:
     input_size = ocp_dim
     hidden_size = ocp_dim * 50
     output_size = 2
-    learning_rate = 0.01
+    learning_rate = 0.001
 
     # Device configuration
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -54,9 +54,9 @@ with cProfile.Profile() as pr:
     etp_stop = 0.1  # active learning stopping condition
     loss_stop = 0.1  # nn training stopping condition
     beta = 0.8
-    n_minibatch = 1024
-    it_max = 100 * B / n_minibatch
+    n_minibatch = 512
     n_epoch = 100
+    it_max = int(n_epoch * B / n_minibatch)
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
@@ -131,13 +131,6 @@ with cProfile.Profile() as pr:
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
-
-        # ind = random.sample(range(X_iter.shape[0]), n_minibatch)
-        # X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
-        # y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
-        # X_iter_tensor = (X_iter_tensor - mean) / std
-
-        # loss = criterion(model(X_iter_tensor), y_iter_tensor)
 
         val = beta * val + (1 - beta) * loss.item()
 
@@ -330,13 +323,6 @@ with cProfile.Profile() as pr:
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
-
-            # ind = random.sample(range(X_iter.shape[0]), n_minibatch)
-            # X_iter_tensor = torch.from_numpy(X_iter[ind].astype(np.float32))
-            # y_iter_tensor = torch.from_numpy(y_iter[ind].astype(np.float32))
-            # X_iter_tensor = (X_iter_tensor - mean) / std
-
-            # loss = criterion(model(X_iter_tensor), y_iter_tensor)
 
             val = beta * val + (1 - beta) * loss.item()
 
