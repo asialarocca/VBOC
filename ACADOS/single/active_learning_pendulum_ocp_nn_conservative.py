@@ -67,7 +67,7 @@ with cProfile.Profile() as pr:
 
     # Hyper-parameters for nn:
     input_size = ocp_dim
-    hidden_size = ocp_dim * 50
+    hidden_size = ocp_dim * 100
     output_size = 2
     learning_rate = 0.01
 
@@ -83,7 +83,7 @@ with cProfile.Profile() as pr:
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
     B = pow(10, ocp_dim)  # batch size
-    etp_stop = 0.1  # active learning stopping condition
+    etp_stop = 0.2  # active learning stopping condition
     loss_stop = 0.01  # nn training stopping condition
     beta = 0.8
     n_minibatch = 64
@@ -91,7 +91,7 @@ with cProfile.Profile() as pr:
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(100, ocp_dim))
+    sample = sampler.random(n=pow(50, ocp_dim))
     l_bounds = [q_min, v_min]
     u_bounds = [q_max, v_max]
     data = qmc.scale(sample, l_bounds, u_bounds)
@@ -112,10 +112,10 @@ with cProfile.Profile() as pr:
         x[i, np.arange(ocp_dim)[np.arange(ocp_dim) != k[i]]] = r[i, :]
         x[i, k[i]] = j[i]
 
-    X_iter[:, 0] = x[:, 0] * (q_max + (q_max-q_min)/100 -
-                              (q_min - (q_max-q_min)/100)) + q_min - (q_max-q_min)/100
-    X_iter[:, 1] = x[:, 1] * (v_max + (v_max-v_min)/100 -
-                              (v_min - (v_max-v_min)/100)) + v_min - (v_max-v_min)/100
+    X_iter[:, 0] = x[:, 0] * (q_max + (q_max-q_min)/10 -
+                              (q_min - (q_max-q_min)/10)) + q_min - (q_max-q_min)/10
+    X_iter[:, 1] = x[:, 1] * (v_max + (v_max-v_min)/10 -
+                              (v_min - (v_max-v_min)/10)) + v_min - (v_max-v_min)/10
 
     # # Generate the initial set of labeled samples:
     # res = ocp.compute_problem((q_max + q_min) / 2, 0.0)
@@ -126,7 +126,7 @@ with cProfile.Profile() as pr:
     #     else:
     #         y_iter = [[1, 0]]
     # else:
-    #     raise Exception("Max iteration reached")
+    #     raise Exception("Max iteration reached"
 
     # Training of an initial classifier:
     for n in range(N_init):
@@ -154,6 +154,8 @@ with cProfile.Profile() as pr:
 
     it = 0
     val = 1
+    
+    init_time = time.time()
 
     # Train the model
     while val > loss_stop and it <= it_max:
@@ -190,16 +192,19 @@ with cProfile.Profile() as pr:
         optimizer.step()
         optimizer.zero_grad()
 
-        val = loss.item()
+        val = beta * val + (1 - beta) * loss.item()
 
         it += 1
+        
+    training_times = [time.time() - init_time]
 
     print("INITIAL CLASSIFIER TRAINED")
 
     with torch.no_grad():
+    #if 0:
         # Plot the results:
-        plt.figure()
-        h = 0.02
+        plt.figure(figsize=(6, 5))
+        h = 0.01
         x_min, x_max = q_min-h, q_max+h
         y_min, y_max = v_min, v_max
         xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
@@ -213,6 +218,7 @@ with cProfile.Profile() as pr:
             for x in range(y_iter.shape[0])
         ]
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        plt.contour(xx, yy, y_pred.reshape(xx.shape), levels=[0], linewidths=(2,), colors=("k",))
         scatter = plt.scatter(
             X_iter[:, 0], X_iter[:, 1], c=z, marker=".", alpha=0.5, cmap=plt.cm.Paired
         )
@@ -222,28 +228,8 @@ with cProfile.Profile() as pr:
         plt.ylabel("Initial velocity [rad/s]")
         plt.title("Classifier")
         hand = scatter.legend_elements()[0]
-        plt.legend(handles=hand, labels=("Non viable", "Viable"))
+        plt.legend(handles=hand, labels=("Non viable", "Viable"), loc='upper right')
         plt.grid(True)
-
-        # # Plot of the entropy:
-        # sigmoid = nn.Sigmoid()
-        # Xu_iter_tensor = torch.from_numpy(Xu_iter.astype(np.float32))
-        # Xu_iter_tensor = (Xu_iter_tensor - mean) / std
-        # prob_xu = sigmoid(model(Xu_iter_tensor)).numpy()
-        # etp = entropy(prob_xu, axis=1)
-        # plt.figure()
-        # prob_xu = sigmoid(out).numpy()
-        # etxu = entropy(prob_xu, axis=1)
-        # out = etxu.reshape(xx.shape)
-        # levels = np.linspace(out.min(), out.max(), 10)
-        # plt.contourf(xx, yy, out, levels=levels)
-        # this = plt.contour(xx, yy, out, levels=levels, colors=("k",), linewidths=(1,))
-        # plt.clabel(this, fmt="%2.1f", colors="w", fontsize=11)
-        # plt.xlim([0.0, np.pi / 2 - 0.01])
-        # plt.ylim([-10.0, 10.0])
-        # plt.xlabel("Initial position [rad]")
-        # plt.ylabel("Initial velocity [rad/s]")
-        # plt.title("Entropy")
 
     # Active learning:
     k = 0  # iteration number
@@ -288,6 +274,8 @@ with cProfile.Profile() as pr:
 
         it = 0
         val = 1
+        
+        init_time = time.time()
 
         # Train the model
         while val > loss_stop and it <= it_max:
@@ -363,64 +351,60 @@ with cProfile.Profile() as pr:
             optimizer.step()
             optimizer.zero_grad()
 
-            val = loss.item()
+            val = beta * val + (1 - beta) * loss.item()
 
             it += 1
+            
+        training_times.append(time.time() - init_time)
 
         print("CLASSIFIER", k, "TRAINED")
 
-    with torch.no_grad():
-        # Plot the results:
-        plt.figure()
-        out = model(inp)
-        y_pred = np.argmax(out.numpy(), axis=1)
-        Z = y_pred.reshape(xx.shape)
-        z = [
-            0 if np.array_equal(y_iter[x], [1, 0]) else 1
-            for x in range(y_iter.shape[0])
-        ]
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        scatter = plt.scatter(
-            X_iter[:, 0],
-            X_iter[:, 1],
-            c=z,
-            marker=".",
-            alpha=0.5,
-            cmap=plt.cm.Paired,
-        )
-        plt.xlim([0.0, np.pi / 2])
-        plt.ylim([-10.0, 10.0])
-        plt.xlabel("Initial position [rad]")
-        plt.ylabel("Initial velocity [rad/s]")
-        plt.title("Classifier")
-        hand = scatter.legend_elements()[0]
-        plt.legend(handles=hand, labels=("Non viable", "Viable"))
-        plt.grid(True)
+        with torch.no_grad():
+        #if 0:
+            # Plot the results:
+            plt.figure(figsize=(6, 5))
+            h = 0.01
+            x_min, x_max = q_min-h, q_max+h
+            y_min, y_max = v_min, v_max
+            xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+            inp = torch.from_numpy(np.c_[xx.ravel(), yy.ravel()].astype(np.float32))
+            inp = (inp - mean) / std
+            out = model(inp)
+            y_pred = np.argmax(out.numpy(), axis=1)
+            Z = y_pred.reshape(xx.shape)
+            z = [
+                0 if np.array_equal(y_iter[x], [1, 0]) else 1
+                for x in range(y_iter.shape[0])
+            ]
+            plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+            plt.contour(xx, yy, y_pred.reshape(xx.shape), levels=[0], linewidths=(2,), colors=("k",))
+            scatter = plt.scatter(
+                X_iter[:, 0], X_iter[:, 1], c=z, marker=".", alpha=0.5, cmap=plt.cm.Paired
+            )
+            plt.xlim([0.0, np.pi / 2])
+            plt.ylim([-10.0, 10.0])
+            plt.xlabel("Initial position [rad]")
+            plt.ylabel("Initial velocity [rad/s]")
+            plt.title("Classifier")
+            hand = scatter.legend_elements()[0]
+            plt.legend(handles=hand, labels=("Non viable", "Viable"), loc='upper right')
+            plt.grid(True)
 
-    # # Plot of the entropy:
-    # plt.figure()
-    # prob_xu = sigmoid(out).numpy()
-    # etxu = entropy(prob_xu, axis=1)
-    # out = etxu.reshape(xx.shape)
-    # levels = np.linspace(out.min(), out.max(), 10)
-    # plt.contourf(xx, yy, out, levels=levels)
-    # this = plt.contour(xx, yy, out, levels=levels, colors=("k",), linewidths=(1,))
-    # plt.clabel(this, fmt="%2.1f", colors="w", fontsize=11)
-    # plt.xlim([0.0, np.pi / 2 - 0.01])
-    # plt.ylim([-10.0, 10.0])
-    # plt.xlabel("Initial position [rad]")
-    # plt.ylabel("Initial velocity [rad/s]")
-    # plt.title("Entropy")
-
-    plt.figure()
-    plt.plot(performance_history)
-    plt.scatter(range(len(performance_history)), performance_history)
-    plt.xlabel("Iteration number")
-    plt.ylabel("Maximum entropy")
-    plt.title("Maximum entropy evolution")
+    #plt.figure()
+    #plt.plot(performance_history)
+    #plt.scatter(range(len(performance_history)), performance_history)
+    #plt.xlabel("Iteration number")
+    #plt.ylabel("Maximum entropy")
+    #plt.title("Maximum entropy evolution")
+    
+    plt.figure(figsize=(6, 5))
+    plt.bar(range(k+1),training_times)
+    plt.xlabel("Iteration")
+    plt.ylabel("Time")
+    plt.title("Training times")
 
     print("Execution time: %s seconds" % (time.time() - start_time))
 
-# pr.print_stats(sort="cumtime")
+pr.print_stats(sort="cumtime")
 
 plt.show()

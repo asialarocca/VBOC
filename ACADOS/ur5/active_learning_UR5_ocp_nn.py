@@ -4,7 +4,7 @@ from scipy.stats import entropy, qmc
 import matplotlib.pyplot as plt
 from numpy.linalg import norm as norm
 import time
-from double_pendulum_ocp_class_mpc import OCPdoublependulumINIT, OCPdoublependulumNN
+from double_pendulum_ocp_class import OCPdoublependulumINIT
 import random
 import warnings
 import torch
@@ -38,7 +38,7 @@ with cProfile.Profile() as pr:
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
     B = pow(10, ocp_dim)  # batch size
-    etp_stop = 0.1  # active learning stopping condition
+    etp_stop = 0.2  # active learning stopping condition
     loss_stop = 0.1  # nn training stopping condition
     beta = 0.8
     n_minibatch = 512
@@ -50,7 +50,7 @@ with cProfile.Profile() as pr:
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(20, ocp_dim))
+    sample = sampler.random(n=pow(30, ocp_dim))
     l_bounds = ocp.xmin.tolist()
     u_bounds = ocp.xmax.tolist()
     Xu_iter = qmc.scale(sample, l_bounds, u_bounds).tolist()
@@ -109,8 +109,9 @@ with cProfile.Profile() as pr:
         if res == 1:
             for f in range(1, ocp.N, int(ocp.N / 3)):
                 current_val = ocp.ocp_solver.get(f, "x").tolist()
-                X_iter.append(current_val)
-                y_iter.append([0, 1])
+                if current_val[2] >= 0.1 and current_val[3] >= 0.1:
+                    X_iter.append(current_val)
+                    y_iter.append([0, 1])
 
     # Delete tested data from the unlabeled set:
     del Xu_iter[:N_init]
@@ -181,8 +182,8 @@ with cProfile.Profile() as pr:
         cit = []
         for i in range(len(X_iter)):
             if (
-                norm(X_iter[i][0] - (ocp.xmin[0] + ocp.xmax[0]) / 2) < 0.1
-                and norm(X_iter[i][2]) < 0.01
+                norm(X_iter[i][0] - (ocp.xmin[0] + ocp.xmax[0]) / 2) < 1.
+                and norm(X_iter[i][2]) < 0.1
             ):
                 xit.append(X_iter[i][1])
                 yit.append(X_iter[i][3])
@@ -224,8 +225,8 @@ with cProfile.Profile() as pr:
         cit = []
         for i in range(len(X_iter)):
             if (
-                norm(X_iter[i][1] - (ocp.xmin[1] + ocp.xmax[1]) / 2) < 0.1
-                and norm(X_iter[i][3]) < 0.01
+                norm(X_iter[i][1] - (ocp.xmin[1] + ocp.xmax[1]) / 2) < 1.
+                and norm(X_iter[i][3]) < 0.1
             ):
                 xit.append(X_iter[i][0])
                 yit.append(X_iter[i][2])
@@ -276,7 +277,8 @@ with cProfile.Profile() as pr:
 
         # Add the B most uncertain samples to the labeled set:
         for x in range(B):
-            x0 = Xu_iter.pop(maxindex[x])
+            x0 = Xu_iter[maxindex[x]]
+            del Xu_iter[maxindex[x]]
             q0 = x0[:2]
             v0 = x0[2:]
 
@@ -288,6 +290,7 @@ with cProfile.Profile() as pr:
             elif res == 0:
                 X_iter.append([q0[0], q0[1], v0[0], v0[1]])
                 y_iter.append([1, 0])
+                
 
         print("CLASSIFIER", k, "IN TRAINING")
 
@@ -351,8 +354,8 @@ with cProfile.Profile() as pr:
         cit = []
         for i in range(len(X_iter)):
             if (
-                norm(X_iter[i][0] - (ocp.xmin[0] + ocp.xmax[0]) / 2) < 0.1
-                and norm(X_iter[i][2]) < 0.01
+                norm(X_iter[i][0] - (ocp.xmin[0] + ocp.xmax[0]) / 2) < 1.
+                and norm(X_iter[i][2]) < 0.1
             ):
                 xit.append(X_iter[i][1])
                 yit.append(X_iter[i][3])
@@ -394,8 +397,8 @@ with cProfile.Profile() as pr:
         cit = []
         for i in range(len(X_iter)):
             if (
-                norm(X_iter[i][1] - (ocp.xmin[1] + ocp.xmax[1]) / 2) < 0.1
-                and norm(X_iter[i][3]) < 0.01
+                norm(X_iter[i][1] - (ocp.xmin[1] + ocp.xmax[1]) / 2) < 1.
+                and norm(X_iter[i][3]) < 0.1
             ):
                 xit.append(X_iter[i][0])
                 yit.append(X_iter[i][2])

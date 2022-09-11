@@ -47,15 +47,15 @@ with cProfile.Profile() as pr:
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
     B = pow(10, ocp_dim)  # batch size
-    etp_stop = 0.1  # active learning stopping condition
-    loss_stop = 0.1  # nn training stopping condition
+    etp_stop = 0.2  # active learning stopping condition
+    loss_stop = 0.01  # nn training stopping condition
     beta = 0.8
     n_minibatch = 64
     it_max = 1e2 * B / n_minibatch
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(100, ocp_dim))
+    sample = sampler.random(n=pow(50, ocp_dim))
     l_bounds = [q_min, v_min]
     u_bounds = [q_max, v_max]
     data = qmc.scale(sample, l_bounds, u_bounds)
@@ -137,7 +137,7 @@ with cProfile.Profile() as pr:
         optimizer.step()
         optimizer.zero_grad()
 
-        val = loss.item()
+        val = beta * val + (1 - beta) * loss.item()
 
         it += 1
 
@@ -146,7 +146,7 @@ with cProfile.Profile() as pr:
     with torch.no_grad():
         # Plot the results:
         plt.figure()
-        h = 0.02
+        h = 0.01
         x_min, x_max = q_min-h, q_max+h
         y_min, y_max = v_min, v_max
         xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
@@ -198,9 +198,8 @@ with cProfile.Profile() as pr:
     performance_history = []
 
     while not (etpmax < etp_stop or Xu_iter.shape[0] == 0):
-
         if Xu_iter.shape[0] < B:
-            B = Xu_iter.shape[0]
+            B = Xu_iter[S].shape[0]
 
         with torch.no_grad():
             sigmoid = nn.Sigmoid()
@@ -217,7 +216,7 @@ with cProfile.Profile() as pr:
         k += 1
 
         # Add the B most uncertain samples to the labeled set:
-        for x in range(B):
+        for x in range(B):         
             q0 = Xu_iter[maxindex[x], 0]
             v0 = Xu_iter[maxindex[x], 1]
 
@@ -229,6 +228,13 @@ with cProfile.Profile() as pr:
                     y_iter = np.append(y_iter, [[0, 1]], axis=0)
                 else:
                     y_iter = np.append(y_iter, [[1, 0]], axis=0)
+                    
+            # Add intermediate states of succesfull initial conditions
+            if res == 1:
+                for f in range(1, ocp.N, int(ocp.N / 3)):
+                    current_val = ocp.ocp_solver.get(f, "x")
+                    X_iter = np.append(X_iter, [current_val], axis=0)
+                    y_iter = np.append(y_iter, [[0, 1]], axis=0)
 
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
@@ -260,7 +266,7 @@ with cProfile.Profile() as pr:
             optimizer.step()
             optimizer.zero_grad()
 
-            val = loss.item()
+            val = beta * val + (1 - beta) * loss.item()
 
             it += 1
 
@@ -318,6 +324,6 @@ with cProfile.Profile() as pr:
 
     print("Execution time: %s seconds" % (time.time() - start_time))
 
-# pr.print_stats(sort="cumtime")
+pr.print_stats(sort="cumtime")
 
 plt.show()

@@ -162,7 +162,7 @@
         "Vz_0": [],
         "W": [
             [
-                0.2,
+                0.0,
                 0.0,
                 0.0
             ],
@@ -179,7 +179,7 @@
         ],
         "W_0": [
             [
-                0.2,
+                0.0,
                 0.0,
                 0.0
             ],
@@ -196,7 +196,7 @@
         ],
         "W_e": [
             [
-                0.2,
+                0.0,
                 0.0
             ],
             [
@@ -348,7 +348,7 @@
         "nlp_solver_tol_eq": 1e-06,
         "nlp_solver_tol_ineq": 1e-06,
         "nlp_solver_tol_stat": 1e-06,
-        "nlp_solver_type": "SQP_RTI",
+        "nlp_solver_type": "SQP",
         "print_level": 0,
         "qp_solver": "PARTIAL_CONDENSING_HPIPM",
         "qp_solver_cond_N": null,

@@ -77,7 +77,7 @@ class OCPpendulum:
         self.ocp.dims.N = self.N
 
         # cost
-        Q = 2 * np.diag([1e-1, 1e-1])
+        Q = 2 * np.diag([0.0, 1e-1])
         R = 2 * np.diag([0.0])
 
         self.ocp.cost.W_e = Q
@@ -119,7 +119,7 @@ class OCPpendulum:
         self.ocp.constraints.ubx_0 = np.array([0.0, 0.0])
 
         # # options
-        # self.ocp.solver_options.nlp_solver_type = "SQP"
+        self.ocp.solver_options.nlp_solver_type = "SQP"
         # -------------------------------------------------
 
     def set_bounds(self, q_min, q_max):

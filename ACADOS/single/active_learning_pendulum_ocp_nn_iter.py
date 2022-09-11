@@ -57,12 +57,12 @@ with cProfile.Profile() as pr:
     loss_stop = 0.01  # nn training stopping condition
     beta = 0.8
     n_minibatch = 64
-    etp_stop = 0.1  # active learning stopping condition
+    etp_stop = 0.2  # active learning stopping condition
     it_max = 1e2 * B / n_minibatch
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(100, ocp_dim))
+    sample = sampler.random(n=pow(50, ocp_dim))
     l_bounds = [q_min, v_min]
     u_bounds = [q_max, v_max]
     data = qmc.scale(sample, l_bounds, u_bounds)

@@ -48,12 +48,12 @@ with cProfile.Profile() as pr:
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
     B = pow(10, ocp_dim)  # batch size
-    etp_stop = 0.1  # active learning stopping condition
+    etp_stop = 0.5  # active learning stopping condition
     loss_stop = 0.01  # nn training stopping condition
     beta = 0.8
-    n_minibatch = 64
-    it_max = 1e2 * B / n_minibatch
-    gridp = 50
+    n_minibatch = 2
+    it_max = int(1e2 * B / n_minibatch)
+    gridp = 15
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
@@ -67,7 +67,7 @@ with cProfile.Profile() as pr:
     mean, std = torch.mean(Xu_iter_tensor), torch.std(Xu_iter_tensor)
 
     # Generate the initial set of labeled samples:
-    n = pow(10, ocp_dim)
+    n = pow(5, ocp_dim)
     X_iter = np.empty((n, ocp_dim))
     y_iter = np.full((n, 2), [1, 0])
     r = np.random.random(size=(n, ocp_dim - 1))
@@ -137,7 +137,7 @@ with cProfile.Profile() as pr:
         optimizer.step()
         optimizer.zero_grad()
 
-        val = loss.item()
+        val = loss.item() * (1-beta) + beta*val
 
         it += 1
 
@@ -209,6 +209,7 @@ with cProfile.Profile() as pr:
                     y_iter = np.append(y_iter, [[0, 1]], axis=0)
                 else:
                     y_iter = np.append(y_iter, [[1, 0]], axis=0)
+                   
 
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
@@ -239,7 +240,7 @@ with cProfile.Profile() as pr:
             optimizer.step()
             optimizer.zero_grad()
 
-            val = loss.item()
+            val = loss.item() * (1-beta) + beta*val
 
             it += 1
 
@@ -276,7 +277,7 @@ with cProfile.Profile() as pr:
     rad_q = (q_max - q_min) / gridp
     rad_v = (v_max - v_min) / gridp
 
-    n_points = pow(2, ocp_dim)
+    n_points = ocp_dim
 
     with torch.no_grad():
         sigmoid = nn.Sigmoid()
@@ -284,9 +285,8 @@ with cProfile.Profile() as pr:
         X_tensor = (X_tensor - mean) / std
         prob_x = sigmoid(model(X_tensor)).numpy()
         etp = entropy(prob_x, axis=1)
-        etmax = max(etp)
 
-    xu = X_iter[etp > etpmax / 10]
+    xu = X_iter[etp > 0.2]
 
     Xu_it = np.empty((xu.shape[0], n_points, ocp_dim))
 
@@ -352,6 +352,7 @@ with cProfile.Profile() as pr:
                     y_iter = np.append(y_iter, [[0, 1]], axis=0)
                 else:
                     y_iter = np.append(y_iter, [[1, 0]], axis=0)
+                   
 
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)

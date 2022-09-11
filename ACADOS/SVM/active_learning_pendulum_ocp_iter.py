@@ -10,9 +10,15 @@ from pendulum_ocp_class import OCPpendulumINIT, OCPpendulumSVM
 import warnings
 warnings.filterwarnings("ignore")
 
-print_stats = 0
+print_stats = 1
 show_plots = 1
-print_cprof = 0
+print_cprof = 1
+
+if show_plots:
+    x_min, x_max = 0.0, np.pi / 2
+    y_min, y_max = -10.0, 10.0
+    h = 0.01
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
 
 with cProfile.Profile() as pr:
 
@@ -34,23 +40,36 @@ with cProfile.Profile() as pr:
 
     # Initialization of the SVM classifier:
     clf = svm.SVC(C=1e5, kernel='rbf', probability=True,
-                  class_weight='balanced', cache_size=1000)
+                  class_weight={1: 1, 0: 10}, cache_size=1000)
 
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
-    B = pow(5, ocp_dim)  # batch size
+    B = pow(10, ocp_dim)  # batch size
     etp_stop = 0.2  # active learning stopping condition
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=2, scramble=False)
-    sample = sampler.random(n=pow(100, ocp_dim))
+    sample = sampler.random(n=pow(50, ocp_dim))
     l_bounds = [q_min, v_min]
     u_bounds = [q_max, v_max]
     data = qmc.scale(sample, l_bounds, u_bounds)
 
     # Generate the initial set of labeled samples:
-    X_iter = [[(q_max+q_min)/2, 0.]]
-    y_iter = [ocp.compute_problem((q_max+q_min)/2, 0.)]
+    contour = pow(20, ocp_dim)
+    X_iter = np.empty((contour, ocp_dim))
+    y_iter = np.full((contour, 1), [0])
+    r = np.random.random(size=(contour, ocp_dim - 1))
+    k = np.random.randint(ocp_dim, size=(contour, 1))
+    j = np.random.randint(2, size=(contour, 1))
+    x = np.zeros((contour, ocp_dim))
+    for i in np.arange(contour):
+        x[i, np.arange(ocp_dim)[np.arange(ocp_dim) != k[i]]] = r[i, :]
+        x[i, k[i]] = j[i]
+
+    X_iter[:, 0] = x[:, 0] * (q_max + (q_max-q_min)/100 -
+                              (q_min - (q_max-q_min)/100)) + q_min - (q_max-q_min)/100
+    X_iter[:, 1] = x[:, 1] * (v_max + (v_max-v_min)/100 -
+                              (v_min - (v_max-v_min)/100)) + v_min - (v_max-v_min)/100
 
     # Generate the initial set of unlabeled samples:
     Xu_iter = data
@@ -68,9 +87,13 @@ with cProfile.Profile() as pr:
         v0 = data[n, 1]
 
         # Data testing:
-        X_iter = np.append(X_iter, [[q0, v0]], axis=0)
         res = ocp.compute_problem(q0, v0)
-        y_iter = np.append(y_iter, res)
+        if res != 2:
+            X_iter = np.append(X_iter, [[q0, v0]], axis=0)
+            if res == 1:
+                y_iter = np.append(y_iter, res)
+            else:
+                y_iter = np.append(y_iter, res)
 
         # Add intermediate states of succesfull initial conditions:
         if res == 1:
@@ -113,18 +136,13 @@ with cProfile.Profile() as pr:
             # v0 = Xu_iter[maxindex[x], 1]
 
             # Data testing:
-            X_iter = np.append(X_iter, [[q0, v0]], axis=0)
             res = ocp.compute_problem(q0, v0)
-            y_iter = np.append(y_iter, res)
-
-            # Add intermediate states of succesfull initial conditions:
-            if res == 1:
-                for f in range(1, ocp.N, int(ocp.N/3)):
-                    current_val = ocp.ocp_solver.get(f, "x")
-                    prob_sample = clf.predict_proba([current_val])
-                    etp_sample = entropy(prob_sample, axis=1)
-                    X_iter = np.append(X_iter, [current_val], axis=0)
-                    y_iter = np.append(y_iter, 1)
+            if res != 2:
+                X_iter = np.append(X_iter, [[q0, v0]], axis=0)
+                if res == 1:
+                    y_iter = np.append(y_iter, res)
+                else:
+                    y_iter = np.append(y_iter, res)
 
         # Delete tested data from the unlabeled set:
         # Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
@@ -146,31 +164,36 @@ with cProfile.Profile() as pr:
         # accuracy (calculated on the training set)
         print("Accuracy:", metrics.accuracy_score(y_iter, y_pred))
         print("False positives:", metrics.confusion_matrix(y_iter, y_pred)[0, 1])
+        print("Number of samples in the labeled set:", X_iter.shape[0])
 
     if show_plots:
         # Plot the results:
-        plt.figure()
-        x_min, x_max = 0., np.pi/2
-        y_min, y_max = -10., 10.
-        h = 0.01
-        xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+        plt.figure(figsize=(6, 5))
         out = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
         out = out.reshape(xx.shape)
         Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
         Z = Z.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        plt.contour(xx, yy, out, levels=[0], linewidths=(2,), colors=('k',))
-        scatter = plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter,
-                              marker=".", alpha=0.5, cmap=plt.cm.Paired)
-        plt.xlim([0., np.pi/2 - 0.01])
-        plt.ylim([-10., 10.])
-        plt.xlabel('Initial position [rad]')
-        plt.ylabel('Initial velocity [rad/s]')
-        plt.title('Classifier')
+        plt.contour(xx, yy, out, levels=[0], linewidths=(2,), colors=("k",))
+        scatter = plt.scatter(
+            X_iter[:, 0],
+            X_iter[:, 1],
+            c=y_iter,
+            marker=".",
+            alpha=0.5,
+            cmap=plt.cm.Paired,
+        )
+        plt.xlim([0.0, np.pi / 2 - 0.01])
+        plt.ylim([-10.0, 10.0])
+        plt.xlabel("Initial position [rad]")
+        plt.ylabel("Initial velocity [rad/s]")
+        plt.title("Classifier")
         hand = scatter.legend_elements()[0]
-        plt.legend(handles=hand, labels=("Non viable", "Viable"))
+        plt.legend(handles=hand, labels=("Non viable", "Viable"), loc='upper right')
+        plt.grid()
 
-    n_sum = sum(clf.predict(data[1:1000, :]))  # used for the stopping criterion
+
+    n_sum = sum(clf.predict(data[1:pow(10, ocp_dim), :]))  # used for the stopping criterion
 
     # ------------------------------------------------------
 
@@ -185,27 +208,19 @@ with cProfile.Profile() as pr:
 
         # The unlabeled set is redefined with the data that resulted unfeasible from testing or classification:
         data_xinit = X_iter[y_iter == 0]
-        # data_xinit = np.delete(data_xinit, range(40), axis=0)
+        data_xinit = np.delete(data_xinit, range(contour), axis=0)
         data_xuinit = Xu_iter[clf.predict(Xu_iter) == 0]
         Xu_iter = np.concatenate([data_xinit, data_xuinit])
 
         # The labeled set is redefined with the data previously tested as feasible:
-        # x_temp_b = X_iter[:40, :]
-        # y_temp_b = y_iter[:40]
-        # x_temp_f = X_iter[y_iter == 1]
-        # y_temp_f = y_iter[y_iter == 1]
-        # X_iter = np.concatenate([x_temp_b, x_temp_f])
-        # y_iter = np.concatenate([y_temp_b, y_temp_f])
-        X_iter = X_iter[y_iter == 1]
-        y_iter = y_iter[y_iter == 1]
-
-        # plt.figure()
-        # plt.xlim([0., np.pi/2 - 0.01])
-        # plt.ylim([-10., 10.])
-        # plt.scatter(Xu_iter[:, 0], Xu_iter[:, 1], marker=".", alpha=0.5)
-        # plt.xlabel('Initial position [rad]')
-        # plt.ylabel('Initial velocity [rad/s]')
-        # plt.title('Initial unlabeled set')
+        x_temp_b = X_iter[:contour, :]
+        y_temp_b = y_iter[:contour]
+        x_temp_f = X_iter[y_iter == 1]
+        y_temp_f = y_iter[y_iter == 1]
+        X_iter = np.concatenate([x_temp_b, x_temp_f])
+        y_iter = np.concatenate([y_temp_b, y_temp_f])
+        #X_iter = X_iter[y_iter == 1]
+        #y_iter = y_iter[y_iter == 1]
 
         # Build a new initial classifier by adding some newly tested data to the labeled set:
         for n in range(N_init):  # - int(N_init * n_sum / (1000))
@@ -213,16 +228,21 @@ with cProfile.Profile() as pr:
             v0 = Xu_iter[n, 1]
 
             # Data testing:
-            X_iter = np.append(X_iter, [[q0, v0]], axis=0)
             res = ocp.compute_problem(q0, v0)
-            y_iter = np.append(y_iter, res)
+            if res != 2:
+                X_iter = np.append(X_iter, [[q0, v0]], axis=0)
+                if res == 1:
+                    y_iter = np.append(y_iter, res)
+                else:
+                    y_iter = np.append(y_iter, res)
 
             # Add intermediate states of succesfull initial conditions
             if res == 1:
                 for f in range(1, ocp.N, int(ocp.N/3)):
                     current_val = ocp.ocp_solver.get(f, "x")
-                    X_iter = np.append(X_iter, [current_val], axis=0)
-                    y_iter = np.append(y_iter, 1)
+                    if clf.predict([current_val]) == 0:
+                        X_iter = np.append(X_iter, [current_val], axis=0)
+                        y_iter = np.append(y_iter, 1)
 
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
@@ -248,14 +268,6 @@ with cProfile.Profile() as pr:
             etp = entropy(prob_xu, axis=1)
             maxindex = np.argpartition(etp, -B)[-B:]  # indexes of the uncertain samples
 
-            # plt.figure()
-            # plt.xlim([0., np.pi/2 - 0.01])
-            # plt.ylim([-10., 10.])
-            # plt.scatter(Xu_iter[:, 0], Xu_iter[:, 1], c = etp, marker=".", alpha=0.5)
-            # plt.xlabel('Initial position [rad]')
-            # plt.ylabel('Initial velocity [rad/s]')
-            # plt.title('Entropy')
-
             etpmax = max(etp[maxindex])  # max entropy used for the stopping condition
 
             # Add the B most uncertain samples to the labeled set:
@@ -266,18 +278,13 @@ with cProfile.Profile() as pr:
                 # v0 = Xu_iter[maxindex[x], 1]
 
                 # Data testing:
-                X_iter = np.append(X_iter, [[q0, v0]], axis=0)
                 res = ocp.compute_problem(q0, v0)
-                y_iter = np.append(y_iter, res)
-
-                # Add intermediate states of succesfull initial conditions:
-                if res == 1:
-                    for f in range(1, ocp.N, int(ocp.N/3)):
-                        current_val = ocp.ocp_solver.get(f, "x")
-                        prob_sample = clf.predict_proba([current_val])
-                        etp_sample = entropy(prob_sample, axis=1)
-                        X_iter = np.append(X_iter, [current_val], axis=0)
-                        y_iter = np.append(y_iter, 1)
+                if res != 2:
+                    X_iter = np.append(X_iter, [[q0, v0]], axis=0)
+                    if res == 1:
+                        y_iter = np.append(y_iter, res)
+                    else:
+                        y_iter = np.append(y_iter, res)
 
             # Delete tested data from the unlabeled set:
             # Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
@@ -301,29 +308,33 @@ with cProfile.Profile() as pr:
             # accuracy (calculated on the training set)
             print("Accuracy:", metrics.accuracy_score(y_iter, y_pred))
             print("False positives:", metrics.confusion_matrix(y_iter, y_pred)[0, 1])
+            print("Number of samples in the labeled set:", X_iter.shape[0])
 
         if show_plots:
             # Plot the results:
-            plt.figure()
-            x_min, x_max = 0., np.pi/2
-            y_min, y_max = -10., 10.
-            h = 0.01
-            xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+            plt.figure(figsize=(6, 5))
             out = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
             out = out.reshape(xx.shape)
             Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
             Z = Z.reshape(xx.shape)
             plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-            plt.contour(xx, yy, out, levels=[0], linewidths=(2,), colors=('k',))
-            scatter = plt.scatter(X_iter[:, 0], X_iter[:, 1], c=y_iter,
-                                  marker=".", alpha=0.5, cmap=plt.cm.Paired)
-            plt.xlim([0., np.pi/2 - 0.01])
-            plt.ylim([-10., 10.])
-            plt.xlabel('Initial position [rad]')
-            plt.ylabel('Initial velocity [rad/s]')
-            plt.title('Classifier')
+            plt.contour(xx, yy, out, levels=[0], linewidths=(2,), colors=("k",))
+            scatter = plt.scatter(
+                X_iter[:, 0],
+                X_iter[:, 1],
+                c=y_iter,
+                marker=".",
+                alpha=0.5,
+                cmap=plt.cm.Paired,
+            )
+            plt.xlim([0.0, np.pi / 2 - 0.01])
+            plt.ylim([-10.0, 10.0])
+            plt.xlabel("Initial position [rad]")
+            plt.ylabel("Initial velocity [rad/s]")
+            plt.title("Classifier")
             hand = scatter.legend_elements()[0]
-            plt.legend(handles=hand, labels=("Non viable", "Viable"))
+            plt.legend(handles=hand, labels=("Non viable", "Viable"), loc='upper right')
+            plt.grid()
 
         # Stopping condition: compare two consecutive classifiers by the number of positively classified
         # data from a predefined pool of samples:

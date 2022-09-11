@@ -28,6 +28,7 @@ from controller_manager_msgs.srv import SwitchControllerRequest, SwitchControlle
 import L8_conf as lab_conf
 import params as conf
 from utils.common_functions import plotJoint, plotAdmittanceTracking, plotEndeff
+from plotjoints import plotPos
 import matplotlib.pyplot as plt
 from termcolor import colored
 from six.moves import (
@@ -50,6 +51,7 @@ import rosnode
 import rosgraph
 import rospkg
 from rospy import Time
+import time
 
 # other utils
 from utils.math_tools import *
@@ -452,10 +454,10 @@ class LabAdmittanceController(BaseControllerFixed):
                 )
             else:
                 plotJoint('position', 0, self.time_log, self.q_log, self.q_des_log, self.qd_log, self.qd_des_log, None, None, self.tau_log,
-                          self.tau_ffwd_log, self.joint_names, self.q_des_log)
-            plotJoint('torque', 2, self.time_log, self.q_log, self.q_des_log, self.qd_log, self.qd_des_log, None, None, self.tau_log,
-                      self.tau_ffwd_log, self.joint_names)
-            plotEndeff('force', 1, p.time_log, p.contactForceW_log)
+                          None, self.joint_names, None)
+            plotJoint('torque', 1, self.time_log, self.q_log, self.q_des_log, self.qd_log, self.qd_des_log, None, None, self.tau_log,
+                      None, self.joint_names, None)
+            #plotEndeff('force', 1, p.time_log, p.contactForceW_log)
             plt.show(block=True)
 
 
@@ -494,17 +496,17 @@ def talker(p):
         p.send_joint_trajectory()
     else:
         # Ocp initialization:
-        model = torch.load('model_save')
+        # model = torch.load('model_save')
         # ocp = OCPdoublependulumNN(model,-7.0702e-05,1.2981) # double pendulum MPC
-        ocp = OCPdoublependulumINIT()
-        # ocp = OCPUR5INIT()  # UR5 MPC
-
-        print('prima')
+        mpc = OCPdoublependulumINIT()
+        
+        yref = mpc.ocp.cost.yref[:mpc.nx]
+        x_guess = np.full((mpc.N+1, mpc.nx),yref)
+        x_guess[0,:2] = conf.robot_params[p.robot_name]["q_0"][1:3]
+        x_guess[0,2:] = np.zeros((2,))
 
         if not p.use_torque_control:
             p.switch_controller("joint_group_pos_controller")
-
-        print('dopo')
         # reset to actual
         p.updateKinematicsDynamics()
         p.time_poly = None
@@ -512,7 +514,14 @@ def talker(p):
         ext_traj_counter = 0
 
         # control loop
-        i = 0
+        iteration = 0
+
+        p.q_des = conf.robot_params[p.robot_name]["q_0"]
+        p.qd_des = np.zeros((6,))
+        
+        tot = 0
+        
+        initial_time = time.time()
 
         while True:
             # homing procedure
@@ -537,34 +546,60 @@ def talker(p):
                 p.q_des = p.q_ref[ext_traj_counter, :]
                 ext_traj_counter += 1
 
-            # EXE L8-1.1: set constant joint reference
-            # p.q_des = np.copy(p.q_des_q0)
+            # # EXE L8-1.1: set constant joint reference
+            # p.q_des = conf.robot_params[p.robot_name]["q_0"]
+            # p.q_des[1:3] = [-2, -1]
+
+            # print('p_current', p.q[1:3], p.qd[1:3])
 
             # EXE L8-1.2: set sinusoidal joint reference
             # p.q_des = p.q_des_q0 + lab_conf.amplitude * np.sin(2*np.pi*lab_conf.frequency*p.time)
             # p.q_des = np.copy(p.q_des_q0)
             # p.dq_des = np.zeros((6,))
 
-            # Double pendulum MPC:
-            if i % 10 == 0:
-                p.q_des = np.zeros((6,))  # np.zeros((6,)) np.copy(p.q_des_q0)
-                p.qd_des = np.zeros((6,))
+            # Double pendulum MPC:     
+            if iteration % 10 == 0:
 
-                print('p_current', p.q, p.qd)
+                #print('p_current', p.q[1:3], p.qd[1:3])
+                
+                current_pos = p.q[1:3]
+                current_vel = p.qd[1:3]
 
-                ocp.compute_problem(p.q[1:3], p.qd[1:3])
-                current_val = ocp.ocp_solver.get(1, "x")
+                #initial_time = time.time()
 
-                print('p_des (for the second and third joints):', current_val)
+                status = mpc.compute_problem(current_pos, current_vel)#, x_guess)
+                
+                #times = time.time() - initial_time
+                
+                #if times >= 0.01:
+                #    mpc.ocp_solver.print_statistics()
+
+                #if status == 1:
+                    #x_guess[0,:2] = current_pos
+                    #x_guess[0,2:] = current_vel
+                    #for i in range(2,mpc.N+1):
+                    #    x_guess[i-1, :] = mpc.ocp_solver.get(i, "x")
+                    #x_guess[mpc.N, :] = yref
+                    
+                current_val = mpc.ocp_solver.get(1, "x")
+                    
+                #else:
+                #    current_val = x_guess[1, :]
+                #    print('The controller could not find a feasible solution. The desired position is set to the previous result')
+                #    # put here the mpc without terminal constraint and above the one with terminal constraint
+
+                #print('p_des', current_val)
 
                 p.q_des[1:3] = current_val[:2]
                 p.qd_des[1:3] = current_val[2:]
 
-                p.tau_ffwd = conf.robot_params[p.robot_name]["kp"] * (np.subtract(
-                    p.q_des, p.q)) + conf.robot_params[p.robot_name]["kd"] * (np.subtract(p.qd_des, p.qd))
+                # p.tau_ffwd = conf.robot_params[p.robot_name]["kp"] * (np.subtract(
+                #     p.q_des, p.q)) + conf.robot_params[p.robot_name]["kd"] * (np.subtract(p.qd_des, p.qd))
 
-                current_contr = ocp.ocp_solver.get(1, "u")
-                p.tau_ffwd[1:3] = current_contr
+                # current_contr = ocp.ocp_solver.get(1, "u")
+                # p.tau_ffwd[1:3] = current_contr
+                
+            iteration = iteration + 1
 
             # # UR5 MPC:
             # print('p_current', p.q, p.qd)
@@ -630,8 +665,8 @@ def talker(p):
             #     p.payload_weight_avg = 0.99 * p.payload_weight_avg + 0.01 * (-p.contactForceW[2] / 9.81)
             #     print("estimated load: ", p.payload_weight_avg)
 
-            # controller with gravity coriolis comp
-            p.tau_ffwd = p.h + np.zeros(p.robot.na)
+            # # controller with gravity coriolis comp
+            # p.tau_ffwd = p.h + np.zeros(p.robot.na)
 
             # only torque loop (not used)
             # p.tau_ffwd = conf.robot_params[p.robot_name]['kp']*(np.subtract(p.q_des,   p.q))  - conf.robot_params[p.robot_name]['kd']*p.qd
@@ -677,9 +712,10 @@ def talker(p):
 
             p.time = p.time + conf.robot_params[p.robot_name]["dt"]
             # stops the while loop if  you prematurely hit CTRL+C
-            if ros.is_shutdown():
-                p.plotStuff()
-                print("Shutting Down")
+            if ros.is_shutdown() or p.log_counter >= conf.robot_params[p.robot_name]['buffer_size']:
+                plotPos(mpc,'position', 0, p.time_log, p.q_log, p.q_des_log, p.qd_log, p.qd_des_log, None, None, p.tau_log,
+                          None, p.joint_names, None)
+                plt.show(block=True)
                 break
 
     print("Shutting Down")
@@ -697,5 +733,5 @@ if __name__ == "__main__":
         talker(p)
     except ros.ROSInterruptException:
         # these plots are for simulated robot
-        # p.plotStuff()
+        p.plotStuff()
         pass

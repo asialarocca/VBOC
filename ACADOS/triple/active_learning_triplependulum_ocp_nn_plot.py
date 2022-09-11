@@ -31,16 +31,25 @@ with cProfile.Profile() as pr:
     q_max = ocp.thetamax
     q_min = ocp.thetamin
 
-    # Hyper-parameters for nn:
-    input_size = ocp_dim
-    hidden_size = ocp_dim * 50
-    output_size = 2
-
-	mean = torch.load('mean_save')
-	std = torch.load('std_save')
+    #with open("mean.txt", "r") as f:
+    #    val = float(f.readlines()[0])
+    #mean = torch.Tensor([val])
+    #with open("std.txt", "r") as f:
+    #    val = float(f.readlines()[0])
+    #std = torch.Tensor([val])
     model = torch.load('model_save')
     X_iter = np.load('X_iter.npy').tolist()
     y_iter = np.load('y_iter.npy').tolist()
+    
+    gridp = 10
+    # Generate low-discrepancy unlabeled samples:
+    sampler = qmc.Halton(d=ocp_dim, scramble=False)
+    sample = sampler.random(n=pow(gridp, ocp_dim))
+    l_bounds = [q_min, q_min, q_min, v_min, v_min, v_min]
+    u_bounds = [q_max, q_max, q_max, v_max, v_max, v_max]
+    data = qmc.scale(sample, l_bounds, u_bounds).tolist()
+    Xu_iter_tensor = torch.Tensor(data)
+    mean, std = torch.mean(Xu_iter_tensor), torch.std(Xu_iter_tensor)
 
     # Plots:
     h = 0.02

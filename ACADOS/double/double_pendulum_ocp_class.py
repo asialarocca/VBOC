@@ -116,7 +116,7 @@ class OCPdoublependulum:
         self.ocp = AcadosOcp()
 
         # dimensions
-        self.Tf = 0.5
+        self.Tf = 0.4
         self.ocp.solver_options.tf = self.Tf  # prediction horizon
 
         self.N = int(100 * self.Tf)
@@ -129,7 +129,7 @@ class OCPdoublependulum:
 
         # cost
         # Q = 2 * np.diag([0.0, 0.0, 0.0, 0.0])
-        Q = 2 * np.diag([1e-2, 1e-2, 1e-2, 1e-2])
+        Q = 2 * np.diag([0., 0., 1e-2, 1e-2])
         R = 2 * np.diag([0.0, 0.0])
 
         self.ocp.cost.W_e = Q
