@@ -51,7 +51,7 @@ with cProfile.Profile() as pr:
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
     B = pow(10, ocp_dim)  # batch size
-    etp_stop = 0.1  # active learning stopping condition
+    etp_stop = 0.2  # active learning stopping condition
     loss_stop = 0.1  # nn training stopping condition
     beta = 0.8
     n_minibatch = 512
@@ -415,7 +415,7 @@ with cProfile.Profile() as pr:
     rad_q = (q_max - q_min) / gridp
     rad_v = (v_max - v_min) / gridp
 
-    n_points = pow(3, ocp_dim)
+    n_points = pow(2, ocp_dim)
 
     with torch.no_grad():
         X_tensor = torch.from_numpy(X_iter.astype(np.float32))

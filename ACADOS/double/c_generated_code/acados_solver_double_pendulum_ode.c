@@ -46,6 +46,8 @@
 
 
 
+#include "double_pendulum_ode_constraints/double_pendulum_ode_h_e_constraint.h"
+
 
 #include "acados_solver_double_pendulum_ode.h"
 
@@ -140,7 +142,7 @@ void double_pendulum_ode_acados_create_1_set_plan(ocp_nlp_plan_t* nlp_solver_pla
     /************************************************
     *  plan
     ************************************************/
-    nlp_solver_plan->nlp_solver = SQP_RTI;
+    nlp_solver_plan->nlp_solver = SQP;
 
     nlp_solver_plan->ocp_qp_solver_plan.qp_solver = PARTIAL_CONDENSING_HPIPM;
 
@@ -303,6 +305,8 @@ void double_pendulum_ode_acados_create_3_create_and_set_functions(double_pendulu
     }while(false)
 
 
+    MAP_CASADI_FNC(nl_constr_h_e_fun_jac, double_pendulum_ode_constr_h_e_fun_jac_uxt_zt);
+    MAP_CASADI_FNC(nl_constr_h_e_fun, double_pendulum_ode_constr_h_e_fun);
 
 
     // explicit ode
@@ -576,6 +580,10 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     ubx_e[0] = 4.71238898038469;
     lbx_e[1] = 3.141592653589793;
     ubx_e[1] = 4.71238898038469;
+    lbx_e[2] = -5;
+    ubx_e[2] = 5;
+    lbx_e[3] = -5;
+    ubx_e[3] = 5;
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "idxbx", idxbx_e);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "lbx", lbx_e);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "ubx", ubx_e);
@@ -593,6 +601,22 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
 
 
 
+    // set up nonlinear constraints for last stage
+    double* luh_e = calloc(2*NHN, sizeof(double));
+    double* lh_e = luh_e;
+    double* uh_e = luh_e + NHN;
+    
+    lh_e[0] = 0.5;
+
+    
+    uh_e[0] = 1.1;
+
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "nl_constr_h_fun_jac", &capsule->nl_constr_h_e_fun_jac);
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "nl_constr_h_fun", &capsule->nl_constr_h_e_fun);
+    
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "lh", lh_e);
+    ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "uh", uh_e);
+    free(luh_e);
 
 
 }
@@ -659,11 +683,37 @@ void double_pendulum_ode_acados_create_6_set_opts(double_pendulum_ode_solver_cap
 
 
 
+    // set SQP specific options
+    double nlp_solver_tol_stat = 0.01;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_stat", &nlp_solver_tol_stat);
 
-    int qp_solver_iter_max = 50;
+    double nlp_solver_tol_eq = 0.01;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_eq", &nlp_solver_tol_eq);
+
+    double nlp_solver_tol_ineq = 0.01;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_ineq", &nlp_solver_tol_ineq);
+
+    double nlp_solver_tol_comp = 0.01;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_comp", &nlp_solver_tol_comp);
+
+    int nlp_solver_max_iter = 1000;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "max_iter", &nlp_solver_max_iter);
+
+    int initialize_t_slacks = 0;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "initialize_t_slacks", &initialize_t_slacks);
+
+    int qp_solver_iter_max = 1000;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_iter_max", &qp_solver_iter_max);
 
-int print_level = 0;
+
+    double qp_solver_tol_stat = 0.01;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_stat", &qp_solver_tol_stat);
+    double qp_solver_tol_eq = 0.01;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_eq", &qp_solver_tol_eq);
+    double qp_solver_tol_ineq = 0.01;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_ineq", &qp_solver_tol_ineq);
+    double qp_solver_tol_comp = 0.01;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_comp", &qp_solver_tol_comp);int print_level = 0;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "print_level", &print_level);
 
 
@@ -890,6 +940,8 @@ int double_pendulum_ode_acados_free(double_pendulum_ode_solver_capsule* capsule)
     // cost
 
     // constraints
+    external_function_param_casadi_free(&capsule->nl_constr_h_e_fun_jac);
+    external_function_param_casadi_free(&capsule->nl_constr_h_e_fun);
 
     return 0;
 }
@@ -912,19 +964,27 @@ void double_pendulum_ode_acados_print_stats(double_pendulum_ode_solver_capsule* 
     ocp_nlp_get(capsule->nlp_config, capsule->nlp_solver, "stat_m", &stat_m);
 
     
-    double stat[1200];
+    double stat[12000];
     ocp_nlp_get(capsule->nlp_config, capsule->nlp_solver, "statistics", stat);
 
     int nrow = sqp_iter+1 < stat_m ? sqp_iter+1 : stat_m;
-    printf("iter\tqp_stat\tqp_iter\n");
+    printf("iter\tres_stat\tres_eq\t\tres_ineq\tres_comp\tqp_stat\tqp_iter\talpha\n");
     for (int i = 0; i < nrow; i++)
     {
         for (int j = 0; j < stat_n + 1; j++)
         {
-            tmp_int = (int) stat[i + j * nrow];
-            printf("%d\t", tmp_int);
+            if (j == 0 || j == 5 || j == 6)
+            {
+                tmp_int = (int) stat[i + j * nrow];
+                printf("%d\t", tmp_int);
+            }
+            else
+            {
+                printf("%e\t", stat[i + j * nrow]);
+            }
         }
         printf("\n");
     }
+
 }
 

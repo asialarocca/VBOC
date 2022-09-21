@@ -371,22 +371,26 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     /**** Cost ****/
     double* W_0 = calloc(NY0*NY0, sizeof(double));
     // change only the non-zero elements:
-    W_0[2+(NY0) * 2] = 0.1;
-    W_0[3+(NY0) * 3] = 0.1;
+    W_0[2+(NY0) * 2] = 0.01;
+    W_0[3+(NY0) * 3] = 0.01;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "W", W_0);
     free(W_0);
 
     double* yref_0 = calloc(NY0, sizeof(double));
     // change only the non-zero elements:
+    yref_0[0] = -1;
+    yref_0[1] = -2.5;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "yref", yref_0);
     free(yref_0);
     double* W = calloc(NY*NY, sizeof(double));
     // change only the non-zero elements:
-    W[2+(NY) * 2] = 0.1;
-    W[3+(NY) * 3] = 0.1;
+    W[2+(NY) * 2] = 0.01;
+    W[3+(NY) * 3] = 0.01;
 
     double* yref = calloc(NY, sizeof(double));
     // change only the non-zero elements:
+    yref[0] = -1;
+    yref[1] = -2.5;
 
     for (int i = 1; i < N; i++)
     {
@@ -437,13 +441,15 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     // terminal cost
     double* yref_e = calloc(NYN, sizeof(double));
     // change only the non-zero elements:
+    yref_e[0] = -1;
+    yref_e[1] = -2.5;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "yref", yref_e);
     free(yref_e);
 
     double* W_e = calloc(NYN*NYN, sizeof(double));
     // change only the non-zero elements:
-    W_e[2+(NYN) * 2] = 0.1;
-    W_e[3+(NYN) * 3] = 0.1;
+    W_e[2+(NYN) * 2] = 0.01;
+    W_e[3+(NYN) * 3] = 0.01;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "W", W_e);
     free(W_e);
     double* Vx_e = calloc(NYN*NX, sizeof(double));
@@ -498,10 +504,10 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     double* lbu = lubu;
     double* ubu = lubu + NBU;
     
-    lbu[0] = -55;
-    ubu[0] = 55;
-    lbu[1] = -55;
-    ubu[1] = 55;
+    lbu[0] = -30;
+    ubu[0] = 30;
+    lbu[1] = -20;
+    ubu[1] = 20;
 
     for (int i = 0; i < N; i++)
     {
@@ -530,9 +536,10 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     double* lbx = lubx;
     double* ubx = lubx + NBX;
     
-    lbx[0] = -3.14;
-    lbx[1] = -3.14;
-    ubx[1] = 3.14;
+    lbx[0] = -1.5;
+    ubx[0] = -0.5;
+    lbx[1] = -3;
+    ubx[1] = -2;
     lbx[2] = -3.14;
     ubx[2] = 3.14;
     lbx[3] = -3.14;
@@ -567,9 +574,10 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     double* lbx_e = lubx_e;
     double* ubx_e = lubx_e + NBXN;
     
-    lbx_e[0] = -3.14;
-    lbx_e[1] = -3.14;
-    ubx_e[1] = 3.14;
+    lbx_e[0] = -1.5;
+    ubx_e[0] = -0.5;
+    lbx_e[1] = -3;
+    ubx_e[1] = -2;
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "idxbx", idxbx_e);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "lbx", lbx_e);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "ubx", ubx_e);

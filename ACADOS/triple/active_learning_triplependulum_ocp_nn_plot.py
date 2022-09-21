@@ -25,31 +25,31 @@ with cProfile.Profile() as pr:
 
     ocp_dim = ocp.nx
 
+    # Hyper-parameters for nn:
+    input_size = ocp_dim
+    hidden_size = ocp_dim * 50
+    output_size = 2
+
+    # Device configuration
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model = NeuralNet(input_size, hidden_size, output_size).to(device)
+    model.load_state_dict(torch.load('model_save', map_location=torch.device('cpu')))
+
     # Position and velocity bounds:
     v_max = ocp.dthetamax
     v_min = -ocp.dthetamax
     q_max = ocp.thetamax
     q_min = ocp.thetamin
 
-    #with open("mean.txt", "r") as f:
-    #    val = float(f.readlines()[0])
-    #mean = torch.Tensor([val])
-    #with open("std.txt", "r") as f:
-    #    val = float(f.readlines()[0])
-    #std = torch.Tensor([val])
-    model = torch.load('model_save')
+    with open("mean.txt", "r") as f:
+        val = float(f.readlines()[0])
+    mean = torch.Tensor([val])
+    with open("std.txt", "r") as f:
+        val = float(f.readlines()[0])
+    std = torch.Tensor([val])
     X_iter = np.load('X_iter.npy').tolist()
     y_iter = np.load('y_iter.npy').tolist()
-    
-    gridp = 10
-    # Generate low-discrepancy unlabeled samples:
-    sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(gridp, ocp_dim))
-    l_bounds = [q_min, q_min, q_min, v_min, v_min, v_min]
-    u_bounds = [q_max, q_max, q_max, v_max, v_max, v_max]
-    data = qmc.scale(sample, l_bounds, u_bounds).tolist()
-    Xu_iter_tensor = torch.Tensor(data)
-    mean, std = torch.mean(Xu_iter_tensor), torch.std(Xu_iter_tensor)
 
     # Plots:
     h = 0.02
@@ -76,29 +76,29 @@ with cProfile.Profile() as pr:
         y_pred = np.argmax(out.numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        xit = []
-        yit = []
-        cit = []
-        for i in range(len(X_iter)):
-            if (
-                norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
-                and norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
-                and norm(X_iter[i][3]) < 0.1 and norm(X_iter[i][4]) < 0.1
-            ):
-                xit.append(X_iter[i][2])
-                yit.append(X_iter[i][5])
-                if y_iter[i] == [1, 0]:
-                    cit.append(0)
-                else:
-                    cit.append(1)
-        plt.scatter(
-            xit,
-            yit,
-            c=cit,
-            marker=".",
-            alpha=0.5,
-            cmap=plt.cm.Paired,
-        )
+        # xit = []
+        # yit = []
+        # cit = []
+        # for i in range(len(X_iter)):
+        #     if (
+        #         norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
+        #         and norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
+        #         and norm(X_iter[i][3]) < 0.1 and norm(X_iter[i][4]) < 0.1
+        #     ):
+        #         xit.append(X_iter[i][2])
+        #         yit.append(X_iter[i][5])
+        #         if y_iter[i] == [1, 0]:
+        #             cit.append(0)
+        #         else:
+        #             cit.append(1)
+        # plt.scatter(
+        #     xit,
+        #     yit,
+        #     c=cit,
+        #     marker=".",
+        #     alpha=0.5,
+        #     cmap=plt.cm.Paired,
+        # )
         plt.xlim([q_min, q_max])
         plt.ylim([v_min, v_max])
         plt.grid()
@@ -121,29 +121,29 @@ with cProfile.Profile() as pr:
         y_pred = np.argmax(out.numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        xit = []
-        yit = []
-        cit = []
-        for i in range(len(X_iter)):
-            if (
-                norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
-                and norm(X_iter[i][2] - (q_min + q_max) / 2) < 0.1
-                and norm(X_iter[i][3]) < 0.1 and norm(X_iter[i][5]) < 0.1
-            ):
-                xit.append(X_iter[i][1])
-                yit.append(X_iter[i][4])
-                if y_iter[i] == [1, 0]:
-                    cit.append(0)
-                else:
-                    cit.append(1)
-        plt.scatter(
-            xit,
-            yit,
-            c=cit,
-            marker=".",
-            alpha=0.5,
-            cmap=plt.cm.Paired,
-        )
+        # xit = []
+        # yit = []
+        # cit = []
+        # for i in range(len(X_iter)):
+        #     if (
+        #         norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
+        #         and norm(X_iter[i][2] - (q_min + q_max) / 2) < 0.1
+        #         and norm(X_iter[i][3]) < 0.1 and norm(X_iter[i][5]) < 0.1
+        #     ):
+        #         xit.append(X_iter[i][1])
+        #         yit.append(X_iter[i][4])
+        #         if y_iter[i] == [1, 0]:
+        #             cit.append(0)
+        #         else:
+        #             cit.append(1)
+        # plt.scatter(
+        #     xit,
+        #     yit,
+        #     c=cit,
+        #     marker=".",
+        #     alpha=0.5,
+        #     cmap=plt.cm.Paired,
+        # )
         plt.xlim([q_min, q_max])
         plt.ylim([v_min, v_max])
         plt.grid()
@@ -166,29 +166,29 @@ with cProfile.Profile() as pr:
         y_pred = np.argmax(out.numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        xit = []
-        yit = []
-        cit = []
-        for i in range(len(X_iter)):
-            if (
-                norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
-                and norm(X_iter[i][2] - (q_min + q_max) / 2) < 0.1
-                and norm(X_iter[i][4]) < 0.1 and norm(X_iter[i][5]) < 0.1
-            ):
-                xit.append(X_iter[i][0])
-                yit.append(X_iter[i][3])
-                if y_iter[i] == [1, 0]:
-                    cit.append(0)
-                else:
-                    cit.append(1)
-        plt.scatter(
-            xit,
-            yit,
-            c=cit,
-            marker=".",
-            alpha=0.5,
-            cmap=plt.cm.Paired,
-        )
+        # xit = []
+        # yit = []
+        # cit = []
+        # for i in range(len(X_iter)):
+        #     if (
+        #         norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
+        #         and norm(X_iter[i][2] - (q_min + q_max) / 2) < 0.1
+        #         and norm(X_iter[i][4]) < 0.1 and norm(X_iter[i][5]) < 0.1
+        #     ):
+        #         xit.append(X_iter[i][0])
+        #         yit.append(X_iter[i][3])
+        #         if y_iter[i] == [1, 0]:
+        #             cit.append(0)
+        #         else:
+        #             cit.append(1)
+        # plt.scatter(
+        #     xit,
+        #     yit,
+        #     c=cit,
+        #     marker=".",
+        #     alpha=0.5,
+        #     cmap=plt.cm.Paired,
+        # )
         plt.xlim([q_min, q_max])
         plt.ylim([v_min, v_max])
         plt.grid()

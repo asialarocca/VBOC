@@ -64,7 +64,7 @@ def plotPos(mpc,name, figure_id, time_log, q_log=None, q_des_log=None, qd_log=No
     labels = ["1 - Shoulder Pan", "2 - Shoulder Lift", "3 - Elbow", "4 - Wrist 1", "5 - Wrist 2", "6 - Wrist 3"]
     
     xmax = np.array([6.14, mpc.xmax[0], mpc.xmax[1], 6.28, 6.28, 6.28, 3.14, 3.14, 3.14, 3.14, 3.14, 3.14])
-    xmin = - np.array([6.14, -mpc.xmin[0], -mpc.xmin[1], 6.28, 6.28, 6.28, 3.14, 3.14, 3.14, 3.14, 3.14, 3.14])
+    xmin = np.array([-6.14, mpc.xmin[0], mpc.xmin[1], -6.28, -6.28, -6.28, -3.14, -3.14, -3.14, -3.14, -3.14, -3.14])
     
     lw_des=7
     lw_act=4   
@@ -75,17 +75,50 @@ def plotPos(mpc,name, figure_id, time_log, q_log=None, q_des_log=None, qd_log=No
         plt.subplot(njoints / 3, 3, jidx + 1)
         plt.ylabel(labels[jidx])
         
-        plt.hlines(xmax[jidx], time_log[0], time_log[-1], linestyles='dashed', alpha=0.7)
-        plt.hlines(xmin[jidx], time_log[0], time_log[-1], linestyles='dashed', alpha=0.7)
+        plt.hlines(xmax[jidx], time_log[0], time_log[-1], linestyles='dashed', alpha=0.7, color = 'black')
+        plt.hlines(xmin[jidx], time_log[0], time_log[-1], linestyles='dashed', alpha=0.7, color = 'black')
         
-        if xmax[jidx] == 0:
-            plt.ylim([1.2*xmin[jidx], 0.3])
-        else:
-            plt.ylim([1.2*xmin[jidx], 1.2*xmax[jidx]])
+        #if jidx == 1 or jidx == 2:
+            #plt.ylim([1.2*xmin[jidx], xmax[jidx]/1.2])
+        #else:
+            #plt.ylim([1.2*xmin[jidx], 1.2*xmax[jidx]])
         
         plt.plot(time_log, plot_var_des_log[jidx,:], linestyle='-', marker="o",markersize=marker_size, lw=lw_des,color = 'red')
         plt.plot(time_log, plot_var_log[jidx,:],linestyle='-',marker="o",markersize=marker_size, lw=lw_act,color = 'blue')
         plt.grid()
-                
+        
+    xref = mpc.ocp.cost.yref
+        
+    fig = plt.figure(figure_id+1)    
+    fig.suptitle('Focus on Shoulder Lift joint', fontsize=20)
+
+    plt.ylabel(labels[1])
+    
+    plt.hlines(xref[0], time_log[0], time_log[-1], linestyles='dashed', alpha=0.7, color = 'green')
+        
+    plt.hlines(xmax[1], time_log[0], time_log[-1], linestyles='dashed', alpha=0.7)
+    plt.hlines(xmin[1], time_log[0], time_log[-1], linestyles='dashed', alpha=0.7, color = 'black')
+        
+    #plt.ylim([1.2*xmin[1], xmax[1]/1.2])
+        
+    plt.plot(time_log, plot_var_des_log[1,:], linestyle='-', marker="o",markersize=marker_size, lw=lw_des,color = 'red')
+    plt.plot(time_log, plot_var_log[1,:],linestyle='-',marker="o",markersize=marker_size, lw=lw_act,color = 'blue')
+    plt.grid()
+    
+    fig = plt.figure(figure_id+2)    
+    fig.suptitle('Focus on Elbow joint', fontsize=20)
+
+    plt.ylabel(labels[2])
+    
+    plt.hlines(xref[1], time_log[0], time_log[-1], linestyles='dashed', alpha=0.7, color = 'green')
+        
+    plt.hlines(xmax[2], time_log[0], time_log[-1], linestyles='dashed', alpha=0.7, color = 'black')
+    #plt.hlines(xmin[2], time_log[0], time_log[-1], linestyles='dashed', alpha=0.7)
+        
+    #plt.ylim([1.2*xmin[2], xmax[2]/1.2])
+        
+    plt.plot(time_log, plot_var_des_log[2,:], linestyle='-', marker="o",markersize=marker_size, lw=lw_des,color = 'red')
+    plt.plot(time_log, plot_var_log[2,:],linestyle='-',marker="o",markersize=marker_size, lw=lw_act,color = 'blue')
+    plt.grid()
 
         

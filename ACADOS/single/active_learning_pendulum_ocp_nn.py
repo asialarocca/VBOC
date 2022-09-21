@@ -47,7 +47,7 @@ with cProfile.Profile() as pr:
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
     B = pow(10, ocp_dim)  # batch size
-    etp_stop = 0.2  # active learning stopping condition
+    etp_stop = 0.5  # active learning stopping condition
     loss_stop = 0.01  # nn training stopping condition
     beta = 0.8
     n_minibatch = 64
@@ -76,10 +76,10 @@ with cProfile.Profile() as pr:
         x[i, np.arange(ocp_dim)[np.arange(ocp_dim) != k[i]]] = r[i, :]
         x[i, k[i]] = j[i]
 
-    X_iter[:, 0] = x[:, 0] * (q_max + (q_max-q_min)/100 -
-                              (q_min - (q_max-q_min)/100)) + q_min - (q_max-q_min)/100
-    X_iter[:, 1] = x[:, 1] * (v_max + (v_max-v_min)/100 -
-                              (v_min - (v_max-v_min)/100)) + v_min - (v_max-v_min)/100
+    X_iter[:, 0] = x[:, 0] * (q_max + (q_max-q_min)/50 -
+                              (q_min - (q_max-q_min)/50)) + q_min - (q_max-q_min)/50
+    X_iter[:, 1] = x[:, 1] * (v_max + (v_max-v_min)/50 -
+                              (v_min - (v_max-v_min)/50)) + v_min - (v_max-v_min)/50
 
     # # Generate the initial set of labeled samples:
     # res = ocp.compute_problem((q_max + q_min) / 2, 0.0)

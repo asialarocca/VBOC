@@ -116,7 +116,7 @@ class OCPdoublependulum:
         self.ocp = AcadosOcp()
 
         # dimensions
-        self.Tf = 0.4
+        self.Tf = 0.1
         self.ocp.solver_options.tf = self.Tf  # prediction horizon
 
         self.N = int(100 * self.Tf)
@@ -479,7 +479,7 @@ class OCPdoublependulumNN(OCPdoublependulum):
         # nonlinear terminal constraints
         self.model.con_h_expr_e = self.nn_decisionfunction(
             nn, mean, std, self.x)
-        self.ocp.constraints.lh_e = np.array([-0.0])
+        self.ocp.constraints.lh_e = np.array([0.5])
         self.ocp.constraints.uh_e = np.array([1.1])
 
         # ocp model

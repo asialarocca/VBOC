@@ -140,7 +140,7 @@ void double_pendulum_ode_acados_create_1_set_plan(ocp_nlp_plan_t* nlp_solver_pla
     /************************************************
     *  plan
     ************************************************/
-    nlp_solver_plan->nlp_solver = SQP_RTI;
+    nlp_solver_plan->nlp_solver = SQP;
 
     nlp_solver_plan->ocp_qp_solver_plan.qp_solver = PARTIAL_CONDENSING_HPIPM;
 
@@ -224,7 +224,7 @@ ocp_nlp_dims* double_pendulum_ode_acados_create_2_create_and_set_dimensions(doub
     nbx[0]  = NBX0;
     nsbx[0] = 0;
     ns[0] = NS - NSBX;
-    nbxe[0] = 6;
+    nbxe[0] = 4;
     ny[0] = NY0;
 
     // terminal - common
@@ -369,12 +369,56 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     }
 
     /**** Cost ****/
+    double* W_0 = calloc(NY0*NY0, sizeof(double));
+    // change only the non-zero elements:
+    W_0[2+(NY0) * 2] = 1;
+    W_0[3+(NY0) * 3] = 1;
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "W", W_0);
+    free(W_0);
+
+    double* yref_0 = calloc(NY0, sizeof(double));
+    // change only the non-zero elements:
+    yref_0[0] = -1;
+    yref_0[1] = -2.5;
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "yref", yref_0);
+    free(yref_0);
+    double* W = calloc(NY*NY, sizeof(double));
+    // change only the non-zero elements:
+    W[2+(NY) * 2] = 1;
+    W[3+(NY) * 3] = 1;
+
+    double* yref = calloc(NY, sizeof(double));
+    // change only the non-zero elements:
+    yref[0] = -1;
+    yref[1] = -2.5;
+
+    for (int i = 1; i < N; i++)
+    {
+        ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "W", W);
+        ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "yref", yref);
+    }
+    free(W);
+    free(yref);
     double* Vx_0 = calloc(NY0*NX, sizeof(double));
     // change only the non-zero elements:
+    Vx_0[0+(NY0) * 0] = 1;
+    Vx_0[1+(NY0) * 1] = 1;
+    Vx_0[2+(NY0) * 2] = 1;
+    Vx_0[3+(NY0) * 3] = 1;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "Vx", Vx_0);
     free(Vx_0);
+    double* Vu_0 = calloc(NY0*NU, sizeof(double));
+    // change only the non-zero elements:
+    Vu_0[4+(NY0) * 0] = 1;
+    Vu_0[5+(NY0) * 1] = 1;
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "Vu", Vu_0);
+    free(Vu_0);
     double* Vx = calloc(NY*NX, sizeof(double));
     // change only the non-zero elements:
+    Vx[0+(NY) * 0] = 1;
+    Vx[1+(NY) * 1] = 1;
+    Vx[2+(NY) * 2] = 1;
+    Vx[3+(NY) * 3] = 1;
     for (int i = 1; i < N; i++)
     {
         ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "Vx", Vx);
@@ -382,8 +426,41 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     free(Vx);
 
     
+    double* Vu = calloc(NY*NU, sizeof(double));
+    // change only the non-zero elements:
+    
+    Vu[4+(NY) * 0] = 1;
+    Vu[5+(NY) * 1] = 1;
+
+    for (int i = 1; i < N; i++)
+    {
+        ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "Vu", Vu);
+    }
+    free(Vu);
 
     // terminal cost
+    double* yref_e = calloc(NYN, sizeof(double));
+    // change only the non-zero elements:
+    yref_e[0] = -1;
+    yref_e[1] = -2.5;
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "yref", yref_e);
+    free(yref_e);
+
+    double* W_e = calloc(NYN*NYN, sizeof(double));
+    // change only the non-zero elements:
+    W_e[2+(NYN) * 2] = 1;
+    W_e[3+(NYN) * 3] = 1;
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "W", W_e);
+    free(W_e);
+    double* Vx_e = calloc(NYN*NX, sizeof(double));
+    // change only the non-zero elements:
+    
+    Vx_e[0+(NYN) * 0] = 1;
+    Vx_e[1+(NYN) * 1] = 1;
+    Vx_e[2+(NYN) * 2] = 1;
+    Vx_e[3+(NYN) * 3] = 1;
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "Vx", Vx_e);
+    free(Vx_e);
 
 
 
@@ -396,19 +473,11 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     idxbx0[1] = 1;
     idxbx0[2] = 2;
     idxbx0[3] = 3;
-    idxbx0[4] = 4;
-    idxbx0[5] = 5;
 
     double* lubx0 = calloc(2*NBX0, sizeof(double));
     double* lbx0 = lubx0;
     double* ubx0 = lubx0 + NBX0;
     // change only the non-zero elements:
-    lbx0[0] = 3.141592653589793;
-    ubx0[0] = 3.141592653589793;
-    lbx0[1] = 3.141592653589793;
-    ubx0[1] = 3.141592653589793;
-    lbx0[2] = 3.141592653589793;
-    ubx0[2] = 3.141592653589793;
 
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "idxbx", idxbx0);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "lbx", lbx0);
@@ -416,14 +485,12 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     free(idxbx0);
     free(lubx0);
     // idxbxe_0
-    int* idxbxe_0 = malloc(6 * sizeof(int));
+    int* idxbxe_0 = malloc(4 * sizeof(int));
     
     idxbxe_0[0] = 0;
     idxbxe_0[1] = 1;
     idxbxe_0[2] = 2;
     idxbxe_0[3] = 3;
-    idxbxe_0[4] = 4;
-    idxbxe_0[5] = 5;
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "idxbxe", idxbxe_0);
     free(idxbxe_0);
 
@@ -433,17 +500,14 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     
     idxbu[0] = 0;
     idxbu[1] = 1;
-    idxbu[2] = 2;
     double* lubu = calloc(2*NBU, sizeof(double));
     double* lbu = lubu;
     double* ubu = lubu + NBU;
     
-    lbu[0] = -12;
-    ubu[0] = 12;
-    lbu[1] = -12;
-    ubu[1] = 12;
-    lbu[2] = -12;
-    ubu[2] = 12;
+    lbu[0] = -30;
+    ubu[0] = 30;
+    lbu[1] = -20;
+    ubu[1] = 20;
 
     for (int i = 0; i < N; i++)
     {
@@ -468,24 +532,18 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     idxbx[1] = 1;
     idxbx[2] = 2;
     idxbx[3] = 3;
-    idxbx[4] = 4;
-    idxbx[5] = 5;
     double* lubx = calloc(2*NBX, sizeof(double));
     double* lbx = lubx;
     double* ubx = lubx + NBX;
     
-    lbx[0] = 3.141592653589793;
-    ubx[0] = 4.71238898038469;
-    lbx[1] = 3.141592653589793;
-    ubx[1] = 4.71238898038469;
-    lbx[2] = 3.141592653589793;
-    ubx[2] = 4.71238898038469;
-    lbx[3] = -5;
-    ubx[3] = 5;
-    lbx[4] = -5;
-    ubx[4] = 5;
-    lbx[5] = -5;
-    ubx[5] = 5;
+    lbx[0] = -1.5;
+    ubx[0] = -0.5;
+    lbx[1] = -3;
+    ubx[1] = -2;
+    lbx[2] = -3.14;
+    ubx[2] = 3.14;
+    lbx[3] = -3.14;
+    ubx[3] = 3.14;
 
     for (int i = 1; i < N; i++)
     {
@@ -512,18 +570,14 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     idxbx_e[1] = 1;
     idxbx_e[2] = 2;
     idxbx_e[3] = 3;
-    idxbx_e[4] = 4;
-    idxbx_e[5] = 5;
     double* lubx_e = calloc(2*NBXN, sizeof(double));
     double* lbx_e = lubx_e;
     double* ubx_e = lubx_e + NBXN;
     
-    lbx_e[0] = 3.141592653589793;
-    ubx_e[0] = 4.71238898038469;
-    lbx_e[1] = 3.141592653589793;
-    ubx_e[1] = 4.71238898038469;
-    lbx_e[2] = 3.141592653589793;
-    ubx_e[2] = 4.71238898038469;
+    lbx_e[0] = -1.5;
+    ubx_e[0] = -0.5;
+    lbx_e[1] = -3;
+    ubx_e[1] = -2;
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "idxbx", idxbx_e);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "lbx", lbx_e);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "ubx", ubx_e);
@@ -591,10 +645,10 @@ void double_pendulum_ode_acados_create_6_set_opts(double_pendulum_ode_solver_cap
     for (int i = 0; i < N; i++)
         ocp_nlp_solver_opts_set_at_stage(nlp_config, nlp_opts, i, "dynamics_jac_reuse", &tmp_bool);
 
-    double nlp_solver_step_length = 1;
+    double nlp_solver_step_length = 0.1;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "step_length", &nlp_solver_step_length);
 
-    double levenberg_marquardt = 0;
+    double levenberg_marquardt = 0.1;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "levenberg_marquardt", &levenberg_marquardt);
 
     /* options QP solver */
@@ -607,11 +661,37 @@ void double_pendulum_ode_acados_create_6_set_opts(double_pendulum_ode_solver_cap
 
 
 
+    // set SQP specific options
+    double nlp_solver_tol_stat = 0.01;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_stat", &nlp_solver_tol_stat);
 
-    int qp_solver_iter_max = 50;
+    double nlp_solver_tol_eq = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_eq", &nlp_solver_tol_eq);
+
+    double nlp_solver_tol_ineq = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_ineq", &nlp_solver_tol_ineq);
+
+    double nlp_solver_tol_comp = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_comp", &nlp_solver_tol_comp);
+
+    int nlp_solver_max_iter = 1000;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "max_iter", &nlp_solver_max_iter);
+
+    int initialize_t_slacks = 0;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "initialize_t_slacks", &initialize_t_slacks);
+
+    int qp_solver_iter_max = 1000;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_iter_max", &qp_solver_iter_max);
 
-int print_level = 0;
+
+    double qp_solver_tol_stat = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_stat", &qp_solver_tol_stat);
+    double qp_solver_tol_eq = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_eq", &qp_solver_tol_eq);
+    double qp_solver_tol_ineq = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_ineq", &qp_solver_tol_ineq);
+    double qp_solver_tol_comp = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_comp", &qp_solver_tol_comp);int print_level = 0;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "print_level", &print_level);
 
 
@@ -635,9 +715,6 @@ void double_pendulum_ode_acados_create_7_set_nlp_out(double_pendulum_ode_solver_
 
     // initialize with x0
     
-    x0[0] = 3.141592653589793;
-    x0[1] = 3.141592653589793;
-    x0[2] = 3.141592653589793;
 
 
     double* u0 = xu0 + NX;
@@ -861,19 +938,27 @@ void double_pendulum_ode_acados_print_stats(double_pendulum_ode_solver_capsule* 
     ocp_nlp_get(capsule->nlp_config, capsule->nlp_solver, "stat_m", &stat_m);
 
     
-    double stat[1200];
+    double stat[12000];
     ocp_nlp_get(capsule->nlp_config, capsule->nlp_solver, "statistics", stat);
 
     int nrow = sqp_iter+1 < stat_m ? sqp_iter+1 : stat_m;
-    printf("iter\tqp_stat\tqp_iter\n");
+    printf("iter\tres_stat\tres_eq\t\tres_ineq\tres_comp\tqp_stat\tqp_iter\talpha\n");
     for (int i = 0; i < nrow; i++)
     {
         for (int j = 0; j < stat_n + 1; j++)
         {
-            tmp_int = (int) stat[i + j * nrow];
-            printf("%d\t", tmp_int);
+            if (j == 0 || j == 5 || j == 6)
+            {
+                tmp_int = (int) stat[i + j * nrow];
+                printf("%d\t", tmp_int);
+            }
+            else
+            {
+                printf("%e\t", stat[i + j * nrow]);
+            }
         }
         printf("\n");
     }
+
 }
 

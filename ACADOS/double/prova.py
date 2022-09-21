@@ -36,7 +36,8 @@ with cProfile.Profile() as pr:
     u_bounds = [q_max, q_max]
     Xu_iter = qmc.scale(sample, l_bounds, u_bounds).tolist()
     
-    U = 0
+    U0 = 0
+    U1=0
     
     # Training of an initial classifier:
     for n in range(len(Xu_iter)):
@@ -44,10 +45,11 @@ with cProfile.Profile() as pr:
         v0 = [0.0, 0.0]
         # Data testing:
         res = ocp.compute_problem(q0, v0)
-        Ux = ocp_solver.get(0, "u")
-        print(Ux[0])
-        Ux = abs(Ux[0])
-        if Ux>U:
-            U = Ux
-		    
-    print(U)
+        U = ocp_solver.get(0, "u")
+        Ux = abs(U[0])
+        if Ux>U0:
+            U0 = Ux
+        Ux = abs(U[1])
+        if Ux>U1:
+            U1 = Ux
+    print(U0,U1)
