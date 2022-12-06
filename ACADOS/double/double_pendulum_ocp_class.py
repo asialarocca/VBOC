@@ -116,7 +116,7 @@ class OCPdoublependulum:
         self.ocp = AcadosOcp()
 
         # dimensions
-        self.Tf = 0.1
+        self.Tf = 0.4
         self.ocp.solver_options.tf = self.Tf  # prediction horizon
 
         self.N = int(100 * self.Tf)
@@ -129,7 +129,7 @@ class OCPdoublependulum:
 
         # cost
         # Q = 2 * np.diag([0.0, 0.0, 0.0, 0.0])
-        Q = 2 * np.diag([0., 0., 1e-2, 1e-2])
+        Q = 2 * np.diag([0., 0., 1., 1.])
         R = 2 * np.diag([0.0, 0.0])
 
         self.ocp.cost.W_e = Q
@@ -153,6 +153,15 @@ class OCPdoublependulum:
         self.thetamax = np.pi / 2 + np.pi
         self.thetamin = np.pi
         self.dthetamax = 5.0
+
+        self.normal = np.array(
+            [
+                self.thetamax - self.thetamin,
+                self.thetamax - self.thetamin,
+                2 * self.dthetamax,
+                2 * self.dthetamax,
+            ]
+        )
 
         self.ocp.constraints.lbu = np.array([-self.Cmax, -self.Cmax])
         self.ocp.constraints.ubu = np.array([self.Cmax, self.Cmax])
@@ -220,45 +229,51 @@ class OCPdoublependulum:
 
         self.ocp_solver.reset()
 
-        self.normal = np.array(
-            [
-                self.thetamax - self.thetamin,
-                self.thetamax - self.thetamin,
-                2 * self.dthetamax,
-                2 * self.dthetamax,
-            ]
-        )
-
         x0 = np.array([q0[0], q0[1], v0[0], v0[1]])
 
         self.ocp_solver.constraints_set(0, "lbx", x0)
         self.ocp_solver.constraints_set(0, "ubx", x0)
 
-        dist_min = 1e3
+        x_guess = np.array([q0[0], q0[1], 0.0, 0.0])
 
-        for k in range(simX_vec.shape[0]):
-            # if np.siself.gn(simX_vec[k, 0, 2]) == np.siself.gn(v0[0]) and np.siself.gn(simX_vec[k, 0, 3]) == np.siself.gn(v0[1]):
-            dist = np.linalg.norm(x0 / self.normal - simX_vec[k, 0, :] / self.normal)
-            if dist < dist_min:
-                dist_min = dist
-                index = k
-
-        # print(x0, simX_vec[index, 0, :])
-
-        for i in range(self.N):
-            self.ocp_solver.set(i, "x", simX_vec[index, i, :])
-            self.ocp_solver.set(i, "u", simU_vec[index, i, :])
-
-        self.ocp_solver.set(self.N, "x", simX_vec[index, self.N, :])
+        for i in range(self.N + 1):
+            self.ocp_solver.set(i, "x", x_guess)
 
         status = self.ocp_solver.solve()
 
         if status == 0:
             return 1
-        elif status == 4:
-            return 0
         else:
-            return 2
+            self.ocp_solver.reset()
+
+            x0 = np.array([q0[0], q0[1], v0[0], v0[1]])
+
+            self.ocp_solver.constraints_set(0, "lbx", x0)
+            self.ocp_solver.constraints_set(0, "ubx", x0)
+
+            dist_min = 1e3
+
+            for k in range(simX_vec.shape[0]):
+                # if np.siself.gn(simX_vec[k, 0, 2]) == np.siself.gn(v0[0]) and np.siself.gn(simX_vec[k, 0, 3]) == np.siself.gn(v0[1]):
+                dist = np.linalg.norm(x0 / self.normal - simX_vec[k, 0, :] / self.normal)
+                if dist < dist_min:
+                    dist_min = dist
+                    index = k
+
+            for i in range(self.N):
+                self.ocp_solver.set(i, "x", simX_vec[index, i, :])
+                self.ocp_solver.set(i, "u", simU_vec[index, i, :])
+
+            self.ocp_solver.set(self.N, "x", simX_vec[index, self.N, :])
+
+            status = self.ocp_solver.solve()
+
+            if status == 0:
+                return 1
+            elif status == 4:
+                return 0
+            else:
+                return 2
 
     def compute_problem_withGUESSPID(self, q0, v0):
 

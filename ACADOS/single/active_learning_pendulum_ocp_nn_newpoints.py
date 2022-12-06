@@ -51,9 +51,9 @@ with cProfile.Profile() as pr:
     etp_stop = 0.2  # active learning stopping condition
     loss_stop = 0.1  # nn training stopping condition
     beta = 0.8
-    n_minibatch = 2
+    n_minibatch = 64
     it_max = int(1e2 * B / n_minibatch)
-    gridp = 20
+    gridp = 50
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)

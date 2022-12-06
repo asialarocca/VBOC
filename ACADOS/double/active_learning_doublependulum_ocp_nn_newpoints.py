@@ -415,7 +415,7 @@ with cProfile.Profile() as pr:
     rad_q = (q_max - q_min) / gridp
     rad_v = (v_max - v_min) / gridp
 
-    n_points = pow(2, ocp_dim)
+    n_points = pow(1, ocp_dim)
 
     with torch.no_grad():
         X_tensor = torch.from_numpy(X_iter.astype(np.float32))
@@ -424,6 +424,9 @@ with cProfile.Profile() as pr:
         etp = entropy(prob_x, axis=1)
 
     xu = X_iter[etp > etp_stop]
+    
+    X_iter = X_iter[etp > 1e-2]
+    y_iter = y_iter[etp > 1e-2]
 
     Xu_it = np.empty((xu.shape[0], n_points, ocp_dim))
 

@@ -100,7 +100,7 @@ with cProfile.Profile() as pr:
 
     # Hyper-parameters for nn:
     input_size = ocp_dim
-    hidden_size = ocp_dim * 50
+    hidden_size = ocp_dim * 100
     output_size = 2
     learning_rate = 0.001
 
@@ -130,7 +130,7 @@ with cProfile.Profile() as pr:
     Xu_iter = qmc.scale(sample, l_bounds, u_bounds).tolist()
 
     # Generate the initial set of labeled samples:
-    n = pow(10, ocp_dim)
+    n = pow(19, ocp_dim)
     X_iter = np.empty((n, ocp_dim))
     y_iter = np.full((n, 2), [1, 0])
     r = np.random.random(size=(n, ocp_dim - 1))
@@ -141,10 +141,10 @@ with cProfile.Profile() as pr:
         x[i, np.arange(ocp_dim)[np.arange(ocp_dim) != k[i]]] = r[i, :]
         x[i, k[i]] = j[i]
 
-    X_iter[:, 0] = np.float32(x[:, 0] * (q_max + 0.05 - (q_min - 0.05)) + q_min - 0.05)
-    X_iter[:, 1] = np.float32(x[:, 1] * (q_max + 0.05 - (q_min - 0.05)) + q_min - 0.05)
-    X_iter[:, 2] = np.float32(x[:, 2] * (v_max + 0.5 - (v_min - 0.5)) + v_min - 0.5)
-    X_iter[:, 3] = np.float32(x[:, 3] * (v_max + 0.5 - (v_min - 0.5)) + v_min - 0.5)
+    X_iter[:, 0] = np.float32(x[:, 0] * (q_max + 0.1 - (q_min - 0.1)) + q_min - 0.1)
+    X_iter[:, 1] = np.float32(x[:, 1] * (q_max + 0.1 - (q_min - 0.1)) + q_min - 0.1)
+    X_iter[:, 2] = np.float32(x[:, 2] * (v_max + 1. - (v_min - 1.) + v_min - 1.)
+    X_iter[:, 3] = np.float32(x[:, 3] * (v_max + 1. - (v_min - 1.)) + v_min - 1.)
 
     X_iter = X_iter.tolist()
     y_iter = y_iter.tolist()
@@ -159,6 +159,13 @@ with cProfile.Profile() as pr:
 
     Xu_iter_tensor = torch.Tensor(Xu_iter)
     mean, std = torch.mean(Xu_iter_tensor), torch.std(Xu_iter_tensor)
+
+    # Get solution of positive samples:
+    N = ocp.N
+    count = 0
+    N_guess = 1000
+    simX = np.ndarray((N_guess, N + 1, ocp_dim))
+    simU = np.ndarray((N_guess, N, int(ocp_dim / 2)))
 
     # Training of an initial classifier:
     for n in range(N_init):
@@ -182,6 +189,14 @@ with cProfile.Profile() as pr:
                 if current_val[2] >= 0.1 and current_val[3] >= 0.1:
                     X_iter.append(current_val)
                     y_iter.append([0, 1])
+
+        if count < N_guess:
+            for i in range(N):
+                simX[count, i, :] = ocp.ocp_solver.get(i, "x")
+                simU[count, i] = ocp.ocp_solver.get(i, "u")
+            simX[count, N, :] = ocp.ocp_solver.get(N, "x")
+
+        count += 1
 
     # Delete tested data from the unlabeled set:
     del Xu_iter[:N_init]
@@ -218,99 +233,99 @@ with cProfile.Profile() as pr:
 
     print("INITIAL CLASSIFIER TRAINED")
 
-    # # Plots:
-    # h = 0.02
-    # xx, yy = np.meshgrid(np.arange(q_min, q_max+h, h), np.arange(v_min, v_max, h))
-    # xrav = xx.ravel()
-    # yrav = yy.ravel()
+    # Plots:
+    h = 0.02
+    xx, yy = np.meshgrid(np.arange(q_min, q_max+h, h), np.arange(v_min, v_max, h))
+    xrav = xx.ravel()
+    yrav = yy.ravel()
 
-    # with torch.no_grad():
-    #     # Plot the results:
-    #     plt.figure()
-    #     inp = torch.from_numpy(
-    #         np.float32(
-    #             np.c_[
-    #                 (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-    #                 xrav,
-    #                 np.zeros(yrav.shape[0]),
-    #                 yrav,
-    #             ]
-    #         )
-    #     )
-    #     inp = (inp - mean) / std
-    #     out = model(inp)
-    #     y_pred = np.argmax(out.numpy(), axis=1)
-    #     Z = y_pred.reshape(xx.shape)
-    #     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    #     xit = []
-    #     yit = []
-    #     cit = []
-    #     for i in range(len(X_iter)):
-    #         if (
-    #             norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
-    #             and norm(X_iter[i][2]) < 0.1
-    #         ):
-    #             xit.append(X_iter[i][1])
-    #             yit.append(X_iter[i][3])
-    #             if y_iter[i] == [1, 0]:
-    #                 cit.append(0)
-    #             else:
-    #                 cit.append(1)
-    #     plt.scatter(
-    #         xit,
-    #         yit,
-    #         c=cit,
-    #         marker=".",
-    #         alpha=0.5,
-    #         cmap=plt.cm.Paired,
-    #     )
-    #     plt.xlim([q_min, q_max])
-    #     plt.ylim([v_min, v_max])
-    #     plt.grid()
-    #     plt.title("Second actuator")
+    with torch.no_grad():
+        # Plot the results:
+        plt.figure()
+        inp = torch.from_numpy(
+            np.float32(
+                np.c_[
+                    (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+                    xrav,
+                    np.zeros(yrav.shape[0]),
+                    yrav,
+                ]
+            )
+        )
+        inp = (inp - mean) / std
+        out = model(inp)
+        y_pred = np.argmax(out.numpy(), axis=1)
+        Z = y_pred.reshape(xx.shape)
+        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        xit = []
+        yit = []
+        cit = []
+        for i in range(len(X_iter)):
+            if (
+                norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
+                and norm(X_iter[i][2]) < 0.1
+            ):
+                xit.append(X_iter[i][1])
+                yit.append(X_iter[i][3])
+                if y_iter[i] == [1, 0]:
+                    cit.append(0)
+                else:
+                    cit.append(1)
+        plt.scatter(
+            xit,
+            yit,
+            c=cit,
+            marker=".",
+            alpha=0.5,
+            cmap=plt.cm.Paired,
+        )
+        plt.xlim([q_min, q_max])
+        plt.ylim([v_min, v_max])
+        plt.grid()
+        plt.title("Second actuator")
 
-    #     plt.figure()
-    #     inp = torch.from_numpy(
-    #         np.float32(
-    #             np.c_[
-    #                 xrav,
-    #                 (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-    #                 yrav,
-    #                 np.zeros(yrav.shape[0]),
-    #             ]
-    #         )
-    #     )
-    #     inp = (inp - mean) / std
-    #     out = model(inp)
-    #     y_pred = np.argmax(out.numpy(), axis=1)
-    #     Z = y_pred.reshape(xx.shape)
-    #     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    #     xit = []
-    #     yit = []
-    #     cit = []
-    #     for i in range(len(X_iter)):
-    #         if (
-    #             norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
-    #             and norm(X_iter[i][3]) < 0.1
-    #         ):
-    #             xit.append(X_iter[i][0])
-    #             yit.append(X_iter[i][2])
-    #             if y_iter[i] == [1, 0]:
-    #                 cit.append(0)
-    #             else:
-    #                 cit.append(1)
-    #     plt.scatter(
-    #         xit,
-    #         yit,
-    #         c=cit,
-    #         marker=".",
-    #         alpha=0.5,
-    #         cmap=plt.cm.Paired,
-    #     )
-    #     plt.xlim([q_min, q_max])
-    #     plt.ylim([v_min, v_max])
-    #     plt.grid()
-    #     plt.title("First actuator")
+        plt.figure()
+        inp = torch.from_numpy(
+            np.float32(
+                np.c_[
+                    xrav,
+                    (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+                    yrav,
+                    np.zeros(yrav.shape[0]),
+                ]
+            )
+        )
+        inp = (inp - mean) / std
+        out = model(inp)
+        y_pred = np.argmax(out.numpy(), axis=1)
+        Z = y_pred.reshape(xx.shape)
+        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        xit = []
+        yit = []
+        cit = []
+        for i in range(len(X_iter)):
+            if (
+                norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
+                and norm(X_iter[i][3]) < 0.1
+            ):
+                xit.append(X_iter[i][0])
+                yit.append(X_iter[i][2])
+                if y_iter[i] == [1, 0]:
+                    cit.append(0)
+                else:
+                    cit.append(1)
+        plt.scatter(
+            xit,
+            yit,
+            c=cit,
+            marker=".",
+            alpha=0.5,
+            cmap=plt.cm.Paired,
+        )
+        plt.xlim([q_min, q_max])
+        plt.ylim([v_min, v_max])
+        plt.grid()
+        plt.title("First actuator")
 
     # Active learning:
     k = 0  # iteration number
@@ -345,21 +360,19 @@ with cProfile.Profile() as pr:
         for x in range(B):
             #x0 = Xu_iter.pop(maxindex[x])
             x0 = Xu_iter[maxindex[x]]
+            del Xu_iter[maxindex[x]]
             q0 = x0[:2]
             v0 = x0[2:]
 
             # Data testing:
-            res = ocp.compute_problem(q0, v0)
+            # res = ocp.compute_problem(q0, v0)
+            res = ocp.compute_problem_withGUESS(q0, v0, simX, simU)
             if res == 1:
                 X_iter.append([q0[0], q0[1], v0[0], v0[1]])
                 y_iter.append([0, 1])
             elif res == 0:
                 X_iter.append([q0[0], q0[1], v0[0], v0[1]])
                 y_iter.append([1, 0])
-
-        # Delete tested data from the unlabeled set:
-        for i in maxindex:
-            del Xu_iter[i]
 
         print("CLASSIFIER", k, "IN TRAINING")
 
@@ -401,103 +414,103 @@ with cProfile.Profile() as pr:
 
         print("etpmax:", etpmax)
 
-    # with torch.no_grad():
-    #     # Plot the results:
-    #     plt.figure()
-    #     inp = torch.from_numpy(
-    #         np.float32(
-    #             np.c_[
-    #                 (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-    #                 xrav,
-    #                 np.zeros(yrav.shape[0]),
-    #                 yrav,
-    #             ]
-    #         )
-    #     )
-    #     inp = (inp - mean) / std
-    #     out = model(inp)
-    #     y_pred = np.argmax(out.numpy(), axis=1)
-    #     Z = y_pred.reshape(xx.shape)
-    #     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    #     xit = []
-    #     yit = []
-    #     cit = []
-    #     for i in range(len(X_iter)):
-    #         if (
-    #             norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
-    #             and norm(X_iter[i][2]) < 0.1
-    #         ):
-    #             xit.append(X_iter[i][1])
-    #             yit.append(X_iter[i][3])
-    #             if y_iter[i] == [1, 0]:
-    #                 cit.append(0)
-    #             else:
-    #                 cit.append(1)
-    #     plt.scatter(
-    #         xit,
-    #         yit,
-    #         c=cit,
-    #         marker=".",
-    #         alpha=0.5,
-    #         cmap=plt.cm.Paired,
-    #     )
-    #     plt.xlim([q_min, q_max])
-    #     plt.ylim([v_min, v_max])
-    #     plt.grid()
-    #     plt.title("Second actuator")
+    with torch.no_grad():
+        # Plot the results:
+        plt.figure()
+        inp = torch.from_numpy(
+            np.float32(
+                np.c_[
+                    (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+                    xrav,
+                    np.zeros(yrav.shape[0]),
+                    yrav,
+                ]
+            )
+        )
+        inp = (inp - mean) / std
+        out = model(inp)
+        y_pred = np.argmax(out.numpy(), axis=1)
+        Z = y_pred.reshape(xx.shape)
+        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        xit = []
+        yit = []
+        cit = []
+        for i in range(len(X_iter)):
+            if (
+                norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
+                and norm(X_iter[i][2]) < 0.1
+            ):
+                xit.append(X_iter[i][1])
+                yit.append(X_iter[i][3])
+                if y_iter[i] == [1, 0]:
+                    cit.append(0)
+                else:
+                    cit.append(1)
+        plt.scatter(
+            xit,
+            yit,
+            c=cit,
+            marker=".",
+            alpha=0.5,
+            cmap=plt.cm.Paired,
+        )
+        plt.xlim([q_min, q_max])
+        plt.ylim([v_min, v_max])
+        plt.grid()
+        plt.title("Second actuator")
 
-    #     plt.figure()
-    #     inp = torch.from_numpy(
-    #         np.float32(
-    #             np.c_[
-    #                 xrav,
-    #                 (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-    #                 yrav,
-    #                 np.zeros(yrav.shape[0]),
-    #             ]
-    #         )
-    #     )
-    #     inp = (inp - mean) / std
-    #     out = model(inp)
-    #     y_pred = np.argmax(out.numpy(), axis=1)
-    #     Z = y_pred.reshape(xx.shape)
-    #     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    #     xit = []
-    #     yit = []
-    #     cit = []
-    #     for i in range(len(X_iter)):
-    #         if (
-    #             norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
-    #             and norm(X_iter[i][3]) < 0.1
-    #         ):
-    #             xit.append(X_iter[i][0])
-    #             yit.append(X_iter[i][2])
-    #             if y_iter[i] == [1, 0]:
-    #                 cit.append(0)
-    #             else:
-    #                 cit.append(1)
-    #     plt.scatter(
-    #         xit,
-    #         yit,
-    #         c=cit,
-    #         marker=".",
-    #         alpha=0.5,
-    #         cmap=plt.cm.Paired,
-    #     )
-    #     plt.xlim([q_min, q_max])
-    #     plt.ylim([v_min, v_max])
-    #     plt.grid()
-    #     plt.title("First actuator")
+        plt.figure()
+        inp = torch.from_numpy(
+            np.float32(
+                np.c_[
+                    xrav,
+                    (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+                    yrav,
+                    np.zeros(yrav.shape[0]),
+                ]
+            )
+        )
+        inp = (inp - mean) / std
+        out = model(inp)
+        y_pred = np.argmax(out.numpy(), axis=1)
+        Z = y_pred.reshape(xx.shape)
+        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        xit = []
+        yit = []
+        cit = []
+        for i in range(len(X_iter)):
+            if (
+                norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
+                and norm(X_iter[i][3]) < 0.1
+            ):
+                xit.append(X_iter[i][0])
+                yit.append(X_iter[i][2])
+                if y_iter[i] == [1, 0]:
+                    cit.append(0)
+                else:
+                    cit.append(1)
+        plt.scatter(
+            xit,
+            yit,
+            c=cit,
+            marker=".",
+            alpha=0.5,
+            cmap=plt.cm.Paired,
+        )
+        plt.xlim([q_min, q_max])
+        plt.ylim([v_min, v_max])
+        plt.grid()
+        plt.title("First actuator")
 
-    #     plt.figure()
-    #     plt.plot(performance_history)
-    #     plt.scatter(range(len(performance_history)), performance_history)
-    #     plt.xlabel("Iteration number")
-    #     plt.ylabel("Maximum entropy")
-    #     plt.title("Maximum entropy evolution")
+        plt.figure()
+        plt.plot(performance_history)
+        plt.scatter(range(len(performance_history)), performance_history)
+        plt.xlabel("Iteration number")
+        plt.ylabel("Maximum entropy")
+        plt.title("Maximum entropy evolution")
 
     print("Execution time: %s seconds" % (time.time() - start_time))
 
 pr.print_stats(sort="cumtime")
 
-# plt.show()
+plt.show()

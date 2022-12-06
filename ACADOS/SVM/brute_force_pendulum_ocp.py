@@ -13,9 +13,9 @@ from scipy.optimize import fsolve
 
 warnings.filterwarnings("ignore")
 
-print_stats = 1
+print_stats = 0
 show_plots = 1
-print_cprof = 1
+print_cprof = 0
 
 if show_plots:
     x_min, x_max = 0.0, np.pi / 2
@@ -37,11 +37,51 @@ with cProfile.Profile() as pr:
     v_min = -ocp.dthetamax
     q_max = ocp.thetamax
     q_min = ocp.thetamin
+    
+    delta_t = 0.01
+
+    def func_min_val(x):
+        thetamin_new, q_dotdot_max = x
+        q_dot = - delta_t * q_dotdot_max
+        M = ocp.d**2 * ocp.m
+        h = ocp.b * q_dot - ocp.d * math.sin(thetamin_new) * ocp.m * ocp.g
+        return (q_dotdot_max - (ocp.Fmax - h)/M,
+                - thetamin_new + q_min + 1/2 * delta_t**2 * q_dotdot_max)
+
+    def func_max_val(x):
+        thetamax_new, q_dotdot_min = x
+        q_dot = - delta_t * q_dotdot_min
+        M = ocp.d**2 * ocp.m
+        h = ocp.b * q_dot - ocp.d * math.sin(thetamax_new) * ocp.m * ocp.g
+        return (q_dotdot_min - (-ocp.Fmax - h)/M,
+                - thetamax_new + q_max + 1/2 * delta_t**2 * q_dotdot_min)
+
+    guess_min = (q_min, ocp.Fmax/ocp.d**2 * ocp.m)
+    guess_max = (q_max, -ocp.Fmax/ocp.d**2 * ocp.m)
+
+    thetamin_new, q_dotdot_max = fsolve(func_min_val, guess_min)
+    thetamax_new, q_dotdot_min = fsolve(func_max_val, guess_max)
+    
+    print(thetamin_new-q_min,thetamax_new-q_max)
+
+    # thetamin_new = q_min - delta__t ** 2 * \
+    #     (ocp.g * ocp.d * ocp.m + ocp.Fmax) / (-ocp.d ** 2 * ocp.m + ocp.b * delta__t) / 2
+    # thetamax_new = q_max - delta__t ** 2 * \
+    #     (ocp.g * ocp.d * ocp.m - ocp.Fmax) / (-ocp.d ** 2 * ocp.m + ocp.b * delta__t) / 2
+
+    # print(q_min, thetamin_new, q_max, thetamax_new)
+
+    ocp.set_bounds(thetamin_new, thetamax_new)
 
     # Initialization of the SVM classifier:
     clf = svm.SVC(
         C=1e5, kernel="rbf", probability=True, class_weight={1: 1, 0: 10}, cache_size=1000
     )
+
+    # Active learning parameters:
+    N_init = pow(10, ocp_dim)  # size of initial labeled set
+    B = pow(10, ocp_dim)  # batch size
+    etp_stop = 0.2  # active learning stopping condition
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
@@ -49,6 +89,13 @@ with cProfile.Profile() as pr:
     l_bounds = [q_min, v_min]
     u_bounds = [q_max, v_max]
     data = qmc.scale(sample, l_bounds, u_bounds)
+
+    # # Generate random samples:
+    # data_q = np.random.uniform(q_min, q_max, size=pow(100, ocp_dim))
+    # data_v = np.random.uniform(v_min, v_max, size=pow(100, ocp_dim))
+    # data = np.transpose(np.array([data_q[:], data_v[:]]))
+
+    Xu_iter = data  # Unlabeled set
 
     # Generate the initial set of labeled samples:
     contour = pow(10, ocp_dim)
@@ -159,6 +206,9 @@ with cProfile.Profile() as pr:
         plt.grid()
 
 print("Execution time: %s seconds" % (time.time() - start_time))
+print("Mean entropy: " + str(np.mean(entropy(clf.predict_proba(data), axis=1))))
+y_pred = clf.predict(X_iter)
+print(metrics.accuracy_score(y_iter, y_pred))
 
 if print_cprof:
     pr.print_stats(sort="cumtime")

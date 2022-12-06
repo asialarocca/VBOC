@@ -386,6 +386,7 @@ with cProfile.Profile() as pr:
             # Plot of the entropy:
             plt.figure(figsize=(6, 5))
             out = entropy(clf.predict_proba(np.c_[xx.ravel(), yy.ravel()]), axis=1)
+            
             out = out.reshape(xx.shape)
             levels = np.linspace(out.min(), out.max(), 5)
             plt.contourf(xx, yy, out, levels=levels)
@@ -413,6 +414,8 @@ with cProfile.Profile() as pr:
 
 print("Execution time: %s seconds" % (time.time() - start_time))
 print("Number of tested samples:", N_init+B*k)
+
+print("Mean entropy: " + str(np.mean(entropy(clf.predict_proba(data), axis=1))))
 
 if print_cprof:
     pr.print_stats(sort="cumtime")

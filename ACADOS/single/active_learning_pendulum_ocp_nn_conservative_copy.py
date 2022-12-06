@@ -86,8 +86,8 @@ with cProfile.Profile() as pr:
     etp_stop = 0.2  # active learning stopping condition
     loss_stop = 0.01  # nn training stopping condition
     beta = 0.8
-    n_minibatch = 64
-    it_max = 1e2 * B / n_minibatch
+    n_minibatch = pow(10, ocp_dim)
+    it_max = 1e3 * B / n_minibatch
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
@@ -163,10 +163,12 @@ with cProfile.Profile() as pr:
     # Train the model
     while val > loss_stop and it <= it_max:
 
-        Xn = np.array([i for i in range(len(X_iter)) if y_iter[i] == [1, 0]])
-        Xp = np.array([i for i in range(len(X_iter)) if y_iter[i] == [0, 1]])
-        ind = Xp[random.sample(range(Xp.shape[0]), int(n_minibatch/4))].tolist()
-        ind.extend(Xn[random.sample(range(Xn.shape[0]), int(3*n_minibatch/4))].tolist())
+        #Xn = np.array([i for i in range(len(X_iter)) if y_iter[i] == [1, 0]])
+        #Xp = np.array([i for i in range(len(X_iter)) if y_iter[i] == [0, 1]])
+        #ind = Xp[random.sample(range(Xp.shape[0]), int(n_minibatch/4))].tolist()
+        #ind.extend(Xn[random.sample(range(Xn.shape[0]), int(3*n_minibatch/4))].tolist())
+        
+        ind = random.sample(range(len(X_iter)), n_minibatch)
 
         X_iter_tensor = torch.Tensor([X_iter[i] for i in ind])
         y_iter_tensor = torch.Tensor([y_iter[i] for i in ind])
@@ -189,11 +191,10 @@ with cProfile.Profile() as pr:
 
     print("INITIAL CLASSIFIER TRAINED")
 
-    #with torch.no_grad():
-    if 0:
+    with torch.no_grad():
         # Plot the results:
         plt.figure(figsize=(6, 5))
-        h = 0.01
+        h = 0.002
         x_min, x_max = q_min-h, q_max+h
         y_min, y_max = v_min, v_max
         xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
@@ -271,34 +272,42 @@ with cProfile.Profile() as pr:
         # Train the model
         while val > loss_stop and it <= it_max:
 
-            Xn = np.array([i for i in range(len(X_iter) - B)
-                          if y_iter[i] == [1, 0]])
-            Xp = np.array([i for i in range(len(X_iter) - B)
-                          if y_iter[i] == [0, 1]])
+            #Xn = np.array([i for i in range(len(X_iter) - B)
+            #              if y_iter[i] == [1, 0]])
+            #Xp = np.array([i for i in range(len(X_iter) - B)
+            #              if y_iter[i] == [0, 1]])
                           
-            if int(3*(n_minibatch / 2)/4) >= Xn.shape[0]:
-                ind = Xn
-            else:
-                ind = Xn[random.sample(range(Xn.shape[0]), int(3*(n_minibatch / 2)/4))].tolist()
-            if int((n_minibatch / 2)/4) >= Xp.shape[0]:
-                ind.extend(Xp)
-            else:
-                ind.extend(Xp[random.sample(range(Xp.shape[0]), int((n_minibatch / 2)/4))].tolist())
+            #if int(3*(n_minibatch / 2)/4) >= Xn.shape[0]:
+            #    ind = Xn
+            #else:
+            #    ind = Xn[random.sample(range(Xn.shape[0]), int(3*(n_minibatch / 2)/4))].tolist()
+            #if int((n_minibatch / 2)/4) >= Xp.shape[0]:
+            #    ind.extend(Xp)
+            #else:
+            #    ind.extend(Xp[random.sample(range(Xp.shape[0]), int((n_minibatch / 2)/4))].tolist())
                 
-            Xn = np.array([i for i in range(len(X_iter) - B, len(X_iter))
-                          if y_iter[i] == [1, 0]])
-            Xp = np.array([i for i in range(len(X_iter) - B, len(X_iter))
-                          if y_iter[i] == [0, 1]])
+            #Xn = np.array([i for i in range(len(X_iter) - B, len(X_iter))
+            #              if y_iter[i] == [1, 0]])
+            #Xp = np.array([i for i in range(len(X_iter) - B, len(X_iter))
+            #              if y_iter[i] == [0, 1]])
                           
-            if int(3*(n_minibatch / 2)/4) >= Xn.shape[0]:
-                ind.extend(Xn)
-            else:
-                ind.extend(Xn[random.sample(range(Xn.shape[0]),
-                           int(3*(n_minibatch / 2)/4))].tolist())
-            if int((n_minibatch / 2)/4) >= Xp.shape[0]:
-                ind.extend(Xp)
-            else:
-                ind.extend(Xp[random.sample(range(Xp.shape[0]), int((n_minibatch / 2)/4))].tolist())
+            #if int(3*(n_minibatch / 2)/4) >= Xn.shape[0]:
+            #    ind.extend(Xn)
+            #else:
+            #    ind.extend(Xn[random.sample(range(Xn.shape[0]),
+            #               int(3*(n_minibatch / 2)/4))].tolist())
+            #if int((n_minibatch / 2)/4) >= Xp.shape[0]:
+            #    ind.extend(Xp)
+            #else:
+            #    ind.extend(Xp[random.sample(range(Xp.shape[0]), int((n_minibatch / 2)/4))].tolist())
+            
+            ind = random.sample(range(len(X_iter) - B), int(n_minibatch / 2))
+            ind.extend(
+                random.sample(
+                    range(len(X_iter) - B, len(X_iter)),
+                    int(n_minibatch / 2),
+                )
+            )
 
             X_iter_tensor = torch.Tensor([X_iter[i] for i in ind])
             y_iter_tensor = torch.Tensor([y_iter[i] for i in ind])
@@ -321,14 +330,9 @@ with cProfile.Profile() as pr:
 
         print("CLASSIFIER", k, "TRAINED")
 
-        #with torch.no_grad():
-        if 0:
+        with torch.no_grad():
             # Plot the results:
             plt.figure(figsize=(6, 5))
-            h = 0.01
-            x_min, x_max = q_min-h, q_max+h
-            y_min, y_max = v_min, v_max
-            xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
             
             inp = torch.from_numpy(np.float32(np.c_[xx.ravel(), yy.ravel()]))
             inp = (inp - mean) / std

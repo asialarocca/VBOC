@@ -46,9 +46,9 @@ with cProfile.Profile() as pr:
     model = NeuralNet(input_size, hidden_size, output_size).to(device)
 
     # Active learning parameters:
-    N_init = pow(5, ocp_dim)  # size of initial labeled set
-    B = pow(5, ocp_dim)  # batch size
-    etp_stop = 0.01  # active learning stopping condition
+    N_init = pow(10, ocp_dim)  # size of initial labeled set
+    B = pow(10, ocp_dim)  # batch size
+    etp_stop = 0.1  # active learning stopping condition
     loss_stop = 0.1  # nn training stopping condition
     beta = 0.8
     n_minibatch = 512
@@ -60,7 +60,7 @@ with cProfile.Profile() as pr:
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(10, ocp_dim))
+    sample = sampler.random(n=pow(20, ocp_dim))
     l_bounds = [q_min, q_min, v_min, v_min]
     u_bounds = [q_max, q_max, v_max, v_max]
     data = qmc.scale(sample, l_bounds, u_bounds).tolist()
@@ -185,7 +185,8 @@ with cProfile.Profile() as pr:
 
         # Add the B most uncertain samples to the labeled set:
         for x in range(B):
-            x0 = Xu_iter.pop(maxindex[x])
+            x0 = Xu_iter[maxindex[x]]
+            del Xu_iter[maxindex[x]]
             q0 = x0[:2]
             v0 = x0[2:]
 
@@ -456,7 +457,8 @@ with cProfile.Profile() as pr:
 
             # Add the B most uncertain samples to the labeled set:
             for x in range(B):
-                x0 = Xu_iter.pop(maxindex[x])
+                x0 = Xu_iter[maxindex[x]]
+                del Xu_iter[maxindex[x]]
                 q0 = x0[:2]
                 v0 = x0[2:]
 

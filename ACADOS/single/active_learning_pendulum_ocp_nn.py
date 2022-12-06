@@ -31,7 +31,7 @@ with cProfile.Profile() as pr:
 
     # Hyper-parameters for nn:
     input_size = ocp_dim
-    hidden_size = ocp_dim * 50
+    hidden_size = ocp_dim * 100
     output_size = 2
     learning_rate = 0.01
 
@@ -47,7 +47,7 @@ with cProfile.Profile() as pr:
     # Active learning parameters:
     N_init = pow(10, ocp_dim)  # size of initial labeled set
     B = pow(10, ocp_dim)  # batch size
-    etp_stop = 0.5  # active learning stopping condition
+    etp_stop = 0.2  # active learning stopping condition
     loss_stop = 0.01  # nn training stopping condition
     beta = 0.8
     n_minibatch = 64
@@ -272,33 +272,33 @@ with cProfile.Profile() as pr:
 
         print("CLASSIFIER", k, "TRAINED")
 
-    with torch.no_grad():
-        # Plot the results:
-        plt.figure()
-        out = model(inp)
-        y_pred = np.argmax(out.numpy(), axis=1)
-        Z = y_pred.reshape(xx.shape)
-        z = [
-            0 if np.array_equal(y_iter[x], [1, 0]) else 1
-            for x in range(y_iter.shape[0])
-        ]
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        scatter = plt.scatter(
-            X_iter[:, 0],
-            X_iter[:, 1],
-            c=z,
-            marker=".",
-            alpha=0.5,
-            cmap=plt.cm.Paired,
-        )
-        plt.xlim([0.0, np.pi / 2])
-        plt.ylim([-10.0, 10.0])
-        plt.xlabel("Initial position [rad]")
-        plt.ylabel("Initial velocity [rad/s]")
-        plt.title("Classifier")
-        hand = scatter.legend_elements()[0]
-        plt.legend(handles=hand, labels=("Non viable", "Viable"))
-        plt.grid(True)
+        with torch.no_grad():
+            # Plot the results:
+            plt.figure()
+            out = model(inp)
+            y_pred = np.argmax(out.numpy(), axis=1)
+            Z = y_pred.reshape(xx.shape)
+            z = [
+                0 if np.array_equal(y_iter[x], [1, 0]) else 1
+                for x in range(y_iter.shape[0])
+            ]
+            plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+            scatter = plt.scatter(
+                X_iter[:, 0],
+                X_iter[:, 1],
+                c=z,
+                marker=".",
+                alpha=0.5,
+                cmap=plt.cm.Paired,
+            )
+            plt.xlim([0.0, np.pi / 2])
+            plt.ylim([-10.0, 10.0])
+            plt.xlabel("Initial position [rad]")
+            plt.ylabel("Initial velocity [rad/s]")
+            plt.title("Classifier")
+            hand = scatter.legend_elements()[0]
+            plt.legend(handles=hand, labels=("Non viable", "Viable"))
+            plt.grid(True)
 
     # # Plot of the entropy:
     # plt.figure()

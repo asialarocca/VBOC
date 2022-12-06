@@ -23,8 +23,21 @@ with cProfile.Profile() as pr:
     ocp = OCPdoublependulumINIT()
 
     ocp_dim = ocp.nx
-
-    model = torch.load('model_save_2')
+    
+    input_size = ocp_dim
+    hidden_size = ocp_dim*50
+    output_size = 2
+    
+    device = torch.device("cpu")
+    #model = NeuralNet(input_size,hidden_size,output_size).to(device)
+    model = torch.load('model_save')
+    
+    with open("mean.txt","r") as f:
+        val = float(f.readlines()[0])
+    mean = torch.Tensor([val]).to(device)
+    with open("std.txt","r") as f:
+        val = float(f.readlines()[0])
+    std = torch.Tensor([val]).to(device)
 
     X_iter = np.load('X_iter.npy').tolist()
     y_iter = np.load('y_iter.npy').tolist()

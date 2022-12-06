@@ -83,7 +83,7 @@ class OCPtriplependulum:
         self.ocp = AcadosOcp()
 
         # dimensions
-        self.Tf = 0.1
+        self.Tf = 0.3
         self.ocp.solver_options.tf = self.Tf  # prediction horizon
 
         self.N = int(100 * self.Tf)
@@ -94,26 +94,26 @@ class OCPtriplependulum:
         ny = self.nx + self.nu
         ny_e = self.nx
 
-        # # cost
+        # cost
         # Q = 2 * np.diag([0.0, 0.0, 0.0, 0.0])
-        # # Q = 2 * np.diag([0.0, 0.0, 1e-2, 1e-2])
-        # R = 2 * np.diag([0.0, 0.0])
+        Q = 2 * np.diag([0.0, 0.0,0., 1., 1.,1.])
+        R = 2 * np.diag([0.0, 0.0,0.])
 
-        # self.ocp.cost.W_e = Q
-        # self.ocp.cost.W = lin.block_diag(Q, R)
+        self.ocp.cost.W_e = Q
+        self.ocp.cost.W = lin.block_diag(Q, R)
 
-        # self.ocp.cost.cost_type = "LINEAR_LS"
-        # self.ocp.cost.cost_type_e = "LINEAR_LS"
+        self.ocp.cost.cost_type = "LINEAR_LS"
+        self.ocp.cost.cost_type_e = "LINEAR_LS"
 
-        # self.ocp.cost.Vx = np.zeros((ny, self.nx))
-        # self.ocp.cost.Vx[: self.nx, : self.nx] = np.eye(self.nx)
-        # self.ocp.cost.Vu = np.zeros((ny, nu))
-        # self.ocp.cost.Vu[self.nx :, :nu] = np.eye(nu)
-        # self.ocp.cost.Vx_e = np.eye(self.nx)
+        self.ocp.cost.Vx = np.zeros((ny, self.nx))
+        self.ocp.cost.Vx[: self.nx, : self.nx] = np.eye(self.nx)
+        self.ocp.cost.Vu = np.zeros((ny, self.nu))
+        self.ocp.cost.Vu[self.nx :, :self.nu] = np.eye(self.nu)
+        self.ocp.cost.Vx_e = np.eye(self.nx)
 
-        # # reference
-        # self.ocp.cost.yref = np.zeros((ny,))
-        # self.ocp.cost.yref_e = np.zeros((ny_e,))
+        # reference
+        self.ocp.cost.yref = np.zeros((ny,))
+        self.ocp.cost.yref_e = np.zeros((ny_e,))
 
         # set constraints
         self.Cmax = 12
@@ -199,35 +199,19 @@ class OCPtriplependulumNN(OCPtriplependulum):
         super().__init__()
 
         # nonlinear terminal constraints
-        self.model.con_h_expr_e = self.nn_decisionfunction(
-            nn, mean, std, self.x)
-        self.ocp.constraints.lh_e = np.array([-0.0])
+        self.model.con_h_expr_e = self.nn_decisionfunction(nn, self.x, mean, std)
+        self.ocp.constraints.lh_e = np.array([0.5])
         self.ocp.constraints.uh_e = np.array([1.1])
-
-        self.ocp.constraints.lbx_e = np.array(
-            [self.thetamin, self.thetamin,  self.thetamin, -
-                self.dthetamax, -self.dthetamax, -self.dthetamax]
-        )
-        self.ocp.constraints.ubx_e = np.array(
-            [self.thetamax, self.thetamax, self.thetamax, self.dthetamax, self.dthetamax, self.dthetamax]
-        )
 
         # ocp model
         self.ocp.model = self.model
-        
-        # options
-        self.ocp.solver_options.nlp_solver_type = "SQP"
-        self.ocp.solver_options.tol = 1e-3
-        self.ocp.solver_options.qp_tol = 1e-3
-        self.ocp.solver_options.nlp_solver_max_iter = 200
-        self.ocp.solver_options.qp_solver_iter_max = 100
 
         # solver
         self.ocp_solver = AcadosOcpSolver(self.ocp, json_file="acados_ocp.json")
 
-    def nn_decisionfunction(self, nn, mean, std, x):
+    def nn_decisionfunction(self, nn, x, mean, std):
 
-        out = (x - mean) / std
+        out = (x-mean.item())/std.item()
         it = 2
 
         for param in nn.parameters():
@@ -243,8 +227,6 @@ class OCPtriplependulumNN(OCPtriplependulum):
                     out = tanh(out)
                 else:
                     out = 1 / (1 + exp(-out))
-                    return vertcat(out[1]-out[0])
-
             it += 1
 
         return out[1]
