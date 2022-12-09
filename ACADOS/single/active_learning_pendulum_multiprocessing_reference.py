@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 from my_nn import NeuralNet
 from multiprocessing import Process, Manager
+from time import sleep
 
 warnings.filterwarnings("ignore")
 
@@ -60,8 +61,8 @@ with cProfile.Profile() as pr:
     u_bounds = [q_max+(q_max-q_min)/100, v_max+(v_max-v_min)/100]
     data = qmc.scale(sample, l_bounds, u_bounds)
 
-    Xu_iter = data  # Unlabeled set
-    Xu_iter_tensor = torch.from_numpy(Xu_iter.astype(np.float32))
+    Xu_iter = data.tolist()  # Unlabeled set
+    Xu_iter_tensor = torch.Tensor(Xu_iter)
     mean, std = torch.mean(Xu_iter_tensor), torch.std(Xu_iter_tensor)
 
     # # Generate the initial set of labeled samples:
@@ -82,35 +83,29 @@ with cProfile.Profile() as pr:
 
     # X_iter = X_iter.tolist()
 
-    def testing(q0,v0,lista):
+    X_iter = [[0,0,0,1]]
+
+    # Training of an initial classifier:
+    for n in range(N_init):
+        q0 = Xu_iter[n][0]
+        v0 = Xu_iter[n][1]
+
         # Data testing:
         res = ocp.compute_problem(q0, v0)
+
         if res == 1:
-            lista.append([q0, v0,0, 1])
+            X_iter.append([q0, v0, 0, 1])
         elif res == 0:
-            lista.append([q0, v0,1, 0])
+            X_iter.append([q0, v0, 1, 0])
 
         # # Add intermediate states of succesfull initial conditions
         # if res == 1:
         #     for f in range(1, ocp.N, int(ocp.N / 3)):
         #         current_val = ocp.ocp_solver.get(f, "x")
-        #         lista.append([current_val[0],current_val[1],0, 1])
-
-    with Manager() as manager:
-        lista = manager.list()
-
-        processes = []
-        for n in range(N_init):
-            p = Process(target=testing, args=(data[n, 0],data[n, 1],lista))  # Passing the list
-            p.start()
-            processes.append(p)
-        for p in processes:
-            p.join()
-
-        X_iter=list(lista)
+        #         X_iter.append([current_val[0],current_val[1],0, 1])
 
     # Delete tested data from the unlabeled set:
-    Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
+    del Xu_iter[:N_init]
 
     it = 0
     val = 1
@@ -139,73 +134,74 @@ with cProfile.Profile() as pr:
 
     print("INITIAL CLASSIFIER TRAINED")
 
-    with torch.no_grad():
-        # Plot the results:
-        plt.figure()
-        h = 0.01
-        x_min, x_max = q_min-(q_max-q_min)/100, q_max+(q_max-q_min)/100
-        y_min, y_max = v_min-(v_max-v_min)/100, v_max+(v_max-v_min)/100
-        xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
-        inp = torch.from_numpy(np.c_[xx.ravel(), yy.ravel()].astype(np.float32))
-        inp = (inp - mean) / std
-        out = model(inp)
-        y_pred = np.argmax(out.numpy(), axis=1)
-        Z = y_pred.reshape(xx.shape)
-        z = [
-            0 if X_iter[x][2] == 1 else 1
-            for x in range(len(X_iter))
-        ]
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        scatter = plt.scatter(
-            [X_iter[n][0] for n in range(len(X_iter))], [X_iter[n][1] for n in range(len(X_iter))], c=z, marker=".", alpha=0.5, cmap=plt.cm.Paired
-        )
-        plt.xlim([x_min, x_max])
-        plt.ylim([y_min, y_max])
-        plt.xlabel("Initial position [rad]")
-        plt.ylabel("Initial velocity [rad/s]")
-        plt.title("Classifier")
-        hand = scatter.legend_elements()[0]
-        plt.legend(handles=hand, labels=("Non viable", "Viable"))
-        plt.grid(True)
+    # with torch.no_grad():
+    #     # Plot the results:
+    #     plt.figure()
+    #     h = 0.01
+    #     x_min, x_max = q_min-(q_max-q_min)/100, q_max+(q_max-q_min)/100
+    #     y_min, y_max = v_min-(v_max-v_min)/100, v_max+(v_max-v_min)/100
+    #     xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+    #     inp = torch.from_numpy(np.c_[xx.ravel(), yy.ravel()].astype(np.float32))
+    #     inp = (inp - mean) / std
+    #     out = model(inp)
+    #     y_pred = np.argmax(out.numpy(), axis=1)
+    #     Z = y_pred.reshape(xx.shape)
+    #     z = [
+    #         0 if X_iter[x][2] == 1 else 1
+    #         for x in range(len(X_iter))
+    #     ]
+    #     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+    #     scatter = plt.scatter(
+    #         [X_iter[n][0] for n in range(len(X_iter))], [X_iter[n][1] for n in range(len(X_iter))], c=z, marker=".", alpha=0.5, cmap=plt.cm.Paired
+    #     )
+    #     plt.xlim([x_min, x_max])
+    #     plt.ylim([y_min, y_max])
+    #     plt.xlabel("Initial position [rad]")
+    #     plt.ylabel("Initial velocity [rad/s]")
+    #     plt.title("Classifier")
+    #     hand = scatter.legend_elements()[0]
+    #     plt.legend(handles=hand, labels=("Non viable", "Viable"))
+    #     plt.grid(True)
 
     # Active learning:
     k = 0  # iteration number
     etpmax = 1
     performance_history = []
 
-    while not (etpmax < etp_stop or Xu_iter.shape[0] == 0):
-        if Xu_iter.shape[0] < B:
-            B = Xu_iter.shape[0]
+    while not (etpmax < etp_stop or len(Xu_iter) == 0):
+        if len(Xu_iter) < B:
+            B = len(Xu_iter)
 
         with torch.no_grad():
             sigmoid = nn.Sigmoid()
-            Xu_iter_tensor = torch.from_numpy(Xu_iter.astype(np.float32))
+            Xu_iter_tensor = torch.Tensor(Xu_iter)
             Xu_iter_tensor = (Xu_iter_tensor - mean) / std
-            prob_xu = sigmoid(model(Xu_iter_tensor)).numpy()
+            prob_xu = sigmoid(model(Xu_iter_tensor))
             etp = entropy(prob_xu, axis=1)
 
-        maxindex = np.argpartition(etp, -B)[-B:]  # indexes of the uncertain samples
+        maxindex = np.argpartition(etp, -B)[
+            -B:
+        ].tolist()  # indexes of the uncertain samples
+        maxindex.sort(reverse=True)
 
         etpmax = max(etp)  # max entropy used for the stopping condition
         performance_history.append(etpmax)
 
         k += 1
 
-        with Manager() as manager:
-            lista = manager.list()
+        # Training of an initial classifier:
+        for x in range(B):
+            q0 = Xu_iter[maxindex[x]][0]
+            v0 = Xu_iter[maxindex[x]][1]
+            del Xu_iter[maxindex[x]]
 
-            processes = []
-            for x in range(B):
-                p = Process(target=testing, args=(Xu_iter[maxindex[x], 0],Xu_iter[maxindex[x], 1],lista))  # Passing the list
-                p.start()
-                processes.append(p)
-            for p in processes:
-                p.join()
+            # Data testing:
+            res = ocp.compute_problem(q0, v0)
 
-            X_iter=X_iter+list(lista)
-
-        # Delete tested data from the unlabeled set:
-        Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
+            if res == 1:
+                X_iter.append([q0, v0, 0, 1])
+            elif res == 0:
+                X_iter.append([q0, v0, 1, 0])
 
         it = 0
         val = 1 
@@ -240,46 +236,46 @@ with cProfile.Profile() as pr:
 
         print("CLASSIFIER", k, "TRAINED")
 
-        with torch.no_grad():
-            # Plot the results:
-            plt.figure()
-            h = 0.01
-            x_min, x_max = q_min-(q_max-q_min)/100, q_max+(q_max-q_min)/100
-            y_min, y_max = v_min-(v_max-v_min)/100, v_max+(v_max-v_min)/100
-            xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
-            inp = torch.from_numpy(np.c_[xx.ravel(), yy.ravel()].astype(np.float32))
-            inp = (inp - mean) / std
-            out = model(inp)
-            y_pred = np.argmax(out.numpy(), axis=1)
-            Z = y_pred.reshape(xx.shape)
-            z = [
-                0 if X_iter[x][2] == 1 else 1
-                for x in range(len(X_iter))
-            ]
-            plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-            scatter = plt.scatter(
-                [X_iter[n][0] for n in range(len(X_iter))], [X_iter[n][1] for n in range(len(X_iter))], c=z, marker=".", alpha=0.5, cmap=plt.cm.Paired
-            )
-            plt.xlim([x_min, x_max])
-            plt.ylim([y_min, y_max])
-            plt.xlabel("Initial position [rad]")
-            plt.ylabel("Initial velocity [rad/s]")
-            plt.title("Classifier")
-            hand = scatter.legend_elements()[0]
-            plt.legend(handles=hand, labels=("Non viable", "Viable"))
-            plt.grid(True)
+        # with torch.no_grad():
+        #     # Plot the results:
+        #     plt.figure()
+        #     h = 0.01
+        #     x_min, x_max = q_min-(q_max-q_min)/100, q_max+(q_max-q_min)/100
+        #     y_min, y_max = v_min-(v_max-v_min)/100, v_max+(v_max-v_min)/100
+        #     xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+        #     inp = torch.from_numpy(np.c_[xx.ravel(), yy.ravel()].astype(np.float32))
+        #     inp = (inp - mean) / std
+        #     out = model(inp)
+        #     y_pred = np.argmax(out.numpy(), axis=1)
+        #     Z = y_pred.reshape(xx.shape)
+        #     z = [
+        #         0 if X_iter[x][2] == 1 else 1
+        #         for x in range(len(X_iter))
+        #     ]
+        #     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        #     scatter = plt.scatter(
+        #         [X_iter[n][0] for n in range(len(X_iter))], [X_iter[n][1] for n in range(len(X_iter))], c=z, marker=".", alpha=0.5, cmap=plt.cm.Paired
+        #     )
+        #     plt.xlim([x_min, x_max])
+        #     plt.ylim([y_min, y_max])
+        #     plt.xlabel("Initial position [rad]")
+        #     plt.ylabel("Initial velocity [rad/s]")
+        #     plt.title("Classifier")
+        #     hand = scatter.legend_elements()[0]
+        #     plt.legend(handles=hand, labels=("Non viable", "Viable"))
+        #     plt.grid(True)
 
 
-    plt.figure()
-    plt.plot(performance_history)
-    plt.scatter(range(len(performance_history)), performance_history)
-    plt.xlabel("Iteration number")
-    plt.ylabel("Maximum entropy")
-    plt.title("Maximum entropy evolution")
+    # plt.figure()
+    # plt.plot(performance_history)
+    # plt.scatter(range(len(performance_history)), performance_history)
+    # plt.xlabel("Iteration number")
+    # plt.ylabel("Maximum entropy")
+    # plt.title("Maximum entropy evolution")
 
     print("Execution time: %s seconds" % (time.time() - start_time))
 
 stats = Stats(pr)
 stats.sort_stats('cumtime').print_stats(20)
 
-plt.show()
+# plt.show()
