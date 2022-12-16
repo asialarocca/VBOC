@@ -5,7 +5,7 @@ from acados_template import AcadosModel
 from casadi import SX, vertcat, sin, exp, norm_2, fmax, tanh
 import time
 from scipy.integrate import odeint
-
+import torch
 
 class OCPpendulum:
     def __init__(self):
@@ -61,7 +61,7 @@ class OCPpendulum:
         self.ocp = AcadosOcp()
 
         # times
-        Tf = 0.1
+        Tf = 0.4
         self.Tf = Tf
         self.N = int(100 * Tf)
 
@@ -77,7 +77,7 @@ class OCPpendulum:
         self.ocp.dims.N = self.N
 
         # cost
-        Q = 2 * np.diag([0.0, 1e-1])
+        Q = 2 * np.diag([0.0, 1.])
         R = 2 * np.diag([0.0])
 
         self.ocp.cost.W_e = Q
@@ -119,7 +119,7 @@ class OCPpendulum:
         self.ocp.constraints.ubx_0 = np.array([0.0, 0.0])
 
         # # options
-        self.ocp.solver_options.nlp_solver_type = "SQP"
+        self.ocp.solver_options.nlp_solver_type = "SQP_RTI"
         # -------------------------------------------------
 
     def set_bounds(self, q_min, q_max):
@@ -151,6 +151,36 @@ class OCPpendulum:
 
         for i in range(self.N+1):
             self.ocp_solver.set(i, "x", x_guess)
+
+        status = self.ocp_solver.solve()
+
+        if status == 0:
+            return 1
+        elif status == 4:
+            return 0
+        else:
+            return 2
+
+    def compute_problem_nnguess(self, q0, v0, model, mean, std):
+
+        self.ocp_solver.reset()
+
+        x0 = np.array([q0, v0])
+
+        self.ocp_solver.constraints_set(0, "lbx", x0)
+        self.ocp_solver.constraints_set(0, "ubx", x0)
+
+        with torch.no_grad():
+            inp = torch.Tensor([[q0, v0]])
+            inp = (inp - mean) / std
+            out = model(inp)
+            out = out * std + mean
+            out = out.numpy()
+        
+        out = np.reshape(out, (self.N,self.nx))
+
+        for i in range(self.N+1):
+            self.ocp_solver.set(i, "x", out[i])
 
         status = self.ocp_solver.solve()
 
