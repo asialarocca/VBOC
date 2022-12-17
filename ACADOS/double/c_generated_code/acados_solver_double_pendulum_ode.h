@@ -74,6 +74,7 @@
 extern "C" {
 #endif
 
+
 // ** capsule for solver data **
 typedef struct double_pendulum_ode_solver_capsule
 {
@@ -118,7 +119,7 @@ ACADOS_SYMBOL_EXPORT int double_pendulum_ode_acados_free_capsule(double_pendulum
 
 ACADOS_SYMBOL_EXPORT int double_pendulum_ode_acados_create(double_pendulum_ode_solver_capsule * capsule);
 
-ACADOS_SYMBOL_EXPORT int double_pendulum_ode_acados_reset(double_pendulum_ode_solver_capsule* capsule);
+ACADOS_SYMBOL_EXPORT int double_pendulum_ode_acados_reset(double_pendulum_ode_solver_capsule* capsule, int reset_qp_solver_mem);
 
 /**
  * Generic version of double_pendulum_ode_acados_create which allows to use a different number of shooting intervals than
@@ -136,10 +137,14 @@ ACADOS_SYMBOL_EXPORT int double_pendulum_ode_acados_update_time_steps(double_pen
  */
 ACADOS_SYMBOL_EXPORT int double_pendulum_ode_acados_update_qp_solver_cond_N(double_pendulum_ode_solver_capsule * capsule, int qp_solver_cond_N);
 ACADOS_SYMBOL_EXPORT int double_pendulum_ode_acados_update_params(double_pendulum_ode_solver_capsule * capsule, int stage, double *value, int np);
+ACADOS_SYMBOL_EXPORT int double_pendulum_ode_acados_update_params_sparse(double_pendulum_ode_solver_capsule * capsule, int stage, int *idx, double *p, int n_update);
+
 ACADOS_SYMBOL_EXPORT int double_pendulum_ode_acados_solve(double_pendulum_ode_solver_capsule * capsule);
 ACADOS_SYMBOL_EXPORT int double_pendulum_ode_acados_free(double_pendulum_ode_solver_capsule * capsule);
 ACADOS_SYMBOL_EXPORT void double_pendulum_ode_acados_print_stats(double_pendulum_ode_solver_capsule * capsule);
-                     
+ACADOS_SYMBOL_EXPORT int double_pendulum_ode_acados_custom_update(double_pendulum_ode_solver_capsule* capsule, double* data, int data_len);
+
+
 ACADOS_SYMBOL_EXPORT ocp_nlp_in *double_pendulum_ode_acados_get_nlp_in(double_pendulum_ode_solver_capsule * capsule);
 ACADOS_SYMBOL_EXPORT ocp_nlp_out *double_pendulum_ode_acados_get_nlp_out(double_pendulum_ode_solver_capsule * capsule);
 ACADOS_SYMBOL_EXPORT ocp_nlp_out *double_pendulum_ode_acados_get_sens_out(double_pendulum_ode_solver_capsule * capsule);

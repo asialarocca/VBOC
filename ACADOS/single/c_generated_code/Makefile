@@ -41,10 +41,12 @@
 MODEL_SRC=
 MODEL_SRC+= pendulum_ode_model/pendulum_ode_expl_ode_fun.c
 MODEL_SRC+= pendulum_ode_model/pendulum_ode_expl_vde_forw.c
+MODEL_SRC+= pendulum_ode_model/pendulum_ode_expl_vde_adj.c
 MODEL_OBJ := $(MODEL_SRC:.c=.o)
 
 # optimal control problem - mostly CasADi exports
 OCP_SRC=
+
 OCP_SRC+= acados_solver_pendulum_ode.c
 OCP_OBJ := $(OCP_SRC:.c=.o)
 
@@ -82,7 +84,7 @@ CPPFLAGS+= -I$(INCLUDE_PATH)/hpipm/include
 
 
 # define the c-compiler flags for make's implicit rules
-CFLAGS = -fPIC -std=c99   #-fno-diagnostics-show-line-numbers -g
+CFLAGS = -fPIC -std=c99   -O2#-fno-diagnostics-show-line-numbers -g
 # # Debugging
 # CFLAGS += -g3
 
@@ -139,11 +141,11 @@ ocp_cython_o: ocp_cython_c
 	$(CC) $(ACADOS_FLAGS) -c -O2 \
 	-fPIC \
 	-o acados_ocp_solver_pyx.o \
-	-I /usr/include/python3.8 \
 	-I $(INCLUDE_PATH)/blasfeo/include/ \
 	-I $(INCLUDE_PATH)/hpipm/include/ \
 	-I $(INCLUDE_PATH) \
 	-I /home/asia/anaconda3/envs/TESI/lib/python3.8/site-packages/numpy/core/include \
+	-I /home/asia/anaconda3/envs/TESI/include/python3.8 \
 	acados_ocp_solver_pyx.c \
 
 ocp_cython: ocp_cython_o
@@ -152,6 +154,33 @@ ocp_cython: ocp_cython_o
 	-Wl,-rpath=$(LIB_PATH) \
 	acados_ocp_solver_pyx.o \
 	$(abspath .)/libacados_ocp_solver_pendulum_ode.so \
+	$(LDFLAGS) $(LDLIBS)
+
+# Sim Cython targets
+sim_cython_c: sim_shared_lib
+	cython \
+	-o acados_sim_solver_pyx.c \
+	-I $(INCLUDE_PATH)/../interfaces/acados_template/acados_template \
+	$(INCLUDE_PATH)/../interfaces/acados_template/acados_template/acados_sim_solver_pyx.pyx \
+	-I /home/asia/Documents/Tesi/tesi/ACADOS/single/c_generated_code \
+
+sim_cython_o: sim_cython_c
+	$(CC) $(ACADOS_FLAGS) -c -O2 \
+	-fPIC \
+	-o acados_sim_solver_pyx.o \
+	-I $(INCLUDE_PATH)/blasfeo/include/ \
+	-I $(INCLUDE_PATH)/hpipm/include/ \
+	-I $(INCLUDE_PATH) \
+	-I /home/asia/anaconda3/envs/TESI/lib/python3.8/site-packages/numpy/core/include \
+	-I /home/asia/anaconda3/envs/TESI/include/python3.8 \
+	acados_sim_solver_pyx.c \
+
+sim_cython: sim_cython_o
+	$(CC) $(ACADOS_FLAGS) -shared \
+	-o acados_sim_solver_pyx.so \
+	-Wl,-rpath=$(LIB_PATH) \
+	acados_sim_solver_pyx.o \
+	$(abspath .)/libacados_sim_solver_pendulum_ode.so \
 	$(LDFLAGS) $(LDLIBS)
 
 clean:
@@ -168,3 +197,9 @@ clean_ocp_cython:
 	$(RM) acados_solver_pendulum_ode.o
 	$(RM) acados_ocp_solver_pyx.so
 	$(RM) acados_ocp_solver_pyx.o
+
+clean_sim_cython:
+	$(RM) libacados_sim_solver_pendulum_ode.so
+	$(RM) acados_sim_solver_pendulum_ode.o
+	$(RM) acados_sim_solver_pyx.so
+	$(RM) acados_sim_solver_pyx.o

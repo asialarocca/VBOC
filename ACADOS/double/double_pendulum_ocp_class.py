@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import time
 from scipy.integrate import odeint
 from scipy.optimize import fsolve
+import torch
 
 
 class OCPdoublependulum:
@@ -215,6 +216,38 @@ class OCPdoublependulum:
 
         for i in range(self.N + 1):
             self.ocp_solver.set(i, "x", x_guess)
+
+        status = self.ocp_solver.solve()
+
+        if status == 0:
+            return 1
+        elif status == 4:
+            return 0
+        else:
+            return 2
+
+    def compute_problem_nnguess(self, q0, v0, model, mean, std):
+
+        self.ocp_solver.reset()
+
+        x0 = np.array([q0[0], q0[1], v0[0], v0[1]])
+
+        self.ocp_solver.constraints_set(0, "lbx", x0)
+        self.ocp_solver.constraints_set(0, "ubx", x0)
+
+        with torch.no_grad():
+            inp = torch.Tensor([[q0[0], q0[1], v0[0], v0[1]]])
+            inp = (inp - mean) / std
+            out = model(inp)
+            out = out * std + mean
+            out = out.numpy()
+        
+        out = np.reshape(out, (self.N,self.nx))
+
+        self.ocp_solver.set(0, "x", x0)
+
+        for i in range(self.N):
+            self.ocp_solver.set(i+1, "x", out[i])
 
         status = self.ocp_solver.solve()
 

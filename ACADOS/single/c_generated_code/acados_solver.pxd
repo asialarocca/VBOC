@@ -47,10 +47,13 @@ cdef extern from "acados_solver_pendulum_ode.h":
     int acados_update_qp_solver_cond_N "pendulum_ode_acados_update_qp_solver_cond_N"(nlp_solver_capsule * capsule, int qp_solver_cond_N)
 
     int acados_update_params "pendulum_ode_acados_update_params"(nlp_solver_capsule * capsule, int stage, double *value, int np_)
+    int acados_update_params_sparse "pendulum_ode_acados_update_params_sparse"(nlp_solver_capsule * capsule, int stage, int *idx, double *p, int n_update)
     int acados_solve "pendulum_ode_acados_solve"(nlp_solver_capsule * capsule)
-    int acados_reset "pendulum_ode_acados_reset"(nlp_solver_capsule * capsule)
+    int acados_reset "pendulum_ode_acados_reset"(nlp_solver_capsule * capsule, int reset_qp_solver_mem)
     int acados_free "pendulum_ode_acados_free"(nlp_solver_capsule * capsule)
     void acados_print_stats "pendulum_ode_acados_print_stats"(nlp_solver_capsule * capsule)
+
+    int acados_custom_update "pendulum_ode_acados_custom_update"(nlp_solver_capsule* capsule, double * data, int data_len)
 
     acados_solver_common.ocp_nlp_in *acados_get_nlp_in "pendulum_ode_acados_get_nlp_in"(nlp_solver_capsule * capsule)
     acados_solver_common.ocp_nlp_out *acados_get_nlp_out "pendulum_ode_acados_get_nlp_out"(nlp_solver_capsule * capsule)

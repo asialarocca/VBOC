@@ -42,6 +42,9 @@
 #include "acados_c/external_function_interface.h"
 #include "acados_solver_pendulum_ode.h"
 
+// blasfeo
+#include "blasfeo/include/blasfeo_d_aux_ext_dep.h"
+
 #define NX     PENDULUM_ODE_NX
 #define NZ     PENDULUM_ODE_NZ
 #define NU     PENDULUM_ODE_NU

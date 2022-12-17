@@ -74,6 +74,7 @@
 extern "C" {
 #endif
 
+
 // ** capsule for solver data **
 typedef struct pendulum_ode_solver_capsule
 {
@@ -118,7 +119,7 @@ ACADOS_SYMBOL_EXPORT int pendulum_ode_acados_free_capsule(pendulum_ode_solver_ca
 
 ACADOS_SYMBOL_EXPORT int pendulum_ode_acados_create(pendulum_ode_solver_capsule * capsule);
 
-ACADOS_SYMBOL_EXPORT int pendulum_ode_acados_reset(pendulum_ode_solver_capsule* capsule);
+ACADOS_SYMBOL_EXPORT int pendulum_ode_acados_reset(pendulum_ode_solver_capsule* capsule, int reset_qp_solver_mem);
 
 /**
  * Generic version of pendulum_ode_acados_create which allows to use a different number of shooting intervals than
@@ -136,10 +137,14 @@ ACADOS_SYMBOL_EXPORT int pendulum_ode_acados_update_time_steps(pendulum_ode_solv
  */
 ACADOS_SYMBOL_EXPORT int pendulum_ode_acados_update_qp_solver_cond_N(pendulum_ode_solver_capsule * capsule, int qp_solver_cond_N);
 ACADOS_SYMBOL_EXPORT int pendulum_ode_acados_update_params(pendulum_ode_solver_capsule * capsule, int stage, double *value, int np);
+ACADOS_SYMBOL_EXPORT int pendulum_ode_acados_update_params_sparse(pendulum_ode_solver_capsule * capsule, int stage, int *idx, double *p, int n_update);
+
 ACADOS_SYMBOL_EXPORT int pendulum_ode_acados_solve(pendulum_ode_solver_capsule * capsule);
 ACADOS_SYMBOL_EXPORT int pendulum_ode_acados_free(pendulum_ode_solver_capsule * capsule);
 ACADOS_SYMBOL_EXPORT void pendulum_ode_acados_print_stats(pendulum_ode_solver_capsule * capsule);
-                     
+ACADOS_SYMBOL_EXPORT int pendulum_ode_acados_custom_update(pendulum_ode_solver_capsule* capsule, double* data, int data_len);
+
+
 ACADOS_SYMBOL_EXPORT ocp_nlp_in *pendulum_ode_acados_get_nlp_in(pendulum_ode_solver_capsule * capsule);
 ACADOS_SYMBOL_EXPORT ocp_nlp_out *pendulum_ode_acados_get_nlp_out(pendulum_ode_solver_capsule * capsule);
 ACADOS_SYMBOL_EXPORT ocp_nlp_out *pendulum_ode_acados_get_sens_out(pendulum_ode_solver_capsule * capsule);

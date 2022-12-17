@@ -42,7 +42,7 @@
 
 // example specific
 #include "pendulum_ode_model/pendulum_ode_model.h"
-
+#include "pendulum_ode_constraints/pendulum_ode_constraints.h"
 
 
 
@@ -369,30 +369,41 @@ void pendulum_ode_acados_create_5_set_nlp_in(pendulum_ode_solver_capsule* capsul
     }
 
     /**** Cost ****/
-    double* W_0 = calloc(NY0*NY0, sizeof(double));
-    // change only the non-zero elements:
-    W_0[1+(NY0) * 1] = 2;
-    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "W", W_0);
-    free(W_0);
-
     double* yref_0 = calloc(NY0, sizeof(double));
     // change only the non-zero elements:
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "yref", yref_0);
     free(yref_0);
-    double* W = calloc(NY*NY, sizeof(double));
-    // change only the non-zero elements:
-    W[1+(NY) * 1] = 2;
-
     double* yref = calloc(NY, sizeof(double));
     // change only the non-zero elements:
 
     for (int i = 1; i < N; i++)
     {
-        ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "W", W);
         ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "yref", yref);
     }
-    free(W);
     free(yref);
+    double* yref_e = calloc(NYN, sizeof(double));
+    // change only the non-zero elements:
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "yref", yref_e);
+    free(yref_e);
+   double* W_0 = calloc(NY0*NY0, sizeof(double));
+    // change only the non-zero elements:
+    W_0[1+(NY0) * 1] = 2;
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "W", W_0);
+    free(W_0);
+    double* W = calloc(NY*NY, sizeof(double));
+    // change only the non-zero elements:
+    W[1+(NY) * 1] = 2;
+
+    for (int i = 1; i < N; i++)
+    {
+        ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "W", W);
+    }
+    free(W);
+    double* W_e = calloc(NYN*NYN, sizeof(double));
+    // change only the non-zero elements:
+    W_e[1+(NYN) * 1] = 2;
+    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "W", W_e);
+    free(W_e);
     double* Vx_0 = calloc(NY0*NX, sizeof(double));
     // change only the non-zero elements:
     Vx_0[0+(NY0) * 0] = 1;
@@ -425,18 +436,6 @@ void pendulum_ode_acados_create_5_set_nlp_in(pendulum_ode_solver_capsule* capsul
         ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "Vu", Vu);
     }
     free(Vu);
-
-    // terminal cost
-    double* yref_e = calloc(NYN, sizeof(double));
-    // change only the non-zero elements:
-    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "yref", yref_e);
-    free(yref_e);
-
-    double* W_e = calloc(NYN*NYN, sizeof(double));
-    // change only the non-zero elements:
-    W_e[1+(NYN) * 1] = 2;
-    ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "W", W_e);
-    free(W_e);
     double* Vx_e = calloc(NYN*NX, sizeof(double));
     // change only the non-zero elements:
     
@@ -623,6 +622,10 @@ void pendulum_ode_acados_create_6_set_opts(pendulum_ode_solver_capsule* capsule)
     qp_solver_cond_N = N;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_cond_N", &qp_solver_cond_N);
 
+    int nlp_solver_ext_qp_res = 0;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "ext_qp_res", &nlp_solver_ext_qp_res);
+    // set HPIPM mode: should be done before setting other QP solver options
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_hpipm_mode", "BALANCE");
 
 
 
@@ -631,6 +634,11 @@ void pendulum_ode_acados_create_6_set_opts(pendulum_ode_solver_capsule* capsule)
 
 int print_level = 0;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "print_level", &print_level);
+    int qp_solver_cond_ric_alg = 1;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_cond_ric_alg", &qp_solver_cond_ric_alg);
+
+    int qp_solver_ric_alg = 1;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_ric_alg", &qp_solver_ric_alg);
 
 
     int ext_cost_num_hess = 0;
@@ -739,6 +747,7 @@ int pendulum_ode_acados_create_with_discretization(pendulum_ode_solver_capsule* 
 
     // 9) do precomputations
     int status = pendulum_ode_acados_create_9_precompute(capsule);
+
     return status;
 }
 
@@ -766,7 +775,7 @@ int pendulum_ode_acados_update_qp_solver_cond_N(pendulum_ode_solver_capsule* cap
 }
 
 
-int pendulum_ode_acados_reset(pendulum_ode_solver_capsule* capsule)
+int pendulum_ode_acados_reset(pendulum_ode_solver_capsule* capsule, int reset_qp_solver_mem)
 {
 
     // set initialization to all zeros
@@ -775,6 +784,7 @@ int pendulum_ode_acados_reset(pendulum_ode_solver_capsule* capsule)
     ocp_nlp_config* nlp_config = capsule->nlp_config;
     ocp_nlp_dims* nlp_dims = capsule->nlp_dims;
     ocp_nlp_out* nlp_out = capsule->nlp_out;
+    ocp_nlp_in* nlp_in = capsule->nlp_in;
     ocp_nlp_solver* nlp_solver = capsule->nlp_solver;
 
     int nx, nu, nv, ns, nz, ni, dim;
@@ -795,8 +805,17 @@ int pendulum_ode_acados_reset(pendulum_ode_solver_capsule* capsule)
             ocp_nlp_out_set(nlp_config, nlp_dims, nlp_out, i, "pi", buffer);
         }
     }
+    // get qp_status: if NaN -> reset memory
+    int qp_status;
+    ocp_nlp_get(capsule->nlp_config, capsule->nlp_solver, "qp_status", &qp_status);
+    if (reset_qp_solver_mem || (qp_status == 3))
+    {
+        // printf("\nin reset qp_status %d -> resetting QP memory\n", qp_status);
+        ocp_nlp_solver_reset_qp_memory(nlp_solver, nlp_in, nlp_out);
+    }
 
     free(buffer);
+    return 0;
 }
 
 
@@ -813,14 +832,63 @@ int pendulum_ode_acados_update_params(pendulum_ode_solver_capsule* capsule, int 
         exit(1);
     }
 
+    const int N = capsule->nlp_solver_plan->N;
+    if (stage < N && stage >= 0)
+    {
+        capsule->forw_vde_casadi[stage].set_param(capsule->forw_vde_casadi+stage, p);
+        capsule->expl_ode_fun[stage].set_param(capsule->expl_ode_fun+stage, p);
+    
+
+        // constraints
+    
+
+        // cost
+        if (stage == 0)
+        {
+        }
+        else // 0 < stage < N
+        {
+        }
+    }
+
+    else // stage == N
+    {
+        // terminal shooting node has no dynamics
+        // cost
+        // constraints
+    
+    }
+
     return solver_status;
 }
 
 
+int pendulum_ode_acados_update_params_sparse(pendulum_ode_solver_capsule * capsule, int stage, int *idx, double *p, int n_update)
+{
+    int solver_status = 0;
+
+    int casadi_np = 0;
+    if (casadi_np < n_update) {
+        printf("pendulum_ode_acados_update_params_sparse: trying to set %d parameters for external functions."
+            " External function has %d parameters. Exiting.\n", n_update, casadi_np);
+        exit(1);
+    }
+    // for (int i = 0; i < n_update; i++)
+    // {
+    //     if (idx[i] > casadi_np) {
+    //         printf("pendulum_ode_acados_update_params_sparse: attempt to set parameters with index %d, while"
+    //             " external functions only has %d parameters. Exiting.\n", idx[i], casadi_np);
+    //         exit(1);
+    //     }
+    //     printf("param %d value %e\n", idx[i], p[i]);
+    // }
+
+    return 0;
+}
 
 int pendulum_ode_acados_solve(pendulum_ode_solver_capsule* capsule)
 {
-    // solve NLP 
+    // solve NLP
     int solver_status = ocp_nlp_solve(capsule->nlp_solver, capsule->nlp_in, capsule->nlp_out);
 
     return solver_status;
@@ -858,15 +926,6 @@ int pendulum_ode_acados_free(pendulum_ode_solver_capsule* capsule)
     return 0;
 }
 
-ocp_nlp_in *pendulum_ode_acados_get_nlp_in(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_in; }
-ocp_nlp_out *pendulum_ode_acados_get_nlp_out(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_out; }
-ocp_nlp_out *pendulum_ode_acados_get_sens_out(pendulum_ode_solver_capsule* capsule) { return capsule->sens_out; }
-ocp_nlp_solver *pendulum_ode_acados_get_nlp_solver(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_solver; }
-ocp_nlp_config *pendulum_ode_acados_get_nlp_config(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_config; }
-void *pendulum_ode_acados_get_nlp_opts(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_opts; }
-ocp_nlp_dims *pendulum_ode_acados_get_nlp_dims(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_dims; }
-ocp_nlp_plan_t *pendulum_ode_acados_get_nlp_plan(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_solver_plan; }
-
 
 void pendulum_ode_acados_print_stats(pendulum_ode_solver_capsule* capsule)
 {
@@ -880,6 +939,11 @@ void pendulum_ode_acados_print_stats(pendulum_ode_solver_capsule* capsule)
     ocp_nlp_get(capsule->nlp_config, capsule->nlp_solver, "statistics", stat);
 
     int nrow = sqp_iter+1 < stat_m ? sqp_iter+1 : stat_m;
+
+    printf("iter\tres_stat\tres_eq\t\tres_ineq\tres_comp\tqp_stat\tqp_iter\talpha");
+    if (stat_n > 8)
+        printf("\t\tqp_res_stat\tqp_res_eq\tqp_res_ineq\tqp_res_comp");
+    printf("\n");
     printf("iter\tqp_stat\tqp_iter\n");
     for (int i = 0; i < nrow; i++)
     {
@@ -892,3 +956,21 @@ void pendulum_ode_acados_print_stats(pendulum_ode_solver_capsule* capsule)
     }
 }
 
+int pendulum_ode_acados_custom_update(pendulum_ode_solver_capsule* capsule, double* data, int data_len)
+{
+    printf("\ndummy function that can be called in between solver calls to update parameters or numerical data efficiently in C.\n");
+    printf("nothing set yet..\n");
+    return 1;
+
+}
+
+
+
+ocp_nlp_in *pendulum_ode_acados_get_nlp_in(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_in; }
+ocp_nlp_out *pendulum_ode_acados_get_nlp_out(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_out; }
+ocp_nlp_out *pendulum_ode_acados_get_sens_out(pendulum_ode_solver_capsule* capsule) { return capsule->sens_out; }
+ocp_nlp_solver *pendulum_ode_acados_get_nlp_solver(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_solver; }
+ocp_nlp_config *pendulum_ode_acados_get_nlp_config(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_config; }
+void *pendulum_ode_acados_get_nlp_opts(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_opts; }
+ocp_nlp_dims *pendulum_ode_acados_get_nlp_dims(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_dims; }
+ocp_nlp_plan_t *pendulum_ode_acados_get_nlp_plan(pendulum_ode_solver_capsule* capsule) { return capsule->nlp_solver_plan; }
