@@ -4,9 +4,8 @@ from scipy.stats import entropy, qmc
 import matplotlib.pyplot as plt
 from numpy.linalg import norm as norm
 import time
-from double_pendulum_ocp_class import OCPdoublependulumINIT, OCPdoublependulumNN
+from double_pendulum_ocp_class import OCPdoublependulumINIT
 import random
-import math
 import warnings
 import torch
 import torch.nn as nn
