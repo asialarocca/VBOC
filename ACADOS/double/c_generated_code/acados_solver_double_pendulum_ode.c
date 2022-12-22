@@ -391,14 +391,10 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     free(yref_e);
    double* W_0 = calloc(NY0*NY0, sizeof(double));
     // change only the non-zero elements:
-    W_0[2+(NY0) * 2] = 2;
-    W_0[3+(NY0) * 3] = 2;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "W", W_0);
     free(W_0);
     double* W = calloc(NY*NY, sizeof(double));
     // change only the non-zero elements:
-    W[2+(NY) * 2] = 2;
-    W[3+(NY) * 3] = 2;
 
     for (int i = 1; i < N; i++)
     {
@@ -691,13 +687,13 @@ void double_pendulum_ode_acados_create_6_set_opts(double_pendulum_ode_solver_cap
     double nlp_solver_tol_comp = 0.000001;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_comp", &nlp_solver_tol_comp);
 
-    int nlp_solver_max_iter = 2000;
+    int nlp_solver_max_iter = 1000;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "max_iter", &nlp_solver_max_iter);
 
     int initialize_t_slacks = 0;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "initialize_t_slacks", &initialize_t_slacks);
 
-    int qp_solver_iter_max = 2000;
+    int qp_solver_iter_max = 1000;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_iter_max", &qp_solver_iter_max);
 
 
@@ -1015,7 +1011,7 @@ void double_pendulum_ode_acados_print_stats(double_pendulum_ode_solver_capsule* 
     ocp_nlp_get(capsule->nlp_config, capsule->nlp_solver, "stat_m", &stat_m);
 
     
-    double stat[24000];
+    double stat[12000];
     ocp_nlp_get(capsule->nlp_config, capsule->nlp_solver, "statistics", stat);
 
     int nrow = sqp_iter+1 < stat_m ? sqp_iter+1 : stat_m;
