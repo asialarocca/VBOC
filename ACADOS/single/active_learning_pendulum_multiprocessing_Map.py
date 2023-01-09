@@ -19,7 +19,7 @@ with cProfile.Profile() as pr:
 
     start_time = time.time()
 
-    cpu_num = 3
+    cpu_num = 31
 
     # Ocp initialization:
     ocp = OCPpendulumINIT()
@@ -58,7 +58,7 @@ with cProfile.Profile() as pr:
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(10, ocp_dim))
+    sample = sampler.random(n=pow(50, ocp_dim))
     l_bounds = [q_min-(q_max-q_min)/100, v_min-(v_max-v_min)/100]
     u_bounds = [q_max+(q_max-q_min)/100, v_max+(v_max-v_min)/100]
     data = qmc.scale(sample, l_bounds, u_bounds)
@@ -243,7 +243,7 @@ with cProfile.Profile() as pr:
 
     print("Execution time: %s seconds" % (time.time() - start_time))
 
-#stats = Stats(pr)
-#stats.sort_stats('cumtime').print_stats(20)
+stats = Stats(pr)
+stats.sort_stats('cumtime').print_stats(20)
 
 # plt.show()

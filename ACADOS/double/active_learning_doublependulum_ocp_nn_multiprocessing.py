@@ -19,7 +19,7 @@ warnings.filterwarnings("ignore")
 with cProfile.Profile() as pr:
 
     start_time = time.time()
-    cpu_num = 4
+    cpu_num = 31
 
     # Ocp initialization:
     ocp = OCPdoublependulumINIT()
@@ -110,9 +110,9 @@ with cProfile.Profile() as pr:
     model = NeuralNet(input_size, hidden_size, output_size).to(device)
 
     # Active learning parameters:
-    N_init = pow(5, ocp_dim)  # size of initial labeled set
-    B = pow(5, ocp_dim)  # batch size
-    etp_stop = 0.5  # active learning stopping condition
+    N_init = pow(10, ocp_dim)  # size of initial labeled set
+    B = pow(10, ocp_dim)  # batch size
+    etp_stop = 0.2  # active learning stopping condition
     loss_stop = 0.1  # nn training stopping condition
     beta = 0.8
     n_minibatch = 512
@@ -124,7 +124,7 @@ with cProfile.Profile() as pr:
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(10, ocp_dim))
+    sample = sampler.random(n=pow(50, ocp_dim))
     l_bounds = [q_min-(q_max-q_min)/100, q_min-(q_max-q_min)/100, v_min-(v_max-v_min)/100, v_min-(v_max-v_min)/100]
     u_bounds = [q_max+(q_max-q_min)/100, q_max+(q_max-q_min)/100, v_max+(v_max-v_min)/100, v_max+(v_max-v_min)/100]
     Xu_iter = qmc.scale(sample, l_bounds, u_bounds).tolist()

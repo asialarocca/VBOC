@@ -54,7 +54,7 @@ with cProfile.Profile() as pr:
 
     start_time = time.time()
 
-    cpu_num = 4
+    cpu_num = 31
 
     # Ocp initialization:
     ocp = OCPdoublependulumINIT()
@@ -80,9 +80,9 @@ with cProfile.Profile() as pr:
     model_guess = NeuralNetGuess(input_size, hidden_size, ocp_dim*ocp.N).to(device)
 
     # Active learning parameters:
-    N_init = pow(5, ocp_dim)  # size of initial labeled set
-    B = pow(5, ocp_dim)  # batch size
-    etp_stop = 0.5  # active learning stopping condition
+    N_init = pow(10, ocp_dim)  # size of initial labeled set
+    B = pow(10, ocp_dim)  # batch size
+    etp_stop = 0.2  # active learning stopping condition
     loss_stop = 0.1  # nn training stopping condition
     beta = 0.8
     n_minibatch = 512
@@ -97,7 +97,7 @@ with cProfile.Profile() as pr:
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(20, ocp_dim))
+    sample = sampler.random(n=pow(50, ocp_dim))
     l_bounds = [q_min-(q_max-q_min)/100, q_min-(q_max-q_min)/100, v_min-(v_max-v_min)/100, v_min-(v_max-v_min)/100]
     u_bounds = [q_max+(q_max-q_min)/100, q_max+(q_max-q_min)/100, v_max+(v_max-v_min)/100, v_max+(v_max-v_min)/100]
     Xu_iter = qmc.scale(sample, l_bounds, u_bounds).tolist()
@@ -311,15 +311,18 @@ with cProfile.Profile() as pr:
 
         tmp1, tmp2 = zip(*temp)
         X_iter = X_iter + tmp1
-        tp = [i for i in X_traj if i is not None]
-        X_traj = X_traj + tp
+        tp = [i for i in tmp2 if i is not None]
+        qn = n_minibatch if len(X_traj) > n_minibatch else len(X_traj)
+        ind = random.sample(range(len(X_traj)), qn)
+        tkeep = [i for i in X_traj if i in ind]
+        X_traj = tkeep + tp
 
         print("CLASSIFIER", k, "IN TRAINING")
 
         it = 0
         val = 1
 
-        Bg = len(tp)
+        Bg = len(X_traj)
 
         # Train the model
         while val > loss_stop and it <= it_max:
@@ -360,17 +363,21 @@ with cProfile.Profile() as pr:
         # Train the guess model
         while val > loss_stop and it <= it_max:
 
-            if len(X_traj) - Bg < qt:
-                qt = len(X_traj) - Bg
-            ind = random.sample(range(len(X_traj) - Bg), qt)
-            if Bg < qt:
-                qt = Bg
-            ind.extend(
-                random.sample(
-                    range(len(X_traj) - Bg, len(X_traj)),
-                    qt,
-                )
-            )
+            # if len(X_traj) - Bg < qt:
+            #     qt = len(X_traj) - Bg
+            # ind = random.sample(range(len(X_traj) - Bg), qt)
+            # if Bg < qt:
+            #     qt = Bg
+            # ind.extend(
+            #     random.sample(
+            #         range(len(X_traj) - Bg, len(X_traj)),
+            #         qt,
+            #     )
+            # )
+
+            if len(X_traj) < qt:
+                qt = len(X_traj)
+            ind = random.sample(range(len(X_traj)), qt)
 
             X_iter_tensor = torch.Tensor([X_traj[i][:4] for i in ind])
             y_iter_tensor = torch.Tensor([X_traj[i][4:] for i in ind])

@@ -375,93 +375,93 @@ with cProfile.Profile() as pr:
 
         print("etpmax:", etpmax)
 
-    with torch.no_grad():
-        # Plot the results:
-        plt.figure()
-        inp = torch.from_numpy(
-            np.float32(
-                np.c_[
-                    (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                    xrav,
-                    np.zeros(yrav.shape[0]),
-                    yrav,
-                ]
-            )
-        ).to(device)
-        inp = (inp - mean) / std
-        out = model(inp)
-        y_pred = np.argmax(out.numpy(), axis=1)
-        Z = y_pred.reshape(xx.shape)
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        xit = []
-        yit = []
-        cit = []
-        for i in range(len(X_iter)):
-            if (
-                norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
-                and norm(X_iter[i][2]) < 0.1
-            ):
-                xit.append(X_iter[i][1])
-                yit.append(X_iter[i][3])
-                if y_iter[i] == [1, 0]:
-                    cit.append(0)
-                else:
-                    cit.append(1)
-        plt.scatter(
-            xit,
-            yit,
-            c=cit,
-            marker=".",
-            alpha=0.5,
-            cmap=plt.cm.Paired,
-        )
-        plt.xlim([x_min, x_max])
-        plt.ylim([y_min, y_max])
-        plt.grid()
-        plt.title("Second actuator")
+    # with torch.no_grad():
+    #     # Plot the results:
+    #     plt.figure()
+    #     inp = torch.from_numpy(
+    #         np.float32(
+    #             np.c_[
+    #                 (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+    #                 xrav,
+    #                 np.zeros(yrav.shape[0]),
+    #                 yrav,
+    #             ]
+    #         )
+    #     ).to(device)
+    #     inp = (inp - mean) / std
+    #     out = model(inp)
+    #     y_pred = np.argmax(out.numpy(), axis=1)
+    #     Z = y_pred.reshape(xx.shape)
+    #     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+    #     xit = []
+    #     yit = []
+    #     cit = []
+    #     for i in range(len(X_iter)):
+    #         if (
+    #             norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
+    #             and norm(X_iter[i][2]) < 0.1
+    #         ):
+    #             xit.append(X_iter[i][1])
+    #             yit.append(X_iter[i][3])
+    #             if y_iter[i] == [1, 0]:
+    #                 cit.append(0)
+    #             else:
+    #                 cit.append(1)
+    #     plt.scatter(
+    #         xit,
+    #         yit,
+    #         c=cit,
+    #         marker=".",
+    #         alpha=0.5,
+    #         cmap=plt.cm.Paired,
+    #     )
+    #     plt.xlim([x_min, x_max])
+    #     plt.ylim([y_min, y_max])
+    #     plt.grid()
+    #     plt.title("Second actuator")
 
-        plt.figure()
-        inp = torch.from_numpy(
-            np.float32(
-                np.c_[
-                    xrav,
-                    (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                    yrav,
-                    np.zeros(yrav.shape[0]),
-                ]
-            )
-        ).to(device)
-        inp = (inp - mean) / std
-        out = model(inp)
-        y_pred = np.argmax(out.numpy(), axis=1)
-        Z = y_pred.reshape(xx.shape)
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        xit = []
-        yit = []
-        cit = []
-        for i in range(len(X_iter)):
-            if (
-                norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
-                and norm(X_iter[i][3]) < 0.1
-            ):
-                xit.append(X_iter[i][0])
-                yit.append(X_iter[i][2])
-                if y_iter[i] == [1, 0]:
-                    cit.append(0)
-                else:
-                    cit.append(1)
-        plt.scatter(
-            xit,
-            yit,
-            c=cit,
-            marker=".",
-            alpha=0.5,
-            cmap=plt.cm.Paired,
-        )
-        plt.xlim([x_min, x_max])
-        plt.ylim([y_min, y_max])
-        plt.grid()
-        plt.title("First actuator")
+    #     plt.figure()
+    #     inp = torch.from_numpy(
+    #         np.float32(
+    #             np.c_[
+    #                 xrav,
+    #                 (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+    #                 yrav,
+    #                 np.zeros(yrav.shape[0]),
+    #             ]
+    #         )
+    #     ).to(device)
+    #     inp = (inp - mean) / std
+    #     out = model(inp)
+    #     y_pred = np.argmax(out.numpy(), axis=1)
+    #     Z = y_pred.reshape(xx.shape)
+    #     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+    #     xit = []
+    #     yit = []
+    #     cit = []
+    #     for i in range(len(X_iter)):
+    #         if (
+    #             norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
+    #             and norm(X_iter[i][3]) < 0.1
+    #         ):
+    #             xit.append(X_iter[i][0])
+    #             yit.append(X_iter[i][2])
+    #             if y_iter[i] == [1, 0]:
+    #                 cit.append(0)
+    #             else:
+    #                 cit.append(1)
+    #     plt.scatter(
+    #         xit,
+    #         yit,
+    #         c=cit,
+    #         marker=".",
+    #         alpha=0.5,
+    #         cmap=plt.cm.Paired,
+    #     )
+    #     plt.xlim([x_min, x_max])
+    #     plt.ylim([y_min, y_max])
+    #     plt.grid()
+    #     plt.title("First actuator")
 
     print("Execution time: %s seconds" % (time.time() - start_time))
 
