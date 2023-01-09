@@ -66,10 +66,9 @@ ocp.dims.N = N
 ocp.solver_options.tf = Tf
 
 # set cost
-Q = 2 * np.diag([0.0, 1e-3])
-R = 2 * np.diag([0.0])
-ocp.cost.W_e = Q
-ocp.cost.W = lin.block_diag(Q, R)
+ocp.cost.W_0 = 2 * np.diag([0., 1., 0.])
+ocp.cost.W = 2 * np.diag([1., 0., 0.])
+ocp.cost.W_e = 2 * np.diag([0., 0.])
 
 ocp.cost.cost_type = "LINEAR_LS"
 ocp.cost.cost_type_e = "LINEAR_LS"
@@ -80,14 +79,15 @@ ocp.cost.Vu = np.zeros((ny, nu))
 ocp.cost.Vu[2, 0] = 1.0
 ocp.cost.Vx_e = np.eye(nx)
 
-ocp.cost.yref = np.zeros((ny,))
-ocp.cost.yref_e = np.zeros((ny_e,))
-
 # set constraints
 Fmax = 3
 thetamax = np.pi / 2
 thetamin = 0.0
 dthetamax = 10.0
+
+ocp.cost.yref_0 = np.array([thetamin, dthetamax, 0.])
+ocp.cost.yref = np.array([thetamax, 0., 0.])
+ocp.cost.yref_e = np.array([0., 0.])
 
 # Calculate max torque to sustain the gravity force:
 print("Max torque to sustain the gravity force:", m * sin(thetamax) * 9.81 * d)
@@ -98,24 +98,27 @@ ocp.constraints.idxbu = np.array([0])
 ocp.constraints.lbx = np.array([thetamin, -dthetamax])
 ocp.constraints.ubx = np.array([thetamax, dthetamax])
 ocp.constraints.idxbx = np.array([0, 1])
-ocp.constraints.lbx_e = np.array([thetamin, 0.0])
+ocp.constraints.lbx_e = np.array([thetamax, 0.0])
 ocp.constraints.ubx_e = np.array([thetamax, 0.0])
 ocp.constraints.idxbx_e = np.array([0, 1])
+ocp.constraints.lbx_0 = np.array([thetamin, -dthetamax])
+ocp.constraints.ubx_0 = np.array([thetamin, dthetamax])
+ocp.constraints.idxbx_0 = np.array([0, 1])
 
 ocp.solver_options.nlp_solver_type = "SQP"
-
-# Initial cnditions
-q0 = np.pi / 6
-v0 = 6.0
-ocp.constraints.x0 = np.array([q0, v0])
 
 # Solver
 ocp_solver = AcadosOcpSolver(ocp, json_file="acados_ocp.json")
 
-x_guess = np.array([q0, 0.0])
+# x_guess = np.array([thetamin, dthetamax])
 
-for i in range(N + 1):
-    ocp_solver.set(i, "x", x_guess)
+ls = np.linspace(thetamin, thetamax, N, endpoint=False)
+vel = np.full(N, dthetamax)
+x_guess = np.append([ls], [vel], axis=0).T
+
+for i in range(N):
+    ocp_solver.set(i, "x", x_guess[i])
+ocp_solver.set(N, "x", np.array([thetamax, 0.0]))
     
 start_time = time.time()
 
