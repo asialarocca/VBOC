@@ -113,7 +113,7 @@ class OCPdoublependulumR:
         self.ocp = AcadosOcp()
 
         # dimensions
-        self.Tf = 0.1
+        self.Tf = 1.
         self.ocp.solver_options.tf = self.Tf  # prediction horizon
 
         self.N = int(100 * self.Tf)
@@ -125,11 +125,9 @@ class OCPdoublependulumR:
         ny_e = self.nx
 
         # cost
-        Q = 2 * np.diag([0., 0., 0., 0.]) # not necessary
-        R = 2 * np.diag([0.0, 0.0]) # not necessary
-
-        self.ocp.cost.W_e = np.diag([0., 0., 0., 0.]) # not necessary
-        self.ocp.cost.W = lin.block_diag(Q, R) # not necessary
+        self.ocp.cost.W_0 = 2 * np.diag([0., 0., 0., 0., 0., 0.]) # 
+        self.ocp.cost.W = 2 * np.diag([0., 0., 0., 0., 0., 0.]) # 
+        self.ocp.cost.W_e = 2 * np.diag([0., 0., 0., 0.])
 
         self.ocp.cost.cost_type = "LINEAR_LS"
         self.ocp.cost.cost_type_e = "LINEAR_LS"
@@ -145,10 +143,6 @@ class OCPdoublependulumR:
         self.thetamax = np.pi / 2 + np.pi
         self.thetamin = np.pi
         self.dthetamax = 5.0
-
-        # reference
-        self.ocp.cost.yref = np.array([(self.thetamax + self.thetamin)/2, (self.thetamax + self.thetamin)/2, 0., 0., 0., 0.]) # np.zeros((ny,))
-        self.ocp.cost.yref_e = np.zeros((ny_e,))
 
         self.ocp.constraints.lbu = np.array([-self.Cmax, -self.Cmax])
         self.ocp.constraints.ubu = np.array([self.Cmax, self.Cmax])
@@ -170,15 +164,21 @@ class OCPdoublependulumR:
         self.ocp.constraints.lbx_0 = np.array([self.thetamin, self.thetamin, -self.dthetamax, -self.dthetamax]) # not necessary
         self.ocp.constraints.ubx_0 = np.array([self.thetamax, self.thetamax, self.dthetamax, self.dthetamax]) # not necessary
         self.ocp.constraints.idxbx_0 = np.array([0, 1, 2, 3])
+
+        # reference
+        self.ocp.cost.yref_0 = np.zeros((ny,))  
+        self.ocp.cost.yref = np.zeros((ny,))  
+        self.ocp.cost.yref_e = np.zeros((ny_e,))
+
         # -------------------------------------------------
 
         self.ocp.solver_options.nlp_solver_type = "SQP"
         self.ocp.solver_options.tol = 1e-6
         self.ocp.solver_options.qp_tol = 1e-6
-        self.ocp.solver_options.qp_solver_iter_max = 1000
-        self.ocp.solver_options.nlp_solver_max_iter = 1000
+        self.ocp.solver_options.qp_solver_iter_max = 10000
+        self.ocp.solver_options.nlp_solver_max_iter = 10000
         self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"
-        self.ocp.solver_options.alpha_reduction = 0.1
+        self.ocp.solver_options.alpha_reduction = 0.3
         self.ocp.solver_options.alpha_min = 1e-2
         self.ocp.solver_options.levenberg_marquardt = 1e-2
         # self.ocp.solver_options.regularize_method = "PROJECT"

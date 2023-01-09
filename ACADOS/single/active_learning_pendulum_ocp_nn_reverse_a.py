@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import entropy, qmc
 import matplotlib.pyplot as plt
 import time
-from pendulum_ocp_class_reverse import OCPpendulumRINIT
+from pendulum_ocp_class_reverse import OCPpendulumReverse
 import warnings
 import random
 import torch
@@ -19,7 +19,7 @@ with cProfile.Profile() as pr:
     start_time = time.time()
 
     # Ocp initialization:
-    ocpr = OCPpendulumRINIT()
+    ocpr = OCPpendulumReverse()
     
     # Position and velocity bounds:
     v_max = ocpr.dthetamax
@@ -51,39 +51,31 @@ with cProfile.Profile() as pr:
     
     eps = 1e-1
     
-    X_save = np.empty((4*(ocpr.N+1),3))
+    X_save = np.array([[(q_min+q_max)/2, 0., 1]])
 
     ls = np.linspace(q_max, q_min, ocpr.N, endpoint=False)
     vel = np.full(ocpr.N, v_min)
     x_guess = np.append([ls], [vel], axis=0).T
     
-    res = ocpr.compute_problem(np.array([q_min, 0.]), x_guess)
+    res = ocpr.compute_problem(np.array([q_min, 0.]), x_guess, 1) # (xe, xguess, a) # min a*x => a > to min, a < 0 to max
 
     if res == 1:
-        for f in range(0, ocpr.N+1):
+        for f in range(ocpr.N+1):
             current_val = ocpr.ocp_solver.get(f, "x")
-
-            if abs(current_val[0] - q_min) <= 1e-3:
-                break
-
-            X_save[f] = np.append(current_val, [1])
-            X_save[2*(ocpr.N+1) + f] = [X_save[f][0], X_save[f][1] - eps, 0]
+            X_save = np.append(X_save, [[current_val[0], current_val[1], 1]], axis = 0)
+            X_save = np.append(X_save, [[current_val[0], current_val[1] - eps, 0]], axis = 0)
 
     ls = np.linspace(q_min, q_max, ocpr.N, endpoint=False)
     vel = np.full(ocpr.N, v_max)
     x_guess = np.append([ls], [vel], axis=0).T
          
-    res = ocpr.compute_problem(np.array([q_max, 0.]), x_guess)
+    res = ocpr.compute_problem(np.array([q_max, 0.]), x_guess, -1)
 
     if res == 1:
-        for f in range(0, ocpr.N+1):
+        for f in range(ocpr.N+1):
             current_val = ocpr.ocp_solver.get(f, "x")
-
-            if abs(current_val[0] - q_max) <= 1e-3:
-                break
-
-            X_save[ocpr.N+1 + f] = np.append(current_val, [1])
-            X_save[3*(ocpr.N+1) + f] = [X_save[ocpr.N+1 + f][0], X_save[ocpr.N+1 + f][1] + eps, 0]
+            X_save = np.append(X_save, [[current_val[0], current_val[1], 1]], axis = 0)
+            X_save = np.append(X_save, [[current_val[0], current_val[1] + eps, 0]], axis = 0)
             
     it = 0
     val = 1

@@ -371,14 +371,10 @@ void double_pendulum_ode_acados_create_5_set_nlp_in(double_pendulum_ode_solver_c
     /**** Cost ****/
     double* yref_0 = calloc(NY0, sizeof(double));
     // change only the non-zero elements:
-    yref_0[0] = 3.9269908169872414;
-    yref_0[1] = 3.9269908169872414;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "yref", yref_0);
     free(yref_0);
     double* yref = calloc(NY, sizeof(double));
     // change only the non-zero elements:
-    yref[0] = 3.9269908169872414;
-    yref[1] = 3.9269908169872414;
 
     for (int i = 1; i < N; i++)
     {
@@ -614,7 +610,7 @@ void double_pendulum_ode_acados_create_6_set_opts(double_pendulum_ode_solver_cap
     double alpha_min = 0.01;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "alpha_min", &alpha_min);
 
-    double alpha_reduction = 0.1;
+    double alpha_reduction = 0.3;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "alpha_reduction", &alpha_reduction);
 
     int line_search_use_sufficient_descent = 0;
@@ -687,13 +683,13 @@ void double_pendulum_ode_acados_create_6_set_opts(double_pendulum_ode_solver_cap
     double nlp_solver_tol_comp = 0.000001;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_comp", &nlp_solver_tol_comp);
 
-    int nlp_solver_max_iter = 1000;
+    int nlp_solver_max_iter = 10000;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "max_iter", &nlp_solver_max_iter);
 
     int initialize_t_slacks = 0;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "initialize_t_slacks", &initialize_t_slacks);
 
-    int qp_solver_iter_max = 1000;
+    int qp_solver_iter_max = 10000;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_iter_max", &qp_solver_iter_max);
 
 
@@ -1011,7 +1007,7 @@ void double_pendulum_ode_acados_print_stats(double_pendulum_ode_solver_capsule* 
     ocp_nlp_get(capsule->nlp_config, capsule->nlp_solver, "stat_m", &stat_m);
 
     
-    double stat[12000];
+    double stat[120000];
     ocp_nlp_get(capsule->nlp_config, capsule->nlp_solver, "statistics", stat);
 
     int nrow = sqp_iter+1 < stat_m ? sqp_iter+1 : stat_m;
