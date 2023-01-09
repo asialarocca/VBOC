@@ -62,7 +62,7 @@ class OCPpendulumR:
         self.ocp = AcadosOcp()
 
         # times
-        Tf = 1.
+        Tf = 10.
         self.Tf = Tf
         self.N = int(100 * Tf)
 
