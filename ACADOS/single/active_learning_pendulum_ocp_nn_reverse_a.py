@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import entropy, qmc
 import matplotlib.pyplot as plt
 import time
-from pendulum_ocp_class_reverse import OCPpendulumReverse
+from pendulum_ocp_class_reverse_a import OCPpendulumReverse
 import warnings
 import random
 import torch
@@ -53,18 +53,6 @@ with cProfile.Profile() as pr:
     
     X_save = np.array([[(q_min+q_max)/2, 0., 1]])
 
-    ls = np.linspace(q_max, q_min, ocpr.N, endpoint=False)
-    vel = np.full(ocpr.N, v_min)
-    x_guess = np.append([ls], [vel], axis=0).T
-    
-    res = ocpr.compute_problem(np.array([q_min, 0.]), x_guess, 1) # (xe, xguess, a) # min a*x => a > to min, a < 0 to max
-
-    if res == 1:
-        for f in range(ocpr.N+1):
-            current_val = ocpr.ocp_solver.get(f, "x")
-            X_save = np.append(X_save, [[current_val[0], current_val[1], 1]], axis = 0)
-            X_save = np.append(X_save, [[current_val[0], current_val[1] - eps, 0]], axis = 0)
-
     ls = np.linspace(q_min, q_max, ocpr.N, endpoint=False)
     vel = np.full(ocpr.N, v_max)
     x_guess = np.append([ls], [vel], axis=0).T
@@ -76,6 +64,18 @@ with cProfile.Profile() as pr:
             current_val = ocpr.ocp_solver.get(f, "x")
             X_save = np.append(X_save, [[current_val[0], current_val[1], 1]], axis = 0)
             X_save = np.append(X_save, [[current_val[0], current_val[1] + eps, 0]], axis = 0)
+
+    ls = np.linspace(q_max, q_min, ocpr.N, endpoint=False)
+    vel = np.full(ocpr.N, v_min)
+    x_guess = np.append([ls], [vel], axis=0).T
+    
+    res = ocpr.compute_problem(np.array([q_min, 0.]), x_guess, 1) # (xe, xguess, a) # min a*x => a > to min, a < 0 to max
+
+    if res == 1:
+        for f in range(ocpr.N+1):
+            current_val = ocpr.ocp_solver.get(f, "x")
+            X_save = np.append(X_save, [[current_val[0], current_val[1], 1]], axis = 0)
+            X_save = np.append(X_save, [[current_val[0], current_val[1] - eps, 0]], axis = 0)
             
     it = 0
     val = 1

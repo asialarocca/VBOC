@@ -27,11 +27,11 @@ with cProfile.Profile() as pr:
     q_min = ocp.thetamin
 
     # Initialization of the SVM classifier:
-    clf = svm.SVC(C=1e6, kernel='rbf')
+    clf = svm.SVC(C=1e4, kernel='rbf')
 
     eps = 0.1
-    multip = 0.01
-    num = 10
+    multip = 0.
+    num = 100
     
     X_save = np.array([[(q_min+q_max)/2,(q_min+q_max)/2,0.,0., 1]])
 
@@ -47,7 +47,7 @@ with cProfile.Profile() as pr:
         ocp.ocp_solver.constraints_set(ocp.N, "lbx", xe)
         ocp.ocp_solver.constraints_set(ocp.N, "ubx", xe)
 
-        ocp.ocp_solver.constraints_set(0, "lbx", np.array([q_min, q_min, v_min, v_min]))
+        ocp.ocp_solver.constraints_set(0, "lbx", np.array([q_min, q_min, 0., v_min]))
         ocp.ocp_solver.constraints_set(0, "ubx", np.array([q_min, q_max, v_max, v_max]))
 
         # if q_fin > (ocp.thetamax + ocp.thetamin)/2:
@@ -79,8 +79,8 @@ with cProfile.Profile() as pr:
         y_ref_0 = np.array([0., 0., x_guess[0,2], 0., 0., 0.])
         y_ref = np.array([xe[0], q_ref, 0., 0., 0., 0.])
 
-        # lb = np.array([ocp.thetamin, ocp.thetamin, 0, -ocp.dthetamax])
-        # ub = np.array([ocp.thetamax, ocp.thetamax, ocp.dthetamax, ocp.dthetamax])
+        lb = np.array([q_min, q_min, 0., v_min])
+        ub = np.array([q_max, q_max, v_max, v_max])
 
         ocp.ocp_solver.set(0, "x", x_guess[0])
         ocp.ocp_solver.cost_set(0, "W", W_0)
@@ -103,12 +103,12 @@ with cProfile.Profile() as pr:
             for f in range(ocp.N+1):
                 current_val = ocp.ocp_solver.get(f, "x")
                 # if abs(current_val[0] - xe[0]) or abs(current_val[1] - q_ref) <= 1e-3:
-                if abs(current_val[0] - xe[0]) <= 1e-3:
+                if abs(current_val[0] - xe[0]) <= 1e-2:
                     break
                 X_save = np.append(X_save, [np.append(current_val, 1)], axis=0)
                 x0 = current_val
                 x0[2] = x0[2] + eps * 1/normal
-                x0[3] = x0[3] + np.sign(q_ref - q_fin) * eps * math.sqrt(ran)/normal
+                x0[3] = x0[3] + np.sign(q_ref - q_fin) * eps * ran/normal # math.sqrt(ran)/normal
                 # X_test = np.append(X_test, [x0], axis=0)
                 # x0[2] = x0[2] + eps
                 X_save = np.append(X_save, [np.append(x0, 0)], axis=0)
@@ -158,7 +158,7 @@ with cProfile.Profile() as pr:
         ocp.ocp_solver.constraints_set(ocp.N, "ubx", xe)
 
         ocp.ocp_solver.constraints_set(0, "lbx", np.array([q_max, q_min, v_min, v_min]))
-        ocp.ocp_solver.constraints_set(0, "ubx", np.array([q_max, q_max, v_max, v_max]))
+        ocp.ocp_solver.constraints_set(0, "ubx", np.array([q_max, q_max, 0., v_max]))
 
         # x_guess = np.array([ocp.thetamax, q2_fin, -ocp.dthetamax, 0.])
 
@@ -189,8 +189,8 @@ with cProfile.Profile() as pr:
         y_ref_0 = np.array([0., 0., x_guess[0,2], 0., 0., 0.])
         y_ref = np.array([xe[0], q_ref, 0., 0., 0., 0.])
 
-        # lb = np.array([ocp.thetamin, ocp.thetamin, -ocp.dthetamax, -ocp.dthetamax])
-        # ub = np.array([ocp.thetamax, ocp.thetamax, 0., ocp.dthetamax])
+        lb = np.array([q_min, q_min, v_min, v_min])
+        ub = np.array([q_max, q_max, 0., v_max])
 
         ocp.ocp_solver.set(0, "x", x_guess[0])
         ocp.ocp_solver.cost_set(0, "W", W_0)
@@ -212,12 +212,12 @@ with cProfile.Profile() as pr:
             for f in range(0, ocp.N+1):
                 current_val = ocp.ocp_solver.get(f, "x")
                 # if abs(current_val[0] - xe[0]) or abs(current_val[1] - q_ref) <= 1e-3:
-                if abs(current_val[0] - xe[0]) <= 1e-3:
+                if abs(current_val[0] - xe[0]) <= 1e-2:
                     break
                 X_save = np.append(X_save, [np.append(current_val, 1)], axis=0)
                 x0 = current_val
                 x0[2] = x0[2] - eps * 1/normal
-                x0[3] = x0[3] + np.sign(q_ref - q_fin) * eps * math.sqrt(ran)/normal
+                x0[3] = x0[3] + np.sign(q_ref - q_fin) * eps * ran/normal # math.sqrt(ran)/normal
                 # X_test = np.append(X_test, [x0], axis=0)
                 # x0[2] = x0[2] - eps
                 X_save = np.append(X_save, [np.append(x0, 0)], axis=0)
@@ -266,7 +266,7 @@ with cProfile.Profile() as pr:
         ocp.ocp_solver.constraints_set(ocp.N, "lbx", xe)
         ocp.ocp_solver.constraints_set(ocp.N, "ubx", xe)
 
-        ocp.ocp_solver.constraints_set(0, "lbx", np.array([q_min, q_min, v_min, v_min]))
+        ocp.ocp_solver.constraints_set(0, "lbx", np.array([q_min, q_min, v_min, 0.]))
         ocp.ocp_solver.constraints_set(0, "ubx", np.array([q_max, q_min, v_max, v_max]))
 
         # x_guess = np.array([q2_fin, ocp.thetamin, 0., ocp.dthetamax])
@@ -298,8 +298,8 @@ with cProfile.Profile() as pr:
         y_ref_0 = np.array([0., 0., 0., x_guess[0,3], 0., 0.])
         y_ref = np.array([q_ref, xe[1], 0., 0., 0., 0.])
         
-        # lb = np.array([ocp.thetamin, ocp.thetamin, -ocp.dthetamax, 0])
-        # ub = np.array([ocp.thetamax, ocp.thetamax, ocp.dthetamax, ocp.dthetamax])
+        lb = np.array([q_min, q_min, v_min, 0.])
+        ub = np.array([q_max, q_max, v_max, v_max])
         
         ocp.ocp_solver.set(0, "x", x_guess[0])
         ocp.ocp_solver.cost_set(0, "W", W_0)
@@ -321,11 +321,11 @@ with cProfile.Profile() as pr:
             for f in range(0, ocp.N+1):
                 current_val = ocp.ocp_solver.get(f, "x")
                 # if abs(current_val[1] - xe[1]) or abs(current_val[0] - q_ref) <= 1e-3:
-                if abs(current_val[1] - xe[1]) <= 1e-3:
+                if abs(current_val[1] - xe[1]) <= 1e-2:
                     break
                 X_save = np.append(X_save, [np.append(current_val, 1)], axis=0)
                 x0 = current_val
-                x0[2] = x0[2] + np.sign(q_ref - q_fin) * eps * math.sqrt(ran)/normal
+                x0[2] = x0[2] + np.sign(q_ref - q_fin) * eps * ran/normal # math.sqrt(ran)/normal
                 x0[3] = x0[3] + eps * 1/normal
                 # X_test = np.append(X_test, [x0], axis=0)
                 # x0[3] = x0[3] + eps 
@@ -376,7 +376,7 @@ with cProfile.Profile() as pr:
         ocp.ocp_solver.constraints_set(ocp.N, "ubx", xe)
 
         ocp.ocp_solver.constraints_set(0, "lbx", np.array([q_min, q_max, v_min, v_min]))
-        ocp.ocp_solver.constraints_set(0, "ubx", np.array([q_max, q_max, v_max, v_max]))
+        ocp.ocp_solver.constraints_set(0, "ubx", np.array([q_max, q_max, v_max, 0.]))
 
         # x_guess = np.array([q1_fin, ocp.thetamax, 0., -ocp.dthetamax])
 
@@ -407,8 +407,8 @@ with cProfile.Profile() as pr:
         y_ref_0 = np.array([0., 0., 0., x_guess[0,3], 0., 0.])
         y_ref = np.array([q_ref, xe[1], 0., 0., 0., 0.])
 
-        # lb = np.array([ocp.thetamin, ocp.thetamin, -ocp.dthetamax, -ocp.dthetamax])
-        # ub = np.array([ocp.thetamax, ocp.thetamax, ocp.dthetamax, 0.])
+        lb = np.array([q_min, q_min, v_min, v_min])
+        ub = np.array([q_max, q_max, v_max, 0.])
         
         ocp.ocp_solver.set(0, "x", x_guess[0])
         ocp.ocp_solver.cost_set(0, "W", W_0)
@@ -430,11 +430,11 @@ with cProfile.Profile() as pr:
             for f in range(0, ocp.N+1):
                 current_val = ocp.ocp_solver.get(f, "x")
                 # if abs(current_val[1] - xe[1]) or abs(current_val[0] - q_ref) <= 1e-3:
-                if abs(current_val[1] - xe[1]) <= 1e-3:
+                if abs(current_val[1] - xe[1]) <= 1e-2:
                     break
                 X_save = np.append(X_save, [np.append(current_val, 1)], axis=0)
                 x0 = current_val
-                x0[2] = x0[2] + np.sign(q_ref - q_fin) * eps * math.sqrt(ran)/normal
+                x0[2] = x0[2] + np.sign(q_ref - q_fin) * eps * ran/normal # math.sqrt(ran)/normal
                 x0[3] = x0[3] - eps * 1/normal
                 # X_test = np.append(X_test, [x0], axis=0)
                 # x0[3] = x0[3] - eps

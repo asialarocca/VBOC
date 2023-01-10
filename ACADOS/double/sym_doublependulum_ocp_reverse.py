@@ -25,52 +25,69 @@ with cProfile.Profile() as pr:
     q_max = ocp.thetamax
     q_min = ocp.thetamin
 
-    # Initialization of the SVM classifier:
-    clf = svm.SVC(C=1e3, kernel='rbf')
-
     eps = 1.
-    multip = 0.
-
-    # lb = np.array([ocp.thetamin, ocp.thetamin, 0, -ocp.dthetamax])
-    # ub = np.array([ocp.thetamax, ocp.thetamax, ocp.dthetamax, ocp.dthetamax])
-
-    # for i in range(ocp.N):
-    #     ocp.ocp_solver.constraints_set(i, "lbx", lb)
-    #     ocp.ocp_solver.constraints_set(i, "ubx", ub)
+    multip = 0.1
 
     ocp.ocp_solver.reset()
+        
+    q_fin = q_min + random.random() * (q_max-q_min)
     
-    q2_fin = q_min + random.random() * (q_max-q_min)
-    
-    xe = np.array([q_max, q2_fin, 0., 0.])
+    xe = np.array([q_max, q_fin, 0., 0.])
 
     ocp.ocp_solver.constraints_set(ocp.N, "lbx", xe)
     ocp.ocp_solver.constraints_set(ocp.N, "ubx", xe)
 
-    if q2_fin > (ocp.thetamax + ocp.thetamin)/2:
-        q2_guess = ocp.thetamax
-        q2dot_guess = ocp.dthetamax
-    else:
-        q2_guess = ocp.thetamin
-        q2dot_guess = -ocp.dthetamax
+    ocp.ocp_solver.constraints_set(0, "lbx", np.array([q_min, q_min, v_min, v_min]))
+    ocp.ocp_solver.constraints_set(0, "ubx", np.array([q_min, q_max, v_max, v_max]))
 
-    x_guess = np.array([ocp.thetamin, q2_guess, ocp.dthetamax, q2dot_guess])
+    # if q_fin > (ocp.thetamax + ocp.thetamin)/2:
+    #     q2_guess = ocp.thetamax
+    #     q2dot_guess = ocp.dthetamax
+    # else:
+    #     q2_guess = ocp.thetamin
+    #     q2dot_guess = -ocp.dthetamax
 
-    # x_guess = np.array([ocp.thetamin, q2_fin, ocp.dthetamax, 0.])
+    # x_guess = np.array([ocp.thetamin, q2_guess, ocp.dthetamax, q2dot_guess])
 
-    ran1 = random.random() * multip
-    ran2 = random.random() * multip
-    normal = math.sqrt(ran1 **2 + ran2 **2 + 1)
+    ls = np.linspace(q_min, q_max, ocp.N, endpoint=False)
+    val = np.full(ocp.N, q_fin)
+    x_guess = np.append([ls], [val], axis=0)
+    val = np.full(ocp.N, v_max)
+    x_guess = np.append(x_guess, [val], axis=0)
+    val = np.zeros(ocp.N)
+    x_guess = np.append(x_guess, [val], axis=0).T
 
-    W = np.diag([0., -ran1, -1., -ran2, 0., 0.]) 
+    # x_guess = np.array([ocp.thetamin, q_fin, ocp.dthetamax, 0.])
 
-    for i in range(ocp.N):
-        ocp.ocp_solver.set(i, "x", x_guess)
+    ran = random.random() * multip
+    q_ref = random.choice([q_min, q_max])
+    normal = math.sqrt(ran**2 + 1)
+
+    W_0 = 2 * np.diag([0., 0., 1., 0., 0., 0.]) 
+    W = 2 * np.diag([1., ran, 0., 0., 0., 0.]) 
+
+    y_ref_0 = np.array([0., 0., x_guess[0,2], 0., 0., 0.])
+    y_ref = np.array([xe[0], q_ref, 0., 0., 0., 0.])
+
+    # lb = np.array([ocp.thetamin, ocp.thetamin, 0, -ocp.dthetamax])
+    # ub = np.array([ocp.thetamax, ocp.thetamax, ocp.dthetamax, ocp.dthetamax])
+
+    ocp.ocp_solver.set(0, "x", x_guess[0])
+    ocp.ocp_solver.cost_set(0, "W", W_0)
+    ocp.ocp_solver.set(0, "yref", y_ref_0)
+
+    for i in range(1,ocp.N):
+        ocp.ocp_solver.set(i, "x", x_guess[i])
         ocp.ocp_solver.cost_set(i, "W", W)
+        ocp.ocp_solver.set(i, "yref", y_ref)
+        # ocp.ocp_solver.constraints_set(i, "lbx", lb)
+        # ocp.ocp_solver.constraints_set(i, "ubx", ub)  
 
     ocp.ocp_solver.set(ocp.N, "x", xe)
+    # ocp.ocp_solver.cost_set(ocp.N, "W", np.diag([0., 0., 0., 0.]))
 
     status = ocp.ocp_solver.solve()
+    ocp.ocp_solver.print_statistics()
 
     if status == 0:
         # for f in range(0, ocp.N+1):
@@ -89,8 +106,6 @@ with cProfile.Profile() as pr:
             simX[i, :] = ocp.ocp_solver.get(i, "x")
             simU[i, :] = ocp.ocp_solver.get(i, "u")
         simX[ocp.N, :] = ocp.ocp_solver.get(ocp.N, "x")
-
-        ocp.ocp_solver.print_statistics()
 
         t = np.linspace(0, ocp.Tf, ocp.N+1)
 
@@ -136,40 +151,40 @@ with cProfile.Profile() as pr:
         plt.xlabel('$t$')
         plt.grid()
 
-        for i in range(ocp.N):
+        # for i in range(ocp.N):
 
-            ocp.ocp_solver.reset()
+        #     ocp.ocp_solver.reset()
 
-            ocp.ocp_solver.constraints_set(ocp.N, "lbx", np.array([ocp.thetamin, ocp.thetamin, 0., 0.]))
-            ocp.ocp_solver.constraints_set(ocp.N, "ubx", np.array([ocp.thetamax, ocp.thetamax, 0., 0.]))
+        #     ocp.ocp_solver.constraints_set(ocp.N, "lbx", np.array([ocp.thetamin, ocp.thetamin, 0., 0.]))
+        #     ocp.ocp_solver.constraints_set(ocp.N, "ubx", np.array([ocp.thetamax, ocp.thetamax, 0., 0.]))
 
-            x0 = simX[i, :]
-            x0[1] = x0[1] + eps * math.sqrt(ran1)/normal
-            x0[2] = x0[2] + eps * 1/normal
-            x0[3] = x0[3] + eps * math.sqrt(ran2)/normal
+        #     x0 = simX[i, :]
+        #     x0[1] = x0[1] + eps * math.sqrt(ran1)/normal
+        #     x0[2] = x0[2] + eps * 1/normal
+        #     x0[3] = x0[3] + eps * math.sqrt(ran2)/normal
 
-            print(x0)
+        #     print(x0)
 
-            ocp.ocp_solver.constraints_set(0, "lbx", x0)
-            ocp.ocp_solver.constraints_set(0, "ubx", x0)
+        #     ocp.ocp_solver.constraints_set(0, "lbx", x0)
+        #     ocp.ocp_solver.constraints_set(0, "ubx", x0)
 
-            x_guess = np.array([x0[0], x0[1], 0.0, 0.0])
+        #     x_guess = np.array([x0[0], x0[1], 0.0, 0.0])
 
-            W = np.diag([0., 0., 1., 1., 0., 0.]) 
+        #     W = np.diag([0., 0., 1., 1., 0., 0.]) 
 
-            for i in range(ocp.N):
-                ocp.ocp_solver.set(i, "x", x_guess)
-                ocp.ocp_solver.cost_set(i, "W", W)
+        #     for i in range(ocp.N):
+        #         ocp.ocp_solver.set(i, "x", x_guess)
+        #         ocp.ocp_solver.cost_set(i, "W", W)
 
-            ocp.ocp_solver.set(ocp.N, "x", x_guess)
-            ocp.ocp_solver.cost_set(ocp.N, "W", 2 * np.diag([0., 0., 1., 1.]))
+        #     ocp.ocp_solver.set(ocp.N, "x", x_guess)
+        #     ocp.ocp_solver.cost_set(ocp.N, "W", 2 * np.diag([0., 0., 1., 1.]))
 
-            status = ocp.ocp_solver.solve()
+        #     status = ocp.ocp_solver.solve()
 
-            print(status)
+        #     print(status)
 
-            if status != 0:
-                ocp.ocp_solver.print_statistics()
+        #     if status != 0:
+        #         ocp.ocp_solver.print_statistics()
 
     else:
         ocp.ocp_solver.print_statistics()

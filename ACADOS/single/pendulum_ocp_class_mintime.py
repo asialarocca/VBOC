@@ -3,12 +3,8 @@ from acados_template import AcadosOcp, AcadosOcpSolver
 import numpy as np
 from acados_template import AcadosModel
 from casadi import SX, vertcat, sin, exp, norm_2, fmax, tanh
-import time
-from scipy.integrate import odeint
-import torch
-from sklearn import svm
 
-class OCPpendulumR:
+class OCPpendulumReverse:
     def __init__(self):
 
         # --------------------SET MODEL--------------------
@@ -62,7 +58,7 @@ class OCPpendulumR:
         self.ocp = AcadosOcp()
 
         # times
-        Tf = 1.
+        Tf = 0.5
         self.Tf = Tf
         self.N = int(100 * Tf)
 
@@ -78,9 +74,13 @@ class OCPpendulumR:
         self.ocp.dims.N = self.N
 
         # cost
-        self.ocp.cost.W_0 = 2 * np.diag([0., 1., 0.])
-        self.ocp.cost.W = 2 * np.diag([1., 0., 0.])
-        self.ocp.cost.W_e = 2 * np.diag([0., 0.])
+        self.w = 1e-6
+        Q = 2 * np.diag([0., self.w])
+        R = 2 * np.diag([0.])
+
+        self.ocp.cost.W_e = np.diag([0., 0.]) 
+        self.ocp.cost.W_0 = lin.block_diag(Q, R)
+        self.ocp.cost.W = lin.block_diag(Q, R)
 
         self.ocp.cost.cost_type = "LINEAR_LS"
         self.ocp.cost.cost_type_e = "LINEAR_LS"
@@ -91,6 +91,11 @@ class OCPpendulumR:
         Vu[2, 0] = 1.0
         self.ocp.cost.Vu = Vu
         self.ocp.cost.Vx_e = np.eye(self.nx)
+
+        # reference
+        self.ocp.cost.yref_0 = np.zeros((ny,))
+        self.ocp.cost.yref = np.zeros((ny,))
+        self.ocp.cost.yref_e = np.zeros((ny_e,))
 
         # constraints
         self.Fmax = 3
@@ -104,33 +109,34 @@ class OCPpendulumR:
         self.ocp.constraints.lbx = np.array([self.thetamin, -self.dthetamax])
         self.ocp.constraints.ubx = np.array([self.thetamax, self.dthetamax])
         self.ocp.constraints.idxbx = np.array([0, 1])
-        self.ocp.constraints.lbx_e = np.array([self.thetamin, -self.dthetamax])  
-        self.ocp.constraints.ubx_e = np.array([self.thetamax, self.dthetamax])  
+        self.ocp.constraints.lbx_e = np.array([self.thetamin, -self.dthetamax])
+        self.ocp.constraints.ubx_e = np.array([self.thetamax, self.dthetamax])
         self.ocp.constraints.idxbx_e = np.array([0, 1])
-        self.ocp.constraints.lbx_0 = np.array([self.thetamin, -self.dthetamax])  
-        self.ocp.constraints.ubx_0 = np.array([self.thetamax, self.dthetamax])  
+        self.ocp.constraints.lbx_0 = np.array([self.thetamin, -self.dthetamax])
+        self.ocp.constraints.ubx_0 = np.array([self.thetamax, self.dthetamax])
         self.ocp.constraints.idxbx_0 = np.array([0, 1])
-
-        # reference
-        self.ocp.cost.yref_0 = np.zeros((ny,))  
-        self.ocp.cost.yref = np.zeros((ny,))  
-        self.ocp.cost.yref_e = np.zeros((ny_e,))
 
         # options
         self.ocp.solver_options.nlp_solver_type = "SQP"
-        # self.ocp.solver_options.tol = 1e-6
-        # self.ocp.solver_options.qp_tol = 1e-6
-        # self.ocp.solver_options.qp_solver_iter_max = 1000
-        # self.ocp.solver_options.nlp_solver_max_iter = 1000
-        # self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"
-        # self.ocp.solver_options.alpha_reduction = 0.1
-        # self.ocp.solver_options.alpha_min = 1e-2
-        # self.ocp.solver_options.levenberg_marquardt = 1e-2
+        self.ocp.solver_options.tol = 1e-6
+        self.ocp.solver_options.qp_tol = 1e-6
+        self.ocp.solver_options.qp_solver_iter_max = 1000
+        self.ocp.solver_options.nlp_solver_max_iter = 1000
+        self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"
+        self.ocp.solver_options.alpha_reduction = 0.1
+        self.ocp.solver_options.alpha_min = 1e-2
+        self.ocp.solver_options.levenberg_marquardt = 1e-2
         # self.ocp.solver_options.regularize_method = "PROJECT"
         # self.ocp.solver_options.nlp_solver_step_length = 0.01
+
+        # ocp model
+        self.ocp.model = self.model
+        
+        # solver
+        self.ocp_solver = AcadosOcpSolver(self.ocp, json_file="acados_ocp.json")
         # -------------------------------------------------
 
-    def compute_problem(self, xe, x_guess):
+    def compute_problem(self, xe, x_guess, a):
 
         self.ocp_solver.reset()
 
@@ -140,34 +146,13 @@ class OCPpendulumR:
         self.ocp_solver.constraints_set(0, "lbx", np.array([x_guess[0,0], -self.dthetamax]))
         self.ocp_solver.constraints_set(0, "ubx", np.array([x_guess[0,0], self.dthetamax]))
 
-        y_ref = np.append(xe, 0.)
+        y_ref = np.array([0, - a / (2 * self.w) , 0.])
 
-        self.ocp_solver.set(0, "x", x_guess[0])
-        self.ocp_solver.set(0, "yref", np.append(x_guess[0], 0.))
-
-        for i in range(1, self.N):
+        for i in range(self.N):
             self.ocp_solver.set(i, "yref", y_ref)
             self.ocp_solver.set(i, "x", x_guess[i])
 
         self.ocp_solver.set(self.N, "x", xe)
-        
-        # if xe[0] > (self.thetamin + self.thetamax)/2:
-            
-        #     lb = np.array([self.thetamin, 0.])
-        #     ub = np.array([self.thetamax, self.dthetamax])
-            
-        #     for i in range(self.N):
-        #         self.ocp_solver.constraints_set(i, "lbx", lb)
-        #         self.ocp_solver.constraints_set(i, "ubx", ub)
-            
-        # else:
-            
-        #     lb = np.array([self.thetamin, -self.dthetamax])
-        #     ub = np.array([self.thetamax, 0.])
-            
-        #     for i in range(self.N):
-        #         self.ocp_solver.constraints_set(i, "lbx", lb)
-        #         self.ocp_solver.constraints_set(i, "ubx", ub)
 
         status = self.ocp_solver.solve()
 
@@ -175,16 +160,4 @@ class OCPpendulumR:
             return 1
         else:
             return 0
-
-class OCPpendulumRINIT(OCPpendulumR):
-    def __init__(self):
-
-        # inherit initialization
-        super().__init__()
-
-        # ocp model
-        self.ocp.model = self.model
-        
-        # solver
-        self.ocp_solver = AcadosOcpSolver(self.ocp, json_file="acados_ocp.json")
 
