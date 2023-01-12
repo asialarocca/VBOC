@@ -173,9 +173,9 @@ class OCPdoublependulumR:
         # -------------------------------------------------
 
         self.ocp.solver_options.nlp_solver_type = "SQP"
-        self.ocp.solver_options.tol = 1e-6
+        self.ocp.solver_options.tol = 1e-4
         self.ocp.solver_options.qp_tol = 1e-6
-        self.ocp.solver_options.qp_solver_iter_max = 10000
+        self.ocp.solver_options.qp_solver_iter_max = 1000
         self.ocp.solver_options.nlp_solver_max_iter = 10000
         self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"
         self.ocp.solver_options.alpha_reduction = 0.3

@@ -19,55 +19,57 @@ if __name__ == "__main__":
     # states
     theta = SX.sym("theta")
     dtheta = SX.sym("dtheta")
-    dt = SX.sym('dt')
-    #ddt = SX.sym('ddt')
-    x = vertcat(theta, dtheta, dt)#, ddt)
+    x = vertcat(theta, dtheta)
 
     # controls
     F = SX.sym("F")
-    #dt = SX.sym('dt')
     u = vertcat(F)
 
     # parameters
-    weight = SX.sym("weight") 
-    p = vertcat(weight)
+    # weight = SX.sym("weight") 
+    # p = vertcat(weight)
 
     # dynamics
-    f_expl = vertcat(dt*dtheta, dt*(m * g * d * sin(theta) + F - b * dtheta) / (d * d * m), 0.)#, 0.)
+    f_expl = vertcat(dtheta, (m * g * d * sin(theta) + F - b * dtheta) / (d * d * m))
 
     model = AcadosModel()
 
     model.f_expl_expr = f_expl
     model.x = x
     model.u = u
-    model.p = p
+    #model.p = p
     model.name = "pendulum_time_opt"
 
     # create ocp object to formulate the OCP
     ocp = AcadosOcp()
 
-    # set dimensions
-    N = 100
-    ocp.dims.N = N
+    # times
+    Tf = 1.
+    Tf = Tf
+    N = int(100 * Tf)
+
+    # prediction horizon
+    ocp.solver_options.tf = Tf
+
+    # dimensions
     nx = model.x.size()[0]
     nu = model.u.size()[0]
     ny = nx + nu
     ny_e = nx
 
+    ocp.dims.N = N
+
     # ocp model
     ocp.model = model
 
-    # set prediction horizon
-    ocp.solver_options.tf = N
-
-    ocp.cost.cost_type_0 = 'EXTERNAL'
+    # set cost
     ocp.cost.cost_type = 'EXTERNAL'
     ocp.cost.cost_type_e = 'EXTERNAL'
 
-    ocp.model.cost_expr_ext_cost_0 = dt + weight * dtheta
-    ocp.model.cost_expr_ext_cost = dt + weight * dtheta
+    ocp.model.cost_expr_ext_cost_0 = - dtheta # weight * x[1]
+    ocp.model.cost_expr_ext_cost = - dtheta # weight * x[1]
     ocp.model.cost_expr_ext_cost_e = 0
-    ocp.parameter_values = np.array([0.])
+    #ocp.parameter_values = np.array([1.])
 
     # set constraints
     Fmax = 3
@@ -78,23 +80,23 @@ if __name__ == "__main__":
     ocp.constraints.lbu = np.array([-Fmax])
     ocp.constraints.ubu = np.array([+Fmax])
     ocp.constraints.idxbu = np.array([0])
-    ocp.constraints.lbx = np.array([thetamin, -dthetamax, 0.])#, 0.])
-    ocp.constraints.ubx = np.array([thetamax, dthetamax, 1e-2])#, 0.])
-    ocp.constraints.idxbx = np.array([0, 1, 2])#, 3])
-    ocp.constraints.lbx_e = np.array([thetamax, 0., 0.])#, 0.])
-    ocp.constraints.ubx_e = np.array([thetamax, 0., 1e-2])#, 0.])
-    ocp.constraints.idxbx_e = np.array([0, 1, 2])#, 3])
-    ocp.constraints.lbx_0 = np.array([thetamin, -dthetamax, 0.])#, 0.])
-    ocp.constraints.ubx_0 = np.array([thetamin, dthetamax, 1e-2])#, 0.])
-    ocp.constraints.idxbx_0 = np.array([0, 1, 2])#, 3])
+    ocp.constraints.lbx = np.array([thetamin, -dthetamax])
+    ocp.constraints.ubx = np.array([thetamax, dthetamax])
+    ocp.constraints.idxbx = np.array([0, 1])
+    ocp.constraints.lbx_e = np.array([thetamax, 0.])
+    ocp.constraints.ubx_e = np.array([thetamax, 0.])
+    ocp.constraints.idxbx_e = np.array([0, 1])
+    ocp.constraints.lbx_0 = np.array([thetamin, -dthetamax])
+    ocp.constraints.ubx_0 = np.array([thetamin, dthetamax])
+    ocp.constraints.idxbx_0 = np.array([0, 1])
 
     # options
     ocp.solver_options.nlp_solver_type = 'SQP'
     ocp.solver_options.hessian_approx = 'EXACT'
     ocp.solver_options.exact_hess_constr = 0
+    ocp.solver_options.exact_hess_cost = 0
     ocp.solver_options.exact_hess_dyn = 0
     ocp.solver_options.tol = 1e-6
-    ocp.solver_options.qp_tol = 1e-6
     ocp.solver_options.qp_solver_iter_max = 100
     ocp.solver_options.nlp_solver_max_iter = 1000
     ocp.solver_options.globalization = "MERIT_BACKTRACKING"
@@ -112,21 +114,33 @@ if __name__ == "__main__":
 
     ocp_solver.reset()
 
-    for i, tau in enumerate(np.linspace(0, 1, N+1)):
-        x_guess = np.array([(1-tau)*thetamin + tau*thetamax, dthetamax, 1e-2])#, 0.])
+    gr = np.load("goodres.npy")
+
+    x_guess = np.array([thetamax, dthetamax])
+
+    for i, tau in enumerate(np.linspace(0, 1, N)):
+        # x_guess = np.array([(1-tau)*thetamin + tau*thetamax, dthetamax])
         # x_guess = (1-tau)*np.array([thetamin, dthetamax]) + tau*np.array([thetamax, 0.])
         ocp_solver.set(i, 'x', x_guess)
-        ocp_solver.set(i, 'p', np.array([-1.]))
+        #ocp_solver.set(i, 'u', np.array([-tau*Fmax]))
+        #ocp_solver.set(i, 'p', np.array([-1.]))
 
     status = ocp_solver.solve()
     ocp_solver.print_statistics()
+    print(ocp_solver.get_cost())
 
     if status == 0:
         for f in range(N+1):
             current_val = ocp_solver.get(f, "x")
-            print(current_val[2])
             X_save = np.append(X_save, [[current_val[0], current_val[1], 1]], axis = 0)
             X_save = np.append(X_save, [[current_val[0], current_val[1] + eps, 0]], axis = 0)
+
+    ocp_solver.reset()
+
+    for i in range(N+1):
+        ocp_solver.set(i, 'x', gr[N+1 + i,:2])
+
+    print(ocp_solver.get_cost())
 
     del ocp, ocp_solver
 
@@ -136,72 +150,70 @@ if __name__ == "__main__":
     m = 0.5  # mass of the ball [kg]
     g = 9.81  # gravity constant [m/s^2]
     d = 0.3  # length of the rod [m]
+    b = 0.01  # damping
 
     # states
     theta = SX.sym("theta")
     dtheta = SX.sym("dtheta")
-    dt = SX.sym('dt')
-    ddt = SX.sym('ddt')
-    x = vertcat(theta, dtheta, dt, ddt)
+    x = vertcat(theta, dtheta)
 
     # controls
     F = SX.sym("F")
-    #dt = SX.sym('dt')
     u = vertcat(F)
 
+    # xdot
+    theta_dot = SX.sym("theta_dot")
+    dtheta_dot = SX.sym("dtheta_dot")
+    xdot = vertcat(theta_dot, dtheta_dot)
+
     # parameters
-    weight = SX.sym("weight") 
-    p = vertcat(weight)
+    # weight = SX.sym("weight") 
+    # p = vertcat(weight)
 
     # dynamics
-    f_expl = vertcat(dt*dtheta, dt*(m * g * d * sin(theta) + F - b * dtheta) / (d * d * m), ddt, 0.)
+    f_expl = vertcat(dtheta, (m * g * d * sin(theta) + F - b * dtheta) / (d * d * m))
+    f_impl = xdot - f_expl
 
     model = AcadosModel()
 
     model.f_expl_expr = f_expl
+    model.f_impl_expr = f_impl
+    model.xdot = xdot
     model.x = x
     model.u = u
-    model.p = p
+    #model.p = p
     model.name = "pendulum_time_opt"
 
     # create ocp object to formulate the OCP
     ocp = AcadosOcp()
 
-    # set dimensions
-    N = 100
-    ocp.dims.N = N
+    # times
+    Tf = 1.
+    Tf = Tf
+    N = int(100 * Tf)
+
+    # prediction horizon
+    ocp.solver_options.tf = Tf
+
+    # dimensions
     nx = model.x.size()[0]
     nu = model.u.size()[0]
     ny = nx + nu
     ny_e = nx
 
+    ocp.dims.N = N
+
     # ocp model
     ocp.model = model
 
-    # set prediction horizon
-    ocp.solver_options.tf = N
-
     # set cost
-    # ocp.cost.W_0 = 2 * np.diag([0., 1., 0.])
-    # ocp.cost.W = 2 * np.diag([0., 1., 0.])
-    # ocp.cost.W_e = 2 * np.diag([0., 0.])
-
-    # ocp.cost.cost_type = "LINEAR_LS"
-    # ocp.cost.cost_type_e = "LINEAR_LS"
-
-    # ocp.cost.Vx = np.zeros((ny, nx))
-    # ocp.cost.Vx[:nx, :nx] = np.eye(nx)
-    # ocp.cost.Vu = np.zeros((ny, nu))
-    # ocp.cost.Vu[2, 0] = 1.0
-    # ocp.cost.Vx_e = np.eye(nx)
-
     ocp.cost.cost_type = 'EXTERNAL'
     ocp.cost.cost_type_e = 'EXTERNAL'
 
-    ocp.model.cost_expr_ext_cost_0 = dt + weight * dtheta
-    ocp.model.cost_expr_ext_cost = dt + weight * dtheta
+    ocp.model.cost_expr_ext_cost_0 = dtheta # weight * x[1]
+    ocp.model.cost_expr_ext_cost = dtheta # weight * x[1]
     ocp.model.cost_expr_ext_cost_e = 0
-    ocp.parameter_values = np.array([1.])
+    #ocp.parameter_values = np.array([1.])
 
     # set constraints
     Fmax = 3
@@ -212,15 +224,15 @@ if __name__ == "__main__":
     ocp.constraints.lbu = np.array([-Fmax])
     ocp.constraints.ubu = np.array([+Fmax])
     ocp.constraints.idxbu = np.array([0])
-    ocp.constraints.lbx = np.array([thetamin, -dthetamax, 0., 0.])
-    ocp.constraints.ubx = np.array([thetamax, dthetamax, 1e-2, 0.])
-    ocp.constraints.idxbx = np.array([0, 1, 2, 3])
-    ocp.constraints.lbx_e = np.array([thetamin, 0., 0., 0.])
-    ocp.constraints.ubx_e = np.array([thetamin, 0., 1e-2, 0.])
-    ocp.constraints.idxbx_e = np.array([0, 1, 2, 3])
-    ocp.constraints.lbx_0 = np.array([thetamax, -dthetamax, 0., 0.])
-    ocp.constraints.ubx_0 = np.array([thetamax, dthetamax, 1e-2, 0.])
-    ocp.constraints.idxbx_0 = np.array([0, 1, 2, 3])
+    ocp.constraints.lbx = np.array([thetamin, -dthetamax])
+    ocp.constraints.ubx = np.array([thetamax, dthetamax])
+    ocp.constraints.idxbx = np.array([0, 1])
+    ocp.constraints.lbx_e = np.array([thetamin, 0.])
+    ocp.constraints.ubx_e = np.array([thetamin, 0.])
+    ocp.constraints.idxbx_e = np.array([0, 1])
+    ocp.constraints.lbx_0 = np.array([thetamax, -dthetamax])
+    ocp.constraints.ubx_0 = np.array([thetamax, dthetamax])
+    ocp.constraints.idxbx_0 = np.array([0, 1])
 
     # options
     ocp.solver_options.nlp_solver_type = 'SQP'
@@ -228,7 +240,6 @@ if __name__ == "__main__":
     ocp.solver_options.exact_hess_constr = 0
     ocp.solver_options.exact_hess_dyn = 0
     ocp.solver_options.tol = 1e-6
-    ocp.solver_options.qp_tol = 1e-6
     ocp.solver_options.qp_solver_iter_max = 100
     ocp.solver_options.nlp_solver_max_iter = 1000
     ocp.solver_options.globalization = "MERIT_BACKTRACKING"
@@ -243,20 +254,30 @@ if __name__ == "__main__":
 
     ocp_solver.reset()
 
+    x_guess = np.array([thetamin, -dthetamax])
+
     for i, tau in enumerate(np.linspace(0, 1, N)):
-        x_guess = np.array([tau*thetamin + (1-tau)*thetamax, -dthetamax, 1e-2, 0.])
+        # x_guess = np.array([tau*thetamin + (1-tau)*thetamax, -dthetamax])
         # x_guess = (1-tau)*np.array([thetamax, -dthetamax]) + tau*np.array([thetamin, 0.])
         ocp_solver.set(i, 'x', x_guess)
+        #ocp_solver.set(i, 'u', np.array([0.]))
 
     status = ocp_solver.solve()
     ocp_solver.print_statistics()
+    print(ocp_solver.get_cost())
 
     if status == 0:
         for f in range(N+1):
             current_val = ocp_solver.get(f, "x")
-            print(current_val[2])
             X_save = np.append(X_save, [[current_val[0], current_val[1], 1]], axis = 0)
             X_save = np.append(X_save, [[current_val[0], current_val[1] - eps, 0]], axis = 0)
+
+    ocp_solver.reset()
+
+    for i in range(N+1):
+        ocp_solver.set(i, 'x', gr[i,:2])
+
+    print(ocp_solver.get_cost())
 
 
     clf = svm.SVC(C=1e6, kernel='rbf')

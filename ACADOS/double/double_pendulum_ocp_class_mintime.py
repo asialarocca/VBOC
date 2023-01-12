@@ -25,25 +25,21 @@ class OCPdoublependulumR:
         theta2 = SX.sym("theta2")
         dtheta1 = SX.sym("dtheta1")
         dtheta2 = SX.sym("dtheta2")
-        self.x = vertcat(theta1, theta2, dtheta1, dtheta2)
+        dt = SX.sym('dt')
+        self.x = vertcat(theta1, theta2, dtheta1, dtheta2, dt)
 
         # controls
         C1 = SX.sym("C1")
         C2 = SX.sym("C2")
         u = vertcat(C1, C2)
 
-        # xdot
-        theta1_dot = SX.sym("theta1_dot")
-        theta2_dot = SX.sym("theta1_dot")
-        dtheta1_dot = SX.sym("dtheta2_dot")
-        dtheta2_dot = SX.sym("dtheta2_dot")
-        xdot = vertcat(theta1_dot, theta2_dot, dtheta1_dot, dtheta2_dot)
-
         # parameters
-        p = []
+        w1 = SX.sym("w1") 
+        w2 = SX.sym("w2") 
+        p = vertcat(w1, w2)
 
         # dynamics
-        f_expl = vertcat(
+        f_expl = dt*vertcat(
             dtheta1,
             dtheta2,
             (
@@ -93,16 +89,13 @@ class OCPdoublependulumR:
             / self.l1
             / self.m2
             / (self.m2 * cos(-2 * theta2 + 2 * theta1) - 2 * self.m1 - self.m2),
+            0.
         )
-
-        f_impl = xdot - f_expl
 
         self.model = AcadosModel()
 
-        self.model.f_impl_expr = f_impl
         self.model.f_expl_expr = f_expl
         self.model.x = self.x
-        self.model.xdot = xdot
         self.model.u = u
         self.model.p = p
         self.model.name = model_name
@@ -112,31 +105,27 @@ class OCPdoublependulumR:
         # -------------------------------------------------
         self.ocp = AcadosOcp()
 
-        # dimensions
-        self.Tf = 1.
-        self.ocp.solver_options.tf = self.Tf  # prediction horizon
-
-        self.N = int(100 * self.Tf)
+        # set dimensions
+        self.N = 100
         self.ocp.dims.N = self.N
-
+        self.ocp.solver_options.tf = self.N
         self.nx = self.model.x.size()[0]
-        self.nu = self.model.u.size()[0]
-        ny = self.nx + self.nu
+        nu = self.model.u.size()[0]
+        ny = self.nx + nu
         ny_e = self.nx
 
+        # ocp model
+        self.ocp.model = self.model
+
         # cost
-        self.ocp.cost.W_0 = 2 * np.diag([0., 0., 0., 0., 0., 0.]) 
-        self.ocp.cost.W = 2 * np.diag([0., 0., 0., 0., 0., 0.]) 
-        self.ocp.cost.W_e = 2 * np.diag([0., 0., 0., 0.])
+        self.ocp.cost.cost_type_0 = 'EXTERNAL'
+        self.ocp.cost.cost_type = 'EXTERNAL'
+        self.ocp.cost.cost_type_e = 'EXTERNAL'
 
-        self.ocp.cost.cost_type = "LINEAR_LS"
-        self.ocp.cost.cost_type_e = "LINEAR_LS"
-
-        self.ocp.cost.Vx = np.zeros((ny, self.nx))
-        self.ocp.cost.Vx[: self.nx, : self.nx] = np.eye(self.nx)
-        self.ocp.cost.Vu = np.zeros((ny, self.nu))
-        self.ocp.cost.Vu[self.nx:, :self.nu] = np.eye(self.nu)
-        self.ocp.cost.Vx_e = np.eye(self.nx)
+        self.ocp.model.cost_expr_ext_cost_0 = dt + w1 * dtheta1 + w2 * dtheta2 
+        self.ocp.model.cost_expr_ext_cost = dt + w1 * dtheta1 + w2 * dtheta2 
+        self.ocp.model.cost_expr_ext_cost_e = 0.
+        self.ocp.parameter_values = np.array([0., 0.])
 
         # set constraints
         self.Cmax = 10
@@ -148,39 +137,38 @@ class OCPdoublependulumR:
         self.ocp.constraints.ubu = np.array([self.Cmax, self.Cmax])
         self.ocp.constraints.idxbu = np.array([0, 1])
         self.ocp.constraints.lbx = np.array(
-            [self.thetamin, self.thetamin, -self.dthetamax, -self.dthetamax]
+            [self.thetamin, self.thetamin, -self.dthetamax, -self.dthetamax, 0.]
         )
         self.ocp.constraints.ubx = np.array(
-            [self.thetamax, self.thetamax, self.dthetamax, self.dthetamax]
+            [self.thetamax, self.thetamax, self.dthetamax, self.dthetamax, 1e-2]
         )
-        self.ocp.constraints.idxbx = np.array([0, 1, 2, 3])
+        self.ocp.constraints.idxbx = np.array([0, 1, 2, 3, 4])
         self.ocp.constraints.lbx_e = np.array(
-            [self.thetamin, self.thetamin, -self.dthetamax, -self.dthetamax]
+            [self.thetamin, self.thetamin, -self.dthetamax, -self.dthetamax, 0.]
         ) # not necessary
         self.ocp.constraints.ubx_e = np.array(
-            [self.thetamax, self.thetamax, self.dthetamax, self.dthetamax]
+            [self.thetamax, self.thetamax, self.dthetamax, self.dthetamax, 1e-2]
         ) # not necessary
-        self.ocp.constraints.idxbx_e = np.array([0, 1, 2, 3])
-        self.ocp.constraints.lbx_0 = np.array([self.thetamin, self.thetamin, -self.dthetamax, -self.dthetamax]) # not necessary
-        self.ocp.constraints.ubx_0 = np.array([self.thetamax, self.thetamax, self.dthetamax, self.dthetamax]) # not necessary
-        self.ocp.constraints.idxbx_0 = np.array([0, 1, 2, 3])
-
-        # reference
-        self.ocp.cost.yref_0 = np.zeros((ny,))  
-        self.ocp.cost.yref = np.zeros((ny,))  
-        self.ocp.cost.yref_e = np.zeros((ny_e,))
+        self.ocp.constraints.idxbx_e = np.array([0, 1, 2, 3, 4])
+        self.ocp.constraints.lbx_0 = np.array([self.thetamin, self.thetamin, -self.dthetamax, -self.dthetamax, 0.]) # not necessary
+        self.ocp.constraints.ubx_0 = np.array([self.thetamax, self.thetamax, self.dthetamax, self.dthetamax, 1e-2]) # not necessary
+        self.ocp.constraints.idxbx_0 = np.array([0, 1, 2, 3, 4])
 
         # -------------------------------------------------
 
         self.ocp.solver_options.nlp_solver_type = "SQP"
-        self.ocp.solver_options.tol = 1e-6
+        self.ocp.solver_options.hessian_approx = 'EXACT'
+        # self.ocp.solver_options.exact_hess_constr = 0
+        # self.ocp.solver_options.exact_hess_dyn = 0
+        self.ocp.solver_options.tol = 1e-4
         self.ocp.solver_options.qp_tol = 1e-6
-        self.ocp.solver_options.qp_solver_iter_max = 10000
+        self.ocp.solver_options.qp_solver_iter_max = 1000
         self.ocp.solver_options.nlp_solver_max_iter = 10000
         self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"
         self.ocp.solver_options.alpha_reduction = 0.3
         self.ocp.solver_options.alpha_min = 1e-2
         self.ocp.solver_options.levenberg_marquardt = 1e-2
+        # self.ocp.solver_options.sim_method_num_steps = 4
         # self.ocp.solver_options.regularize_method = "PROJECT"
         # self.ocp.solver_options.nlp_solver_step_length = 0.01
 
@@ -189,9 +177,6 @@ class OCPdoublependulumRINIT(OCPdoublependulumR):
 
         # inherit initialization
         super().__init__()
-
-        # ocp model
-        self.ocp.model = self.model
 
         # solver
         self.ocp_solver = AcadosOcpSolver(self.ocp, json_file="acados_ocp.json")

@@ -31,7 +31,7 @@ with cProfile.Profile() as pr:
 
     eps = 0.1
     multip = 0.
-    num = 100
+    num = 10
     
     X_save = np.array([[(q_min+q_max)/2,(q_min+q_max)/2,0.,0., 1]])
 
