@@ -26,8 +26,8 @@ if __name__ == "__main__":
     u = vertcat(F)
 
     # parameters
-    # weight = SX.sym("weight") 
-    # p = vertcat(weight)
+    weight = SX.sym("weight") 
+    p = vertcat(weight)
 
     # dynamics
     f_expl = vertcat(dtheta, (m * g * d * sin(theta) + F - b * dtheta) / (d * d * m))
@@ -63,13 +63,14 @@ if __name__ == "__main__":
     ocp.model = model
 
     # set cost
+    ocp.cost.cost_type_0 = 'EXTERNAL'
     ocp.cost.cost_type = 'EXTERNAL'
     ocp.cost.cost_type_e = 'EXTERNAL'
 
-    ocp.model.cost_expr_ext_cost_0 = - dtheta # weight * x[1]
-    ocp.model.cost_expr_ext_cost = - dtheta # weight * x[1]
-    ocp.model.cost_expr_ext_cost_e = 0
-    #ocp.parameter_values = np.array([1.])
+    ocp.model.cost_expr_ext_cost_0 = weight * dtheta 
+    ocp.model.cost_expr_ext_cost = 0.
+    ocp.model.cost_expr_ext_cost_e = 0.
+    ocp.parameter_values = np.array([-1.])
 
     # set constraints
     Fmax = 3
@@ -95,7 +96,6 @@ if __name__ == "__main__":
     ocp.solver_options.hessian_approx = 'EXACT'
     ocp.solver_options.exact_hess_constr = 0
     ocp.solver_options.exact_hess_cost = 0
-    ocp.solver_options.exact_hess_dyn = 0
     ocp.solver_options.tol = 1e-6
     ocp.solver_options.qp_solver_iter_max = 100
     ocp.solver_options.nlp_solver_max_iter = 1000
@@ -114,20 +114,15 @@ if __name__ == "__main__":
 
     ocp_solver.reset()
 
-    gr = np.load("goodres.npy")
-
     x_guess = np.array([thetamax, dthetamax])
 
     for i, tau in enumerate(np.linspace(0, 1, N)):
-        # x_guess = np.array([(1-tau)*thetamin + tau*thetamax, dthetamax])
+        x_guess = np.array([(1-tau)*thetamin + tau*thetamax, dthetamax])
         # x_guess = (1-tau)*np.array([thetamin, dthetamax]) + tau*np.array([thetamax, 0.])
         ocp_solver.set(i, 'x', x_guess)
-        #ocp_solver.set(i, 'u', np.array([-tau*Fmax]))
-        #ocp_solver.set(i, 'p', np.array([-1.]))
 
     status = ocp_solver.solve()
     ocp_solver.print_statistics()
-    print(ocp_solver.get_cost())
 
     if status == 0:
         for f in range(N+1):
