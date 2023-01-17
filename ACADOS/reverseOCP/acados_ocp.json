@@ -1,7 +1,7 @@
 {
     "acados_include_path": "/home/asialarocca/acados/include",
     "acados_lib_path": "/home/asialarocca/acados/lib",
-    "code_export_directory": "/home/asialarocca/Documents/tesi/ACADOS/reverse OCP/c_generated_code",
+    "code_export_directory": "/home/asialarocca/Documents/tesi/ACADOS/reverseOCP/c_generated_code",
     "constraints": {
         "C": [],
         "C_e": [],
@@ -13,15 +13,18 @@
         ],
         "idxbx": [
             0,
-            1
+            1,
+            2
         ],
         "idxbx_0": [
             0,
-            1
+            1,
+            2
         ],
         "idxbx_e": [
             0,
-            1
+            1,
+            2
         ],
         "idxbxe_0": [],
         "idxsbu": [],
@@ -38,15 +41,18 @@
         ],
         "lbx": [
             0.0,
-            0.0
+            -10.0,
+            1.0
         ],
         "lbx_0": [
             0.0,
-            0.0
+            -10.0,
+            1.0
         ],
         "lbx_e": [
-            1.5707963267948966,
-            0.0
+            0.0,
+            -10.0,
+            1.0
         ],
         "lg": [],
         "lg_e": [],
@@ -68,15 +74,18 @@
         ],
         "ubx": [
             1.5707963267948966,
-            10.0
+            10.0,
+            1.0
         ],
         "ubx_0": [
             1.5707963267948966,
-            10.0
+            10.0,
+            1.0
         ],
         "ubx_e": [
             1.5707963267948966,
-            0.0
+            10.0,
+            1.0
         ],
         "ug": [],
         "ug_e": [],
@@ -114,7 +123,7 @@
         "cost_ext_fun_type_e": "casadi",
         "cost_type": "EXTERNAL",
         "cost_type_0": "EXTERNAL",
-        "cost_type_e": "EXTERNAL",
+        "cost_type_e": "LINEAR_LS",
         "yref": [],
         "yref_0": null,
         "yref_e": [],
@@ -130,15 +139,15 @@
     "dims": {
         "N": 100,
         "nbu": 1,
-        "nbx": 2,
-        "nbx_0": 2,
-        "nbx_e": 2,
+        "nbx": 3,
+        "nbx_0": 3,
+        "nbx_e": 3,
         "nbxe_0": 0,
         "ng": 0,
         "ng_e": 0,
         "nh": 0,
         "nh_e": 0,
-        "np": 2,
+        "np": 3,
         "nphi": 0,
         "nphi_e": 0,
         "nr": 0,
@@ -155,7 +164,7 @@
         "nsphi": 0,
         "nsphi_e": 0,
         "nu": 1,
-        "nx": 2,
+        "nx": 3,
         "ny": 0,
         "ny_0": 0,
         "ny_e": 0,
@@ -174,12 +183,12 @@
         "cost_conl_custom_outer_hess": null,
         "cost_conl_custom_outer_hess_0": null,
         "cost_conl_custom_outer_hess_e": null,
-        "cost_expr_ext_cost": 0.0,
+        "cost_expr_ext_cost": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaegfaaaaaaaaaaaaaaabaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaegdaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaacaaaaaaahhehegpcaaaaaaaaaaaaaacaaaaaaaegeh",
         "cost_expr_ext_cost_0": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaegfaaaaaaaaaaaaaaabaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaegbaaaaaaaaaaaaaaaegdaaaaaaaaaaaaaaaegeaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaacaaaaaaahhbdegmcaaaaaaaaaaaaaachibnceeeflpbcjppdegpcaaaaaaaaaaaaaafaaaaaaaehigfgehbgegdaaaaaaaaaaaaaaaegeaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaacaaaaaaahhcdegmcaaaaaaaaaaaaaajgkaaaaaaaegpcaaaaaaaaaaaaaagaaaaaaaegehigfgehbg",
         "cost_expr_ext_cost_custom_hess": null,
         "cost_expr_ext_cost_custom_hess_0": null,
         "cost_expr_ext_cost_custom_hess_e": null,
-        "cost_expr_ext_cost_e": 0.0,
+        "cost_expr_ext_cost_e": null,
         "cost_psi_expr": null,
         "cost_psi_expr_0": null,
         "cost_psi_expr_e": null,
@@ -195,22 +204,23 @@
         "dyn_disc_fun_jac_hess": null,
         "dyn_ext_fun_type": "casadi",
         "dyn_generic_source": null,
-        "f_expl_expr": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaeggaaaaaaaaaaaaaaacaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaacaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaacaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaagaaaaaaaegehigfgehbgegeaaaaaaaaaaaaaaaegcaaaaaaaaaaaaaaaegbaaaaaaaaaaaaaaaegdaaaaaaaaaaaaaaaegmcaaaaaaaaaaaaaachfcgabifjdelihppdegnaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaafaaaaaaaehigfgehbgegpcaaaaaaaaaaaaaabaaaaaaageegdaaaaaaaaaaaaaaaegmcaaaaaaaaaaaaaachlhebokhebokheipdchbaaaaaaaaaaaaaaaegmcaaaaaaaaaaaaaachkahndkahndkahkpd",
+        "f_expl_expr": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaeghaaaaaaaaaaaaaaadaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaadaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaacaaaaaaaaaaaaaaadaaaaaaaaaaaaaaaegdaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaacaaaaaaaegehegpcaaaaaaaaaaaaaagaaaaaaaegehigfgehbgegdaaaaaaaaaaaaaaachbaaaaaaaaaaaaaaaegeaaaaaaaaaaaaaaaegcaaaaaaaaaaaaaaaegbaaaaaaaaaaaaaaaegdaaaaaaaaaaaaaaaegmcaaaaaaaaaaaaaachfcgabifjdelihppdegnaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaafaaaaaaaehigfgehbgegpcaaaaaaaaaaaaaabaaaaaaageegdaaaaaaaaaaaaaaaegmcaaaaaaaaaaaaaachlhebokhebokheipdchcaaaaaaaaaaaaaaaegmcaaaaaaaaaaaaaachkahndkahndkahkpdegmcaaaaaaaaaaaaaaad",
         "f_impl_expr": null,
         "gnsf": {
             "nontrivial_f_LO": 1,
             "purely_linear": 0
         },
-        "name": "pendulum_time_opt",
-        "p": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaeggaaaaaaaaaaaaaaacaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaacaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaacaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaacaaaaaaahhbdegpcaaaaaaaaaaaaaacaaaaaaahhcd",
+        "name": "pendulum_ode",
+        "p": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaeghaaaaaaaaaaaaaaadaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaadaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaacaaaaaaaaaaaaaaadaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaacaaaaaaahhbdegpcaaaaaaaaaaaaaacaaaaaaahhcdegpcaaaaaaaaaaaaaacaaaaaaahheh",
         "u": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaegfaaaaaaaaaaaaaaabaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaabaaaaaaage",
-        "x": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaeggaaaaaaaaaaaaaaacaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaacaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaacaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaafaaaaaaaehigfgehbgegpcaaaaaaaaaaaaaagaaaaaaaegehigfgehbg",
+        "x": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaeghaaaaaaaaaaaaaaadaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaadaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaacaaaaaaaaaaaaaaadaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaafaaaaaaaehigfgehbgegpcaaaaaaaaaaaaaagaaaaaaaegehigfgehbgegpcaaaaaaaaaaaaaacaaaaaaaegeh",
         "xdot": null,
         "z": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaegdaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "parameter_values": [
-        -1.0,
-        -10.0
+        0.0,
+        0.0,
+        0.0
     ],
     "problem_class": "OCP",
     "shared_lib_ext": ".so",
@@ -224,7 +234,7 @@
         "eps_sufficient_descent": 0.0001,
         "exact_hess_constr": 0,
         "exact_hess_cost": 0,
-        "exact_hess_dyn": 1,
+        "exact_hess_dyn": 0,
         "ext_cost_num_hess": 0,
         "ext_fun_compile_flags": "-O2",
         "full_step_dual": 0,
@@ -234,7 +244,7 @@
         "hpipm_mode": "BALANCE",
         "initialize_t_slacks": 0,
         "integrator_type": "ERK",
-        "levenberg_marquardt": 0.01,
+        "levenberg_marquardt": 1e-06,
         "line_search_use_sufficient_descent": 0,
         "model_external_shared_lib_dir": null,
         "model_external_shared_lib_name": null,

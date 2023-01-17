@@ -68,14 +68,27 @@ int main()
     double x_current[NX];
     x_current[0] = 0.0;
     x_current[1] = 0.0;
+    x_current[2] = 0.0;
+    x_current[3] = 0.0;
 
   
-    printf("main_sim: initial state not defined, should be in lbx_0, using zero vector.");
+    x_current[0] = 1.5707963267948966;
+    x_current[1] = -10;
+    x_current[2] = 0;
+    x_current[3] = 0;
+    
+  
 
 
     // initial value for control input
     double u0[NU];
     u0[0] = 0.0;
+    // set parameters
+    double p[NP];
+    p[0] = 1;
+
+    pendulum_time_opt_acados_sim_update_params(capsule, p, NP);
+  
 
     int n_sim_steps = 3;
     // solve ocp in loop

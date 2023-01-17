@@ -1,7 +1,7 @@
 {
     "acados_include_path": "/home/asialarocca/acados/include",
     "acados_lib_path": "/home/asialarocca/acados/lib",
-    "code_export_directory": "/home/asialarocca/Documents/tesi/ACADOS/reverse OCP/c_generated_code",
+    "code_export_directory": "/home/asialarocca/Documents/tesi/ACADOS/reverseOCP/c_generated_code",
     "cython_include_dirs": [
         "/home/asialarocca/.local/lib/python3.10/site-packages/numpy/core/include",
         "/usr/include/python3.10"
@@ -24,12 +24,12 @@
         "cost_conl_custom_outer_hess": null,
         "cost_conl_custom_outer_hess_0": null,
         "cost_conl_custom_outer_hess_e": null,
-        "cost_expr_ext_cost": 0.0,
+        "cost_expr_ext_cost": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaegfaaaaaaaaaaaaaaabaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaegdaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaacaaaaaaahhehegpcaaaaaaaaaaaaaacaaaaaaaegeh",
         "cost_expr_ext_cost_0": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaegfaaaaaaaaaaaaaaabaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaegbaaaaaaaaaaaaaaaegdaaaaaaaaaaaaaaaegeaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaacaaaaaaahhbdegmcaaaaaaaaaaaaaachibnceeeflpbcjppdegpcaaaaaaaaaaaaaafaaaaaaaehigfgehbgegdaaaaaaaaaaaaaaaegeaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaacaaaaaaahhcdegmcaaaaaaaaaaaaaajgkaaaaaaaegpcaaaaaaaaaaaaaagaaaaaaaegehigfgehbg",
         "cost_expr_ext_cost_custom_hess": null,
         "cost_expr_ext_cost_custom_hess_0": null,
         "cost_expr_ext_cost_custom_hess_e": null,
-        "cost_expr_ext_cost_e": 0.0,
+        "cost_expr_ext_cost_e": null,
         "cost_psi_expr": null,
         "cost_psi_expr_0": null,
         "cost_psi_expr_e": null,
@@ -51,7 +51,7 @@
             "nontrivial_f_LO": 1,
             "purely_linear": 0
         },
-        "name": "pendulum_time_opt",
+        "name": "pendulum_ode",
         "p": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaegdaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "u": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaegfaaaaaaaaaaaaaaabaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaabaaaaaaage",
         "x": "jhpnnagiieahaaaadaaaaaaaaaaaaaaaaaeggaaaaaaaaaaaaaaacaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaacaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaacaaaaaaaaaaaaaaaegpcaaaaaaaaaaaaaafaaaaaaaehigfgehbgegpcaaaaaaaaaaaaaagaaaaaaaegehigfgehbg",

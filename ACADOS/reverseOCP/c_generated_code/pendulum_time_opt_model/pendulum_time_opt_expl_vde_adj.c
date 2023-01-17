@@ -28,7 +28,6 @@ extern "C" {
 #define casadi_s0 CASADI_PREFIX(s0)
 #define casadi_s1 CASADI_PREFIX(s1)
 #define casadi_s2 CASADI_PREFIX(s2)
-#define casadi_s3 CASADI_PREFIX(s3)
 
 /* Symbol visibility in DLLs */
 #ifndef CASADI_SYMBOL_EXPORT
@@ -45,29 +44,44 @@ extern "C" {
   #endif
 #endif
 
-static const casadi_int casadi_s0[6] = {2, 1, 0, 2, 0, 1};
+static const casadi_int casadi_s0[8] = {4, 1, 0, 4, 0, 1, 2, 3};
 static const casadi_int casadi_s1[5] = {1, 1, 0, 1, 0};
-static const casadi_int casadi_s2[3] = {0, 0, 0};
-static const casadi_int casadi_s3[7] = {3, 1, 0, 3, 0, 1, 2};
+static const casadi_int casadi_s2[9] = {5, 1, 0, 5, 0, 1, 2, 3, 4};
 
-/* pendulum_time_opt_expl_vde_adj:(i0[2],i1[2],i2,i3[])->(o0[3]) */
+/* pendulum_time_opt_expl_vde_adj:(i0[4],i1[4],i2,i3)->(o0[5]) */
 static int casadi_f0(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem) {
-  casadi_real a0, a1, a2, a3;
+  casadi_real a0, a1, a2, a3, a4, a5, a6, a7;
   a0=arg[0]? arg[0][0] : 0;
-  a0=cos(a0);
-  a1=1.4715000000000000e+00;
-  a2=2.2222222222222221e+01;
-  a3=arg[1]? arg[1][1] : 0;
-  a2=(a2*a3);
-  a1=(a1*a2);
+  a1=cos(a0);
+  a2=1.4715000000000000e+00;
+  a3=arg[0]? arg[0][2] : 0;
+  a4=2.2222222222222221e+01;
+  a5=arg[1]? arg[1][1] : 0;
+  a4=(a4*a5);
+  a5=(a3*a4);
+  a6=(a2*a5);
+  a1=(a1*a6);
+  if (res[0]!=0) res[0][0]=a1;
+  a1=arg[1]? arg[1][0] : 0;
+  a3=(a3*a1);
+  a6=1.0000000000000000e-02;
+  a7=(a6*a5);
+  a3=(a3-a7);
+  if (res[0]!=0) res[0][1]=a3;
+  a0=sin(a0);
+  a2=(a2*a0);
+  a0=arg[2]? arg[2][0] : 0;
+  a2=(a2+a0);
+  a0=arg[0]? arg[0][1] : 0;
+  a6=(a6*a0);
+  a2=(a2-a6);
+  a2=(a2*a4);
   a0=(a0*a1);
-  if (res[0]!=0) res[0][0]=a0;
-  a0=arg[1]? arg[1][0] : 0;
-  a1=1.0000000000000000e-02;
-  a1=(a1*a2);
-  a0=(a0-a1);
-  if (res[0]!=0) res[0][1]=a0;
+  a2=(a2+a0);
   if (res[0]!=0) res[0][2]=a2;
+  a2=arg[1]? arg[1][2] : 0;
+  if (res[0]!=0) res[0][3]=a2;
+  if (res[0]!=0) res[0][4]=a5;
   return 0;
 }
 
@@ -131,14 +145,14 @@ CASADI_SYMBOL_EXPORT const casadi_int* pendulum_time_opt_expl_vde_adj_sparsity_i
     case 0: return casadi_s0;
     case 1: return casadi_s0;
     case 2: return casadi_s1;
-    case 3: return casadi_s2;
+    case 3: return casadi_s1;
     default: return 0;
   }
 }
 
 CASADI_SYMBOL_EXPORT const casadi_int* pendulum_time_opt_expl_vde_adj_sparsity_out(casadi_int i) {
   switch (i) {
-    case 0: return casadi_s3;
+    case 0: return casadi_s2;
     default: return 0;
   }
 }

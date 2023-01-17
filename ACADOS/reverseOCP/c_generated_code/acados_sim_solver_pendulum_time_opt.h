@@ -37,10 +37,10 @@
 #include "acados_c/sim_interface.h"
 #include "acados_c/external_function_interface.h"
 
-#define PENDULUM_TIME_OPT_NX     2
+#define PENDULUM_TIME_OPT_NX     4
 #define PENDULUM_TIME_OPT_NZ     0
 #define PENDULUM_TIME_OPT_NU     1
-#define PENDULUM_TIME_OPT_NP     0
+#define PENDULUM_TIME_OPT_NP     1
 
 #ifdef __cplusplus
 extern "C" {

@@ -1,5 +1,4 @@
 import time
-from utils import plot_pendulum
 import scipy.linalg as lin
 import numpy as np
 from acados_template import AcadosOcp, AcadosOcpSolver
@@ -20,12 +19,10 @@ if __name__ == "__main__":
     theta = SX.sym("theta")
     dtheta = SX.sym("dtheta")
     dt = SX.sym('dt')
-    #ddt = SX.sym('ddt')
-    x = vertcat(theta, dtheta, dt)#, ddt)
+    x = vertcat(theta, dtheta, dt)
 
     # controls
     F = SX.sym("F")
-    #dt = SX.sym('dt')
     u = vertcat(F)
 
     # parameters
@@ -33,7 +30,7 @@ if __name__ == "__main__":
     p = vertcat(weight)
 
     # dynamics
-    f_expl = vertcat(dt*dtheta, dt*(m * g * d * sin(theta) + F - b * dtheta) / (d * d * m), 0.)#, 0.)
+    f_expl = dt*vertcat(dtheta, (m * g * d * sin(theta) + F - b * dtheta) / (d * d * m), 0.)
 
     model = AcadosModel()
 
@@ -64,7 +61,7 @@ if __name__ == "__main__":
     ocp.cost.cost_type = 'EXTERNAL'
     ocp.cost.cost_type_e = 'EXTERNAL'
 
-    ocp.model.cost_expr_ext_cost_0 = dt + weight * dtheta
+    ocp.model.cost_expr_ext_cost_0 = 0. # dt + weight * dtheta
     ocp.model.cost_expr_ext_cost = dt + weight * dtheta
     ocp.model.cost_expr_ext_cost_e = 0
     ocp.parameter_values = np.array([0.])
@@ -78,20 +75,21 @@ if __name__ == "__main__":
     ocp.constraints.lbu = np.array([-Fmax])
     ocp.constraints.ubu = np.array([+Fmax])
     ocp.constraints.idxbu = np.array([0])
-    ocp.constraints.lbx = np.array([thetamin, -dthetamax, 0.])#, 0.])
-    ocp.constraints.ubx = np.array([thetamax, dthetamax, 1e-2])#, 0.])
-    ocp.constraints.idxbx = np.array([0, 1, 2])#, 3])
-    ocp.constraints.lbx_e = np.array([thetamax, 0., 0.])#, 0.])
-    ocp.constraints.ubx_e = np.array([thetamax, 0., 1e-2])#, 0.])
-    ocp.constraints.idxbx_e = np.array([0, 1, 2])#, 3])
-    ocp.constraints.lbx_0 = np.array([thetamin, -dthetamax, 0.])#, 0.])
-    ocp.constraints.ubx_0 = np.array([thetamin, dthetamax, 1e-2])#, 0.])
-    ocp.constraints.idxbx_0 = np.array([0, 1, 2])#, 3])
+    ocp.constraints.lbx = np.array([thetamin, -dthetamax, 0.])
+    ocp.constraints.ubx = np.array([thetamax, dthetamax, 1e-2])
+    ocp.constraints.idxbx = np.array([0, 1, 2])
+    ocp.constraints.lbx_e = np.array([thetamax, 0., 0.])
+    ocp.constraints.ubx_e = np.array([thetamax, 0., 1e-2])
+    ocp.constraints.idxbx_e = np.array([0, 1, 2])
+    ocp.constraints.lbx_0 = np.array([thetamin, dthetamax, 0.])
+    ocp.constraints.ubx_0 = np.array([thetamin, dthetamax, 1e-2])
+    ocp.constraints.idxbx_0 = np.array([0, 1, 2])
 
     # options
     ocp.solver_options.nlp_solver_type = 'SQP'
     ocp.solver_options.hessian_approx = 'EXACT'
     ocp.solver_options.exact_hess_constr = 0
+    ocp.solver_options.exact_hess_cost = 0
     ocp.solver_options.exact_hess_dyn = 0
     ocp.solver_options.tol = 1e-6
     ocp.solver_options.qp_tol = 1e-6
@@ -113,8 +111,8 @@ if __name__ == "__main__":
     ocp_solver.reset()
 
     for i, tau in enumerate(np.linspace(0, 1, N+1)):
-        x_guess = np.array([(1-tau)*thetamin + tau*thetamax, dthetamax, 1e-2])#, 0.])
-        # x_guess = (1-tau)*np.array([thetamin, dthetamax]) + tau*np.array([thetamax, 0.])
+        # x_guess = np.array([(1-tau)*thetamin + tau*thetamax, dthetamax, 1e-3])#, 0.])
+        x_guess = (1-tau)*np.array([thetamin, dthetamax, 1e-3]) + tau*np.array([thetamax, 0., 1e-3])
         ocp_solver.set(i, 'x', x_guess)
         ocp_solver.set(i, 'p', np.array([-1.]))
 
@@ -124,7 +122,7 @@ if __name__ == "__main__":
     if status == 0:
         for f in range(N+1):
             current_val = ocp_solver.get(f, "x")
-            print(current_val[2])
+            print(current_val[1])
             X_save = np.append(X_save, [[current_val[0], current_val[1], 1]], axis = 0)
             X_save = np.append(X_save, [[current_val[0], current_val[1] + eps, 0]], axis = 0)
 

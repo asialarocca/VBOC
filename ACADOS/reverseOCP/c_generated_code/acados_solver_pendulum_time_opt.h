@@ -39,12 +39,12 @@
 #include "acados_c/ocp_nlp_interface.h"
 #include "acados_c/external_function_interface.h"
 
-#define PENDULUM_TIME_OPT_NX     2
+#define PENDULUM_TIME_OPT_NX     4
 #define PENDULUM_TIME_OPT_NZ     0
 #define PENDULUM_TIME_OPT_NU     1
-#define PENDULUM_TIME_OPT_NP     2
-#define PENDULUM_TIME_OPT_NBX    2
-#define PENDULUM_TIME_OPT_NBX0   2
+#define PENDULUM_TIME_OPT_NP     1
+#define PENDULUM_TIME_OPT_NBX    4
+#define PENDULUM_TIME_OPT_NBX0   4
 #define PENDULUM_TIME_OPT_NBU    1
 #define PENDULUM_TIME_OPT_NSBX   0
 #define PENDULUM_TIME_OPT_NSBU   0
@@ -58,7 +58,7 @@
 #define PENDULUM_TIME_OPT_NS     0
 #define PENDULUM_TIME_OPT_NSN    0
 #define PENDULUM_TIME_OPT_NG     0
-#define PENDULUM_TIME_OPT_NBXN   2
+#define PENDULUM_TIME_OPT_NBXN   4
 #define PENDULUM_TIME_OPT_NGN    0
 #define PENDULUM_TIME_OPT_NY0    0
 #define PENDULUM_TIME_OPT_NY     0

@@ -296,7 +296,7 @@ void pendulum_time_opt_acados_create_3_create_and_set_functions(pendulum_time_op
         capsule->__CAPSULE_FNC__.casadi_sparsity_in = & __MODEL_BASE_FNC__ ## _sparsity_in; \
         capsule->__CAPSULE_FNC__.casadi_sparsity_out = & __MODEL_BASE_FNC__ ## _sparsity_out; \
         capsule->__CAPSULE_FNC__.casadi_work = & __MODEL_BASE_FNC__ ## _work; \
-        external_function_param_casadi_create(&capsule->__CAPSULE_FNC__ , 2); \
+        external_function_param_casadi_create(&capsule->__CAPSULE_FNC__ , 1); \
     }while(false)
 
 
@@ -365,8 +365,7 @@ void pendulum_time_opt_acados_create_4_set_default_parameters(pendulum_time_opt_
     const int N = capsule->nlp_solver_plan->N;
     // initialize parameters to nominal value
     double* p = calloc(NP, sizeof(double));
-    p[0] = -1;
-    p[1] = -10;
+    p[0] = 1;
 
     for (int i = 0; i <= N; i++) {
         pendulum_time_opt_acados_update_params(capsule, i, p, NP);
@@ -397,7 +396,7 @@ void pendulum_time_opt_acados_create_5_set_nlp_in(pendulum_time_opt_solver_capsu
     if (new_time_steps) {
         pendulum_time_opt_acados_update_time_steps(capsule, N, new_time_steps);
     } else {// all time_steps are identical
-        double time_step = 0.01;
+        double time_step = 1;
         for (int i = 0; i < N; i++)
         {
             ocp_nlp_in_set(nlp_config, nlp_dims, nlp_in, i, "Ts", &time_step);
@@ -437,13 +436,18 @@ void pendulum_time_opt_acados_create_5_set_nlp_in(pendulum_time_opt_solver_capsu
     int* idxbx0 = malloc(NBX0 * sizeof(int));
     idxbx0[0] = 0;
     idxbx0[1] = 1;
+    idxbx0[2] = 2;
+    idxbx0[3] = 3;
 
     double* lubx0 = calloc(2*NBX0, sizeof(double));
     double* lbx0 = lubx0;
     double* ubx0 = lubx0 + NBX0;
     // change only the non-zero elements:
+    lbx0[0] = 1.5707963267948966;
     ubx0[0] = 1.5707963267948966;
+    lbx0[1] = -10;
     ubx0[1] = 10;
+    ubx0[2] = 0.01;
 
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "idxbx", idxbx0);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "lbx", lbx0);
@@ -484,12 +488,16 @@ void pendulum_time_opt_acados_create_5_set_nlp_in(pendulum_time_opt_solver_capsu
     
     idxbx[0] = 0;
     idxbx[1] = 1;
+    idxbx[2] = 2;
+    idxbx[3] = 3;
     double* lubx = calloc(2*NBX, sizeof(double));
     double* lbx = lubx;
     double* ubx = lubx + NBX;
     
     ubx[0] = 1.5707963267948966;
+    lbx[1] = -10;
     ubx[1] = 10;
+    ubx[2] = 0.01;
 
     for (int i = 1; i < N; i++)
     {
@@ -514,12 +522,13 @@ void pendulum_time_opt_acados_create_5_set_nlp_in(pendulum_time_opt_solver_capsu
     
     idxbx_e[0] = 0;
     idxbx_e[1] = 1;
+    idxbx_e[2] = 2;
+    idxbx_e[3] = 3;
     double* lubx_e = calloc(2*NBXN, sizeof(double));
     double* lbx_e = lubx_e;
     double* ubx_e = lubx_e + NBXN;
     
-    lbx_e[0] = 1.5707963267948966;
-    ubx_e[0] = 1.5707963267948966;
+    ubx_e[2] = 0.01;
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "idxbx", idxbx_e);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "lbx", lbx_e);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, N, "ubx", ubx_e);
@@ -563,10 +572,10 @@ void pendulum_time_opt_acados_create_6_set_opts(pendulum_time_opt_solver_capsule
     {
         ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "exact_hess", &nlp_solver_exact_hessian);
     }
-    int exact_hess_dyn = 1;
+    int exact_hess_dyn = 0;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "exact_hess_dyn", &exact_hess_dyn);
 
-    int exact_hess_cost = 0;
+    int exact_hess_cost = 1;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "exact_hess_cost", &exact_hess_cost);
 
     int exact_hess_constr = 0;
@@ -658,7 +667,15 @@ void pendulum_time_opt_acados_create_6_set_opts(pendulum_time_opt_solver_capsule
     int qp_solver_iter_max = 100;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_iter_max", &qp_solver_iter_max);
 
-int print_level = 0;
+
+    double qp_solver_tol_stat = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_stat", &qp_solver_tol_stat);
+    double qp_solver_tol_eq = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_eq", &qp_solver_tol_eq);
+    double qp_solver_tol_ineq = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_ineq", &qp_solver_tol_ineq);
+    double qp_solver_tol_comp = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_tol_comp", &qp_solver_tol_comp);int print_level = 0;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "print_level", &print_level);
     int qp_solver_cond_ric_alg = 1;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_cond_ric_alg", &qp_solver_cond_ric_alg);
@@ -692,6 +709,8 @@ void pendulum_time_opt_acados_create_7_set_nlp_out(pendulum_time_opt_solver_caps
 
     // initialize with x0
     
+    x0[0] = 1.5707963267948966;
+    x0[1] = -10;
 
 
     double* u0 = xu0 + NX;
@@ -856,7 +875,7 @@ int pendulum_time_opt_acados_update_params(pendulum_time_opt_solver_capsule* cap
 {
     int solver_status = 0;
 
-    int casadi_np = 2;
+    int casadi_np = 1;
     if (casadi_np != np) {
         printf("acados_update_params: trying to set %i parameters for external functions."
             " External function has %i parameters. Exiting.\n", np, casadi_np);
@@ -910,7 +929,7 @@ int pendulum_time_opt_acados_update_params_sparse(pendulum_time_opt_solver_capsu
 {
     int solver_status = 0;
 
-    int casadi_np = 2;
+    int casadi_np = 1;
     if (casadi_np < n_update) {
         printf("pendulum_time_opt_acados_update_params_sparse: trying to set %d parameters for external functions."
             " External function has %d parameters. Exiting.\n", n_update, casadi_np);

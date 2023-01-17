@@ -33,22 +33,22 @@
 
 cimport acados_sim_solver_common
 
-cdef extern from "acados_sim_solver_pendulum_time_opt.h":
+cdef extern from "acados_sim_solver_pendulum_ode.h":
     ctypedef struct sim_solver_capsule "sim_solver_capsule":
         pass
 
-    sim_solver_capsule * acados_sim_solver_create_capsule "pendulum_time_opt_acados_sim_solver_create_capsule"()
-    int acados_sim_solver_free_capsule "pendulum_time_opt_acados_sim_solver_free_capsule"(sim_solver_capsule *capsule)
+    sim_solver_capsule * acados_sim_solver_create_capsule "pendulum_ode_acados_sim_solver_create_capsule"()
+    int acados_sim_solver_free_capsule "pendulum_ode_acados_sim_solver_free_capsule"(sim_solver_capsule *capsule)
 
-    int acados_sim_create "pendulum_time_opt_acados_sim_create"(sim_solver_capsule * capsule)
-    int acados_sim_solve "pendulum_time_opt_acados_sim_solve"(sim_solver_capsule * capsule)
-    int acados_sim_free "pendulum_time_opt_acados_sim_free"(sim_solver_capsule * capsule)
-    int acados_sim_update_params "pendulum_time_opt_acados_sim_update_params"(sim_solver_capsule * capsule, double *value, int np_)
-    # int acados_sim_update_params_sparse "pendulum_time_opt_acados_sim_update_params_sparse"(sim_solver_capsule * capsule, int stage, int *idx, double *p, int n_update)
+    int acados_sim_create "pendulum_ode_acados_sim_create"(sim_solver_capsule * capsule)
+    int acados_sim_solve "pendulum_ode_acados_sim_solve"(sim_solver_capsule * capsule)
+    int acados_sim_free "pendulum_ode_acados_sim_free"(sim_solver_capsule * capsule)
+    int acados_sim_update_params "pendulum_ode_acados_sim_update_params"(sim_solver_capsule * capsule, double *value, int np_)
+    # int acados_sim_update_params_sparse "pendulum_ode_acados_sim_update_params_sparse"(sim_solver_capsule * capsule, int stage, int *idx, double *p, int n_update)
 
-    acados_sim_solver_common.sim_in *acados_get_sim_in "pendulum_time_opt_acados_get_sim_in"(sim_solver_capsule * capsule)
-    acados_sim_solver_common.sim_out *acados_get_sim_out "pendulum_time_opt_acados_get_sim_out"(sim_solver_capsule * capsule)
-    acados_sim_solver_common.sim_solver *acados_get_sim_solver "pendulum_time_opt_acados_get_sim_solver"(sim_solver_capsule * capsule)
-    acados_sim_solver_common.sim_config *acados_get_sim_config "pendulum_time_opt_acados_get_sim_config"(sim_solver_capsule * capsule)
-    acados_sim_solver_common.sim_opts *acados_get_sim_opts "pendulum_time_opt_acados_get_sim_opts"(sim_solver_capsule * capsule)
-    void *acados_get_sim_dims "pendulum_time_opt_acados_get_sim_dims"(sim_solver_capsule * capsule)
+    acados_sim_solver_common.sim_in *acados_get_sim_in "pendulum_ode_acados_get_sim_in"(sim_solver_capsule * capsule)
+    acados_sim_solver_common.sim_out *acados_get_sim_out "pendulum_ode_acados_get_sim_out"(sim_solver_capsule * capsule)
+    acados_sim_solver_common.sim_solver *acados_get_sim_solver "pendulum_ode_acados_get_sim_solver"(sim_solver_capsule * capsule)
+    acados_sim_solver_common.sim_config *acados_get_sim_config "pendulum_ode_acados_get_sim_config"(sim_solver_capsule * capsule)
+    acados_sim_solver_common.sim_opts *acados_get_sim_opts "pendulum_ode_acados_get_sim_opts"(sim_solver_capsule * capsule)
+    void *acados_get_sim_dims "pendulum_ode_acados_get_sim_dims"(sim_solver_capsule * capsule)

@@ -77,7 +77,7 @@ int pendulum_time_opt_acados_sim_create(sim_solver_capsule * capsule)
     bool tmp_bool;
 
     
-    double Tsim = 0.01;
+    double Tsim = 1;
 
     
     // explicit ode
@@ -108,6 +108,15 @@ int pendulum_time_opt_acados_sim_create(sim_solver_capsule * capsule)
     capsule->sim_expl_ode_fun_casadi->casadi_sparsity_out = &pendulum_time_opt_expl_ode_fun_sparsity_out;
     capsule->sim_expl_ode_fun_casadi->casadi_work = &pendulum_time_opt_expl_ode_fun_work;
     external_function_param_casadi_create(capsule->sim_expl_ode_fun_casadi, np);
+    capsule->sim_expl_ode_hess = (external_function_param_casadi *) malloc(sizeof(external_function_param_casadi));
+    // external_function_param_casadi impl_dae_jac_x_xdot_u_z;
+    capsule->sim_expl_ode_hess->casadi_fun = &pendulum_time_opt_expl_ode_hess;
+    capsule->sim_expl_ode_hess->casadi_work = &pendulum_time_opt_expl_ode_hess_work;
+    capsule->sim_expl_ode_hess->casadi_sparsity_in = &pendulum_time_opt_expl_ode_hess_sparsity_in;
+    capsule->sim_expl_ode_hess->casadi_sparsity_out = &pendulum_time_opt_expl_ode_hess_sparsity_out;
+    capsule->sim_expl_ode_hess->casadi_n_in = &pendulum_time_opt_expl_ode_hess_n_in;
+    capsule->sim_expl_ode_hess->casadi_n_out = &pendulum_time_opt_expl_ode_hess_n_out;
+    external_function_param_casadi_create(capsule->sim_expl_ode_hess, np);
 
     
 
@@ -137,25 +146,13 @@ int pendulum_time_opt_acados_sim_create(sim_solver_capsule * capsule)
     sim_collocation_type collocation_type = GAUSS_LEGENDRE;
     sim_opts_set(pendulum_time_opt_sim_config, pendulum_time_opt_sim_opts, "collocation_type", &collocation_type);
 
-
+ 
     tmp_int = 4;
     sim_opts_set(pendulum_time_opt_sim_config, pendulum_time_opt_sim_opts, "num_stages", &tmp_int);
-    tmp_int = 3;
+    tmp_int = 1;
     sim_opts_set(pendulum_time_opt_sim_config, pendulum_time_opt_sim_opts, "num_steps", &tmp_int);
-
-    // options that are not available to AcadosOcpSolver
-    //  (in OCP they will be determined by other options, like exact_hessian)
-    tmp_bool = true;
-    sim_opts_set(pendulum_time_opt_sim_config, pendulum_time_opt_sim_opts, "sens_forw", &tmp_bool);
-    tmp_bool = false;
-    sim_opts_set(pendulum_time_opt_sim_config, pendulum_time_opt_sim_opts, "sens_adj", &tmp_bool);
-    tmp_bool = false;
-    sim_opts_set(pendulum_time_opt_sim_config, pendulum_time_opt_sim_opts, "sens_algebraic", &tmp_bool);
-    tmp_bool = false;
-    sim_opts_set(pendulum_time_opt_sim_config, pendulum_time_opt_sim_opts, "sens_hess", &tmp_bool);
-    tmp_bool = true;
-    sim_opts_set(pendulum_time_opt_sim_config, pendulum_time_opt_sim_opts, "output_z", &tmp_bool);
-
+    tmp_bool = 0;
+    sim_opts_set(pendulum_time_opt_sim_config, pendulum_time_opt_sim_opts, "jac_reuse", &tmp_bool);
 
 
     // sim in / out
@@ -174,6 +171,8 @@ int pendulum_time_opt_acados_sim_create(sim_solver_capsule * capsule)
                  "expl_vde_adj", capsule->sim_vde_adj_casadi);
     pendulum_time_opt_sim_config->model_set(pendulum_time_opt_sim_in->model,
                  "expl_ode_fun", capsule->sim_expl_ode_fun_casadi);
+    pendulum_time_opt_sim_config->model_set(pendulum_time_opt_sim_in->model,
+                "expl_ode_hess", capsule->sim_expl_ode_hess);
 
     // sim solver
     sim_solver *pendulum_time_opt_sim_solver = sim_solver_create(pendulum_time_opt_sim_config,
@@ -181,11 +180,19 @@ int pendulum_time_opt_acados_sim_create(sim_solver_capsule * capsule)
     capsule->acados_sim_solver = pendulum_time_opt_sim_solver;
 
 
+    /* initialize parameter values */
+    double* p = calloc(np, sizeof(double));
+    
+    p[0] = 1;
+
+    pendulum_time_opt_acados_sim_update_params(capsule, p, np);
+    free(p);
+
 
     /* initialize input */
     // x
-    double x0[2];
-    for (int ii = 0; ii < 2; ii++)
+    double x0[4];
+    for (int ii = 0; ii < 4; ii++)
         x0[ii] = 0.0;
 
     sim_in_set(pendulum_time_opt_sim_config, pendulum_time_opt_sim_dims,
@@ -201,11 +208,11 @@ int pendulum_time_opt_acados_sim_create(sim_solver_capsule * capsule)
                pendulum_time_opt_sim_in, "u", u0);
 
     // S_forw
-    double S_forw[6];
-    for (int ii = 0; ii < 6; ii++)
+    double S_forw[20];
+    for (int ii = 0; ii < 20; ii++)
         S_forw[ii] = 0.0;
-    for (int ii = 0; ii < 2; ii++)
-        S_forw[ii + ii * 2 ] = 1.0;
+    for (int ii = 0; ii < 4; ii++)
+        S_forw[ii + ii * 4 ] = 1.0;
 
 
     sim_in_set(pendulum_time_opt_sim_config, pendulum_time_opt_sim_dims,
@@ -243,6 +250,7 @@ int pendulum_time_opt_acados_sim_free(sim_solver_capsule *capsule)
     external_function_param_casadi_free(capsule->sim_forw_vde_casadi);
     external_function_param_casadi_free(capsule->sim_vde_adj_casadi);
     external_function_param_casadi_free(capsule->sim_expl_ode_fun_casadi);
+    external_function_param_casadi_free(capsule->sim_expl_ode_hess);
 
     return 0;
 }
@@ -261,6 +269,7 @@ int pendulum_time_opt_acados_sim_update_params(sim_solver_capsule *capsule, doub
     capsule->sim_forw_vde_casadi[0].set_param(capsule->sim_forw_vde_casadi, p);
     capsule->sim_vde_adj_casadi[0].set_param(capsule->sim_vde_adj_casadi, p);
     capsule->sim_expl_ode_fun_casadi[0].set_param(capsule->sim_expl_ode_fun_casadi, p);
+    capsule->sim_expl_ode_hess[0].set_param(capsule->sim_expl_ode_hess, p);
 
     return status;
 }
