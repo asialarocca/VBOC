@@ -130,7 +130,7 @@ with cProfile.Profile() as pr:
     Xu_iter = qmc.scale(sample, l_bounds, u_bounds).tolist()
 
     # Generate the initial set of labeled samples:
-    n = pow(19, ocp_dim)
+    n = pow(10, ocp_dim)
     X_iter = np.empty((n, ocp_dim))
     y_iter = np.full((n, 2), [1, 0])
     r = np.random.random(size=(n, ocp_dim - 1))

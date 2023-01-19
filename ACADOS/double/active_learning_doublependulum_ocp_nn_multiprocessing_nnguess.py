@@ -80,7 +80,7 @@ with cProfile.Profile() as pr:
     model_guess = NeuralNetGuess(input_size, hidden_size, ocp_dim*ocp.N).to(device)
 
     # Active learning parameters:
-    N_init = pow(10, ocp_dim)  # size of initial labeled set
+    N_init = pow(5, ocp_dim)  # size of initial labeled set
     B = pow(10, ocp_dim)  # batch size
     etp_stop = 0.2  # active learning stopping condition
     loss_stop = 0.1  # nn training stopping condition
@@ -104,6 +104,8 @@ with cProfile.Profile() as pr:
 
     Xu_iter_tensor = torch.Tensor(Xu_iter).to(device)
     mean, std = torch.mean(Xu_iter_tensor).to(device), torch.std(Xu_iter_tensor).to(device)
+    
+    print(mean, std)
 
     with Pool(cpu_num) as p:
         temp = list(p.map(testing, Xu_iter[:N_init]))
@@ -400,6 +402,10 @@ with cProfile.Profile() as pr:
         print("CLASSIFIER", k, "TRAINED")
 
         print("etpmax:", etpmax)
+        
+    torch.save(model.state_dict(), 'model_2pendulum')
+    model = NeuralNet(input_size, hidden_size, output_size).to(device)
+    model.load_state_dict(torch.load('model_2pendulum'))
 
     with torch.no_grad():
         # Plot the results:
