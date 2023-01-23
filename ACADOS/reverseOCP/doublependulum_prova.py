@@ -45,9 +45,9 @@ if __name__ == "__main__":
     # Initialization of the SVM classifier:
     clf = svm.SVC(C=1e6, kernel='rbf', class_weight='balanced')
 
-    eps = 1.
+    eps = 1e-2
     multip = 1.
-    num = 20
+    num = 1000
     
     X_save = np.array([[(q_min+q_max)/2, (q_min+q_max)/2, 0., 0., 1]])
     
@@ -106,7 +106,7 @@ if __name__ == "__main__":
                 X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
                 X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 1]], axis = 0)
 
-                print('first set, at the limit, x0: ', x0, model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std))
+                # print('first set, at the limit, x0: ', x0, model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std))
             else:
                 x_sol = np.array([[0.,0.,0.,0.]])
                 u_sol = np.array([[0.,0.]])
@@ -149,7 +149,7 @@ if __name__ == "__main__":
 
                 status = ocp.ocp_solver.solve()
 
-                print('first set, minimum time, status: ', status)
+                # print('first set, minimum time, status: ', status)
 
                 if status == 0:
                     if x_sym[0] > q_max:
@@ -169,7 +169,12 @@ if __name__ == "__main__":
 
                     X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
 
-                    print('first set, not at the limit, x0: ', x0, model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std))
+                    with torch.no_grad():
+                        out_v = model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std).numpy()
+                        out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
+                        if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                            print('first set, not at the limit, x0: ', x0, out_v)
+                            print('first set, not at the limit, x_sym: ', x_sym, out_uv)
 
                     dt_sym = ocp.ocp_solver.get(0, "x")[4]
 
@@ -183,26 +188,28 @@ if __name__ == "__main__":
                             x_sym = sim.acados_integrator.get("x")
                             X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
 
-                            current_val = ocp.ocp_solver.get(f, "x")
+                            current_val = ocp.ocp_solver.get(f+1, "x")
                             X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
 
-                            print('first set, sym, status: ', status)
-                            print('first set, sym, x: ', x_sym, model((torch.from_numpy(np.float32([x_sym])).to(device) - mean) / std))
-                            print('first set, mintime, x: ', current_val[:4], model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std))
+                            # print('first set, sym, status: ', status)
+                            with torch.no_grad():
+                                out_v = model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std).numpy()
+                                out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
+                                if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                                    print('first set, not at the limit, x: ', current_val[:4], out_v)
+                                    print('first set, not at the limit, x_sym: ', x_sym, out_uv) 
                         else:
                             break
                     
-                    current_val = ocp.ocp_solver.get(ocp.N, "x")
-                    X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
+                    # current_val = ocp.ocp_solver.get(ocp.N, "x")
+                    # X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
 
-                    print('first set, mintime, x: ', current_val[:4], model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std))
+                    # print('first set, mintime, x: ', current_val[:4], model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std))
                 else:
                     X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
                     X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 1]], axis = 0)
 
         # ----------------------------------------------------------
-
-        print('check')
 
         q_fin = q_min + random.random() * (q_max-q_min)
 
@@ -257,7 +264,7 @@ if __name__ == "__main__":
                 X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
                 X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 1]], axis = 0)
 
-                print('second set, at the limit, x0: ', x0, model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std))
+                # print('second set, at the limit, x0: ', x0, model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std))
             else:
                 x_sol = np.array([[0.,0.,0.,0.]])
                 u_sol = np.array([[0.,0.]])
@@ -300,9 +307,7 @@ if __name__ == "__main__":
 
                 status = ocp.ocp_solver.solve()
 
-                print('second set, minimum time, status: ', status)
-
-                print(status)
+                # print('second set, minimum time, status: ', status)
 
                 if status == 0:
                     if x_sym[0] > q_max:
@@ -322,7 +327,12 @@ if __name__ == "__main__":
 
                     X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
 
-                    print('second set, not at the limit, x0: ', x0, model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std))
+                    with torch.no_grad():
+                        out_v = model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std).numpy()
+                        out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
+                        if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                            print('2 set, not at the limit, x0: ', x0, out_v)
+                            print('2 set, not at the limit, x_sym: ', x_sym, out_uv)
 
                     dt_sym = ocp.ocp_solver.get(0, "x")[4]
 
@@ -336,26 +346,28 @@ if __name__ == "__main__":
                             x_sym = sim.acados_integrator.get("x")
                             X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
 
-                            current_val = ocp.ocp_solver.get(f, "x")
+                            current_val = ocp.ocp_solver.get(f+1, "x")
                             X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
                         
-                            print('second set, sym, status: ', status)
-                            print('second set, sym, x: ', x_sym, model((torch.from_numpy(np.float32([x_sym])).to(device) - mean) / std))
-                            print('second set, mintime, x: ', current_val[:4], model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std))
+                            # print('first set, sym, status: ', status)
+                            with torch.no_grad():
+                                out_v = model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std).numpy()
+                                out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
+                                if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                                    print('2 set, not at the limit, x: ', current_val[:4], out_v)
+                                    print('2 set, not at the limit, x_sym: ', x_sym, out_uv) 
                         else:
                             break
 
-                    current_val = ocp.ocp_solver.get(ocp.N, "x")
-                    X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
+                    # current_val = ocp.ocp_solver.get(ocp.N, "x")
+                    # X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
                 
-                    print('second set, mintime, x: ', current_val[:4], model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std))
+                    # print('second set, mintime, x: ', current_val[:4], model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std))
                 else:
                     X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
                     X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 1]], axis = 0)
 
         # ---------------------------------------------------------
-
-        print('check')
 
         q_fin = q_min + random.random() * (q_max-q_min)
 
@@ -410,7 +422,7 @@ if __name__ == "__main__":
                 X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
                 X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 1]], axis = 0)
 
-                print('third set, at the limit, x0: ', x0, model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std))
+                # print('third set, at the limit, x0: ', x0, model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std))
             else:
                 x_sol = np.array([[0.,0.,0.,0.]])
                 u_sol = np.array([[0.,0.]])
@@ -453,9 +465,7 @@ if __name__ == "__main__":
 
                 status = ocp.ocp_solver.solve()
 
-                print('third set, minimum time, status: ', status)
-
-                print(status)
+                # print('third set, minimum time, status: ', status)
 
                 if status == 0:
                     if x_sym[0] > q_max:
@@ -475,7 +485,12 @@ if __name__ == "__main__":
 
                     X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
 
-                    print('third set, not at the limit, x0: ', x0, model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std))
+                    with torch.no_grad():
+                        out_v = model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std).numpy()
+                        out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
+                        if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                            print('3 set, not at the limit, x0: ', x0, out_v)
+                            print('3 set, not at the limit, x_sym: ', x_sym, out_uv)
 
                     dt_sym = ocp.ocp_solver.get(0, "x")[4]
 
@@ -489,24 +504,26 @@ if __name__ == "__main__":
                             x_sym = sim.acados_integrator.get("x")
                             X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
 
-                            current_val = ocp.ocp_solver.get(f, "x")
+                            current_val = ocp.ocp_solver.get(f+1, "x")
                             X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
                     
-                            print('third set, sym, status: ', status)
-                            print('third set, sym, x: ', x_sym, model((torch.from_numpy(np.float32([x_sym])).to(device) - mean) / std))
-                            print('third set, mintime, x: ', current_val[:4], model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std))
+                            # print('first set, sym, status: ', status)
+                            with torch.no_grad():
+                                out_v = model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std).numpy()
+                                out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
+                                if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                                    print('3 set, not at the limit, x: ', current_val[:4], out_v)
+                                    print('3 set, not at the limit, x_sym: ', x_sym, out_uv) 
                         else:
                             break
 
-                    current_val = ocp.ocp_solver.get(ocp.N, "x")
-                    X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
+                    # current_val = ocp.ocp_solver.get(ocp.N, "x")
+                    # X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
                 
-                    print('third set, mintime, x: ', current_val[:4], model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std))
+                    # print('third set, mintime, x: ', current_val[:4], model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std))
                 else:
                     X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
                     X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 1]], axis = 0)
-
-        print('check')
 
         # ----------------------------------------------------------
 
@@ -544,8 +561,6 @@ if __name__ == "__main__":
             x4_eps = x0[3] - eps * p[3] / (2*v_max)
             x_sym = np.array([x1_eps, x2_eps, x3_eps, x4_eps])
 
-            print(x0)
-
             if ran < 0:
                 q_comp2 = q_max
             else:
@@ -565,7 +580,7 @@ if __name__ == "__main__":
                 X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
                 X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 1]], axis = 0)
 
-                print('fourth set, at the limit, x0: ', x0, model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std))
+                # print('fourth set, at the limit, x0: ', x0, model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std))
             else:
                 x_sol = np.array([[0.,0.,0.,0.]])
                 u_sol = np.array([[0.,0.]])
@@ -608,9 +623,7 @@ if __name__ == "__main__":
 
                 status = ocp.ocp_solver.solve()
 
-                print('second set, minimum time, status: ', status)
-
-                print(status)
+                # print('second set, minimum time, status: ', status)
 
                 if status == 0:
                     if x_sym[0] > q_max:
@@ -630,7 +643,12 @@ if __name__ == "__main__":
 
                     X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
 
-                    print('fourth set, not at the limit, x0: ', x0, model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std))
+                    with torch.no_grad():
+                        out_v = model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std).numpy()
+                        out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
+                        if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                            print('4 set, not at the limit, x0: ', x0, out_v)
+                            print('4 set, not at the limit, x_sym: ', x_sym, out_uv)
 
                     dt_sym = ocp.ocp_solver.get(0, "x")[4]
 
@@ -644,24 +662,26 @@ if __name__ == "__main__":
                             x_sym = sim.acados_integrator.get("x")
                             X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
 
-                            current_val = ocp.ocp_solver.get(f, "x")
+                            current_val = ocp.ocp_solver.get(f+1, "x")
                             X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
                     
-                            print('fourth set, sym, status: ', status)
-                            print('fourth set, sym, x: ', x_sym, model((torch.from_numpy(np.float32([x_sym])).to(device) - mean) / std))
-                            print('fourth set, mintime, x: ', current_val[:4], model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std))
+                            # print('first set, sym, status: ', status)
+                            with torch.no_grad():
+                                out_v = model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std).numpy()
+                                out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
+                                if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                                    print('4 set, not at the limit, x: ', current_val[:4], out_v)
+                                    print('4 set, not at the limit, x_sym: ', x_sym, out_uv) 
                         else:
                             break
 
-                    current_val = ocp.ocp_solver.get(ocp.N, "x")
-                    X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
+                    # current_val = ocp.ocp_solver.get(ocp.N, "x")
+                    # X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
 
-                    print('second set, mintime, x: ', current_val[:4], model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std))
+                    # print('second set, mintime, x: ', current_val[:4], model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std))
                 else:
                     X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
                     X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 1]], axis = 0)
-
-    print('check')
     
     clf.fit(X_save[:,:4], X_save[:,4])
 

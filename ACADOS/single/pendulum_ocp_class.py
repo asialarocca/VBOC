@@ -61,7 +61,7 @@ class OCPpendulum:
         self.ocp = AcadosOcp()
 
         # times
-        Tf = 0.4
+        Tf = 0.1
         self.Tf = Tf
         self.N = int(100 * Tf)
 
@@ -171,7 +171,7 @@ class OCPpendulum:
         self.ocp_solver.constraints_set(0, "ubx", x0)
 
         with torch.no_grad():
-            inp = torch.Tensor([[q0, v0]])
+            inp = torch.Tensor([[[q0, v0]]])
             inp = (inp - mean) / std
             out = model(inp)
             out = out * std + mean

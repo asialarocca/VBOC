@@ -8,7 +8,8 @@ import warnings
 import random
 import torch
 import torch.nn as nn
-from my_nn import NeuralNet, NeuralNetGuess
+#from my_nn import NeuralNet, NeuralNetGuess
+from my_rnn import NeuralNet, RecurrentNeuralNet
 
 warnings.filterwarnings("ignore")
 
@@ -37,7 +38,7 @@ with cProfile.Profile() as pr:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = NeuralNet(input_size, hidden_size, output_size).to(device)
-    model_guess = NeuralNetGuess(input_size, hidden_size, ocp_dim*ocp.N).to(device)
+    model_guess = RecurrentNeuralNet(input_size, ocp.N).to(device)
 
     # Loss and optimizer
     criterion = nn.BCEWithLogitsLoss()
@@ -71,7 +72,8 @@ with cProfile.Profile() as pr:
     if res == 1:
         X_iter = np.double([[(q_max + q_min) / 2, 0.0]])
         y_iter = [[0, 1]]
-        X_traj = [[(q_max + q_min) / 2, 0.0]*(ocp.N+1)]
+        #X_traj = [[(q_max + q_min) / 2, 0.0]*(ocp.N+1)]
+        X_traj = [[[(q_max + q_min) / 2, 0.0]]*(ocp.N+1)]
     else:
         raise Exception("Origin unviable")
 
@@ -96,7 +98,8 @@ with cProfile.Profile() as pr:
             for i in range(ocp.N+1):
                 simX[i, :] = ocp.ocp_solver.get(i, "x")
 
-            X_traj = np.append(X_traj, [np.reshape(simX,((ocp.N+1)*ocp_dim,))], axis=0)
+            # X_traj = np.append(X_traj, [np.reshape(simX,((ocp.N+1)*ocp_dim,))], axis=0)
+            X_traj = np.append(X_traj, [simX], axis=0)
 
     # Delete tested data from the unlabeled set:
     Xu_iter = np.delete(Xu_iter, range(N_init), axis=0)
@@ -136,13 +139,17 @@ with cProfile.Profile() as pr:
     
         ind = random.sample(range(X_traj.shape[0]), n_minibatch)
 
-        X_iter_tensor = torch.from_numpy(X_traj[:,:2].astype(np.float32))
-        y_iter_tensor = torch.from_numpy(X_traj[:,2:].astype(np.float32))
+        X_iter_tensor = torch.from_numpy(X_traj[:,:1].astype(np.float32))
+        y_iter_tensor = torch.from_numpy(X_traj[:,1:].astype(np.float32))
         X_iter_tensor = (X_iter_tensor - mean) / std
         y_iter_tensor = (y_iter_tensor - mean) / std
 
+        #print(X_iter_tensor.size())
+        #print(y_iter_tensor.size())
+
         # Forward pass
         outputs = model_guess(X_iter_tensor)
+        #print(outputs.size())
         loss = criterion_g(outputs, y_iter_tensor)
 
         # Backward and optimize
@@ -186,8 +193,12 @@ with cProfile.Profile() as pr:
         plt.grid(True)
 
         plt.figure()
-        inpnn = torch.from_numpy(data[:10].astype(np.float32))
+        dat = np.empty((10,1,ocp_dim))
+        for i in range(10):
+            dat[i,0,:] = np.copy(data[i])
+        inpnn = torch.from_numpy(dat.astype(np.float32))
         inpnn = (inpnn - mean) / std
+        print(inpnn.size())
         outnn = model_guess(inpnn)
         outnn = outnn * std + mean
         outnn = outnn.detach().numpy()
@@ -249,7 +260,8 @@ with cProfile.Profile() as pr:
                 for i in range(ocp.N+1):
                     simX[i, :] = ocp.ocp_solver.get(i, "x")
 
-                X_traj = np.append(X_traj, [np.reshape(simX,((ocp.N+1)*ocp_dim,))], axis=0)
+                # X_traj = np.append(X_traj, [np.reshape(simX,((ocp.N+1)*ocp_dim,))], axis=0)
+                X_traj = np.append(X_traj, [simX], axis=0)
 
         # Delete tested data from the unlabeled set:
         Xu_iter = np.delete(Xu_iter, maxindex, axis=0)
@@ -306,8 +318,8 @@ with cProfile.Profile() as pr:
                 )
             )
 
-            X_iter_tensor = torch.from_numpy(X_traj[:,:2].astype(np.float32))
-            y_iter_tensor = torch.from_numpy(X_traj[:,2:].astype(np.float32))
+            X_iter_tensor = torch.from_numpy(X_traj[ind,:1].astype(np.float32))
+            y_iter_tensor = torch.from_numpy(X_traj[ind,1:].astype(np.float32))
             X_iter_tensor = (X_iter_tensor - mean) / std
             y_iter_tensor = (y_iter_tensor - mean) / std
 
@@ -355,7 +367,11 @@ with cProfile.Profile() as pr:
             plt.grid(True)
 
             plt.figure()
-            inpnn = torch.from_numpy(X_traj[-10:,:ocp_dim].astype(np.float32))
+            dat = np.empty((10,1,ocp_dim))
+            for i in range(10):
+                dat[i,0,:] = np.copy(data[i])
+            inpnn = torch.from_numpy(dat.astype(np.float32))
+            #inpnn = torch.from_numpy(X_traj[-10:,:ocp_dim].astype(np.float32))
             inpnn = (inpnn - mean) / std
             outnn = model_guess(inpnn)
             outnn = outnn * std + mean
