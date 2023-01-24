@@ -18,7 +18,7 @@ if __name__ == "__main__":
     q_min = ocp.thetamin
 
     X_save = np.array([[(q_min+q_max)/2, 0., 1]])
-    eps = 10.
+    eps = 1.
 
     ocp.ocp_solver.reset()
 
@@ -108,8 +108,11 @@ if __name__ == "__main__":
         print('min time ocp status: ', status)
 
         if status == 0:
+            dt_sym = ocp.ocp_solver.get(0, "x")[2]
+
             if x2_eps > v_max:
                 out = True
+
                 for f in range(ocp.N):
                     current_val = ocp.ocp_solver.get(f, "x")
                     X_save = np.append(X_save, [[current_val[0], current_val[1], 1]], axis = 0)
@@ -121,12 +124,12 @@ if __name__ == "__main__":
                     else:
                         if out == True:
                             future_val = ocp.ocp_solver.get(f+1, "x")
-                            x_sym = np.array([current_val[0] + (current_val[1] - future_val[1]), current_val[1] + (current_val[0] - future_val[0])])
-                            out = False
+                            #x_sym = np.array([current_val[0] + (current_val[1] - future_val[1]), current_val[1] + (current_val[0] - future_val[0])])
+                            x_sym = np.array([current_val[0], v_eps])
+                            X_save = np.append(X_save, [[x_sym[0], x_sym[1], 0]], axis = 0)
                         else:
-                            dt_sym = ocp.ocp_solver.get(0, "x")[2]
                             if x_sym[0] > q_min and x_sym[0] < q_max and x_sym[1] < v_max and x_sym[1] > v_min:
-                                u_sym = ocp.ocp_solver.get(f, "u")     
+                                u_sym = ocp.ocp_solver.get(f, "u") 
                                 sim.acados_integrator.set("u", u_sym)
                                 sim.acados_integrator.set("x", x_sym)
                                 sim.acados_integrator.set("T", dt_sym)
@@ -139,11 +142,13 @@ if __name__ == "__main__":
                                 if x_sym[1] < v_min or x_sym[1] > v_max:
                                     X_save = np.append(X_save, [[current_val[0], x_sym[1], 0]], axis = 0)
 
+                        out = False
+                    
+                    current_val = ocp.ocp_solver.get(ocp.N, "x")
+                    X_save = np.append(X_save, [[current_val[0], current_val[1], 1]], axis = 0)
             else:
                 X_save = np.append(X_save, [[x_sym[0], x_sym[1], 0]], axis = 0)
                 X_save = np.append(X_save, [[x0[0], x0[1], 1]], axis = 0)
-
-                dt_sym = ocp.ocp_solver.get(0, "x")[2]
 
                 for f in range(ocp.N):
                     current_val = ocp.ocp_solver.get(f, "x")
