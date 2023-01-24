@@ -245,7 +245,7 @@ if __name__ == "__main__":
     ocp.solver_options.globalization = "MERIT_BACKTRACKING"
     ocp.solver_options.alpha_reduction = 0.3
     ocp.solver_options.alpha_min = 1e-2
-    ocp.solver_options.levenberg_marquardt = 1e-2
+    ocp.solver_options.levenberg_marquardt = 1e-4
     # ocp.solver_options.sim_method_num_steps = 4
     # ocp.solver_options.line_search_use_sufficient_descent = 1
 
