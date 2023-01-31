@@ -127,7 +127,7 @@ class OCPdoublependulumR:
         self.ocp.cost.cost_type_0 = 'EXTERNAL'
         self.ocp.cost.cost_type = 'EXTERNAL'
 
-        self.ocp.model.cost_expr_ext_cost_0 = w1 / (self.thetamax - self.thetamin) * theta1 + w2 / (self.thetamax - self.thetamin) * theta2 + w3 / (2*self.dthetamax) * dtheta1 + w4 / (2*self.dthetamax) * dtheta2
+        self.ocp.model.cost_expr_ext_cost_0 = w1 / (self.thetamax - self.thetamin) * theta1 + w2 / (self.thetamax - self.thetamin) * theta2 + w3 / (2*self.dthetamax) * dtheta1 + w4 / (2*self.dthetamax) * dtheta2 + wt * dt 
         self.ocp.model.cost_expr_ext_cost = wt * dt 
         self.ocp.parameter_values = np.array([0., 0., 0., 0., 0.])
 
@@ -159,7 +159,6 @@ class OCPdoublependulumR:
         self.ocp.solver_options.exact_hess_constr = 0
         self.ocp.solver_options.exact_exact_hess_cost = 0
         self.ocp.solver_options.exact_hess_dyn = 0
-        self.ocp.solver_options.tol = 1e-6
         self.ocp.solver_options.qp_solver_iter_max = 1000
         self.ocp.solver_options.nlp_solver_max_iter = 10000
         self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"

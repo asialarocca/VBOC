@@ -54,7 +54,7 @@ if __name__ == "__main__":
         # u_guess = np.empty((ocp.N,1))
 
         x0 = ocp.ocp_solver.get(0, "x")
-        u0 = ocp.ocp_solver.get(0, "u")
+        # u0 = ocp.ocp_solver.get(0, "u")
         x1_eps = x0[0]
         x2_eps = x0[1] - eps * p[0] / (2*v_max)
         x_sym = np.array([x1_eps, x2_eps])

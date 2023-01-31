@@ -13,6 +13,8 @@ from my_nn import NeuralNet, NeuralNetGuess
 from statistics import mean
 from multiprocessing import Pool
 from pstats import Stats
+from torch.utils.data import TensorDataset, DataLoader
+import math
 
 warnings.filterwarnings("ignore")
 
@@ -86,7 +88,9 @@ with cProfile.Profile() as pr:
     loss_stop = 0.1  # nn training stopping condition
     beta = 0.8
     n_minibatch = 512
+    n_minibatch_model = pow(50,2)
     it_max = int(100 * B / n_minibatch)
+    gridp = 70
 
     # Loss and optimizer
     criterion = nn.BCEWithLogitsLoss()
@@ -97,9 +101,9 @@ with cProfile.Profile() as pr:
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
-    sample = sampler.random(n=pow(50, ocp_dim))
-    l_bounds = [q_min-(q_max-q_min)/100, q_min-(q_max-q_min)/100, v_min-(v_max-v_min)/100, v_min-(v_max-v_min)/100]
-    u_bounds = [q_max+(q_max-q_min)/100, q_max+(q_max-q_min)/100, v_max+(v_max-v_min)/100, v_max+(v_max-v_min)/100]
+    sample = sampler.random(n=pow(gridp, ocp_dim))
+    l_bounds = [q_min-(q_max-q_min)/20, q_min-(q_max-q_min)/20, v_min-(v_max-v_min)/20, v_min-(v_max-v_min)/20]
+    u_bounds = [q_max+(q_max-q_min)/20, q_max+(q_max-q_min)/20, v_max+(v_max-v_min)/20, v_max+(v_max-v_min)/20]
     Xu_iter = qmc.scale(sample, l_bounds, u_bounds).tolist()
 
     Xu_iter_tensor = torch.Tensor(Xu_iter).to(device)
@@ -178,102 +182,6 @@ with cProfile.Profile() as pr:
 
     print("INITIAL CLASSIFIER TRAINED")
 
-    # Plots:
-    h = 0.02
-    x_min, x_max = q_min-(q_max-q_min)/100, q_max+(q_max-q_min)/100
-    y_min, y_max = v_min-(v_max-v_min)/100, v_max+(v_max-v_min)/100
-    xx, yy = np.meshgrid(np.arange(x_min, x_max+h, h), np.arange(y_min, y_max, h))
-    xrav = xx.ravel()
-    yrav = yy.ravel()
-
-    with torch.no_grad():
-        # Plot the results:
-        plt.figure()
-        inp = torch.from_numpy(
-            np.float32(
-                np.c_[
-                    (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                    xrav,
-                    np.zeros(yrav.shape[0]),
-                    yrav,
-                ]
-            )
-        ).to(device)
-        inp = (inp - mean) / std
-        out = model(inp)
-        y_pred = np.argmax(out.numpy(), axis=1)
-        Z = y_pred.reshape(xx.shape)
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        xit = []
-        yit = []
-        cit = []
-        for i in range(len(X_iter)):
-            if (
-                norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
-                and norm(X_iter[i][2]) < 0.1
-            ):
-                xit.append(X_iter[i][1])
-                yit.append(X_iter[i][3])
-                if X_iter[i][4] == 1:
-                    cit.append(0)
-                else:
-                    cit.append(1)
-        plt.scatter(
-            xit,
-            yit,
-            c=cit,
-            marker=".",
-            alpha=0.5,
-            cmap=plt.cm.Paired,
-        )
-        plt.xlim([x_min, x_max])
-        plt.ylim([y_min, y_max])
-        plt.grid()
-        plt.title("Second actuator")
-
-        plt.figure()
-        inp = torch.from_numpy(
-            np.float32(
-                np.c_[
-                    xrav,
-                    (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                    yrav,
-                    np.zeros(yrav.shape[0]),
-                ]
-            )
-        ).to(device)
-        inp = (inp - mean) / std
-        out = model(inp)
-        y_pred = np.argmax(out.numpy(), axis=1)
-        Z = y_pred.reshape(xx.shape)
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        xit = []
-        yit = []
-        cit = []
-        for i in range(len(X_iter)):
-            if (
-                norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
-                and norm(X_iter[i][3]) < 0.1
-            ):
-                xit.append(X_iter[i][0])
-                yit.append(X_iter[i][2])
-                if X_iter[i][4] == 1:
-                    cit.append(0)
-                else:
-                    cit.append(1)
-        plt.scatter(
-            xit,
-            yit,
-            c=cit,
-            marker=".",
-            alpha=0.5,
-            cmap=plt.cm.Paired,
-        )
-        plt.xlim([x_min, x_max])
-        plt.ylim([y_min, y_max])
-        plt.grid()
-        plt.title("First actuator")
-
     # Active learning:
     k = 0  # iteration number
     etpmax = 1
@@ -286,11 +194,25 @@ with cProfile.Profile() as pr:
         if len(Xu_iter) < B:
             B = len(Xu_iter)
 
+        # with torch.no_grad():
+        #     Xu_iter_tensor = torch.Tensor(Xu_iter).to(device)
+        #     Xu_iter_tensor = (Xu_iter_tensor - mean) / std
+        #     prob_xu = sigmoid(model(Xu_iter_tensor)).cpu()
+        #     etp = entropy(prob_xu, axis=1)
+
+        etp = np.empty((len(Xu_iter),))
+    
         with torch.no_grad():
             Xu_iter_tensor = torch.Tensor(Xu_iter).to(device)
             Xu_iter_tensor = (Xu_iter_tensor - mean) / std
-            prob_xu = sigmoid(model(Xu_iter_tensor)).cpu()
-            etp = entropy(prob_xu, axis=1)
+            my_dataloader = DataLoader(Xu_iter_tensor,batch_size=n_minibatch_model,shuffle=False)
+            for (idx, batch) in enumerate(my_dataloader):
+                if n_minibatch_model*(idx+1) > len(Xu_iter):
+                    prob_xu = sigmoid(model(batch)).cpu()
+                    etp[n_minibatch_model*idx:len(Xu_iter)] = entropy(prob_xu, axis=1)
+                else:
+                    prob_xu = sigmoid(model(batch)).cpu()
+                    etp[n_minibatch_model*idx:n_minibatch_model*(idx+1)] = entropy(prob_xu, axis=1)
 
         maxindex = np.argpartition(etp, -B)[
             -B:
@@ -362,6 +284,13 @@ with cProfile.Profile() as pr:
 
         qt = int(n_minibatch / 2)
 
+        end_ind = len(X_traj)
+        init_ind = len(X_traj) - pow(20,4)
+        if init_ind < 0:
+            init_ind = 0
+
+        X_traj = X_traj[init_ind:end_ind]
+
         # Train the guess model
         while val > loss_stop and it <= it_max:
 
@@ -403,11 +332,20 @@ with cProfile.Profile() as pr:
 
         print("etpmax:", etpmax)
         
-    torch.save(model.state_dict(), 'model_2pendulum')
-    model = NeuralNet(input_size, hidden_size, output_size).to(device)
-    model.load_state_dict(torch.load('model_2pendulum'))
+        torch.save(model.state_dict(), 'model_2pendulum')
+
+    # model = NeuralNet(input_size, hidden_size, output_size).to(device)
+    # model.load_state_dict(torch.load('model_2pendulum'))
 
     with torch.no_grad():
+        # Plots:
+        h = 0.02
+        x_min, x_max = q_min-(q_max-q_min)/100, q_max+(q_max-q_min)/100
+        y_min, y_max = v_min-(v_max-v_min)/100, v_max+(v_max-v_min)/100
+        xx, yy = np.meshgrid(np.arange(x_min, x_max+h, h), np.arange(y_min, y_max, h))
+        xrav = xx.ravel()
+        yrav = yy.ravel()
+
         # Plot the results:
         plt.figure()
         inp = torch.from_numpy(
@@ -447,8 +385,8 @@ with cProfile.Profile() as pr:
             alpha=0.5,
             cmap=plt.cm.Paired,
         )
-        plt.xlim([x_min, x_max])
-        plt.ylim([y_min, y_max])
+        plt.xlim([q_min, q_max])
+        plt.ylim([v_min, v_max])
         plt.grid()
         plt.title("Second actuator")
 
@@ -490,8 +428,8 @@ with cProfile.Profile() as pr:
             alpha=0.5,
             cmap=plt.cm.Paired,
         )
-        plt.xlim([x_min, x_max])
-        plt.ylim([y_min, y_max])
+        plt.xlim([q_min, q_max])
+        plt.ylim([v_min, v_max])
         plt.grid()
         plt.title("First actuator")
 
