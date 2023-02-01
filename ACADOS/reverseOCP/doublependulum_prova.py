@@ -92,19 +92,6 @@ if __name__ == "__main__":
             X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
             X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 1]], axis = 0)
 
-            if ran < 0:
-                q_comp1 = q_max
-            else:
-                q_comp1 = q_min
-            if ran1 < 0:
-                q_comp2 = q_max
-            else:
-                q_comp2 = q_min
-            if ran2 < 0:
-                v_comp2 = v_max
-            else:
-                v_comp2 = v_min
-
             x_guess = np.empty((ocp.N+1,5))
             u_guess = np.empty((ocp.N,2))
 
@@ -150,37 +137,327 @@ if __name__ == "__main__":
             if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] < v_min or x_sym[2] > v_max or x_sym[3] < v_min or x_sym[3] > v_max:
                 print('AT THE LIMIT')
                 
-                with torch.no_grad():
-                    out_v = model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std).numpy()
-                    out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
-                    if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
-                        print('1 set, at the limit, x0: ', x0, out_v)
-                        print('1 set, at the limit, x_sym0: ', x_sym, out_uv)
+                # with torch.no_grad():
+                #     out_v = model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std).numpy()
+                #     out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
+                #     if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                #         print('1 set, at the limit, x0: ', x0, out_v)
+                #         print('1 set, at the limit, x_sym0: ', x_sym, out_uv)
 
                 if status == 0:
-                    is_min_time = True
-                    it = 0
-                    for i in range(ocp.N):
-                        current_u = ocp.ocp_solver.get(i, "u")
-                        if not ((abs(current_u[0]) < tau_max + 1e-2 and abs(current_u[0]) > tau_max - 1e-2) or (abs(current_u[1]) < tau_max + 1e-2 and abs(current_u[1]) > tau_max - 1e-2)):
-                            is_min_time = False
+                    # if is_min_time:
+                    #     # TODO: trova quando ti stacchi dai vincoli e inizia la simulazione da la
+                    #     print('MIN TIME') 
+                    # else:
+                    #     # TODO: binary search
+                    #     print('NOT MIN TIME')
+
+                    dt_sym = ocp.ocp_solver.get(0, "x")[4]
+
+                    x_sol = np.empty((ocp.N+1,4))
+                    u_sol = np.empty((ocp.N,2))
+
+                    current_val = ocp.ocp_solver.get(0, "x")
+                    x_sol[0] = np.copy(current_val[:4])
+
+                    # print('x0: ', x_sol[0])
+
+                    check_init = True
+
+                    for i in range(1, ocp.N):
+                        current_val = ocp.ocp_solver.get(i, "x")
+                        x_sol[i] = np.copy(current_val[:4])
+                        current_u = ocp.ocp_solver.get(i-1, "u")
+                        u_sol[i-1] = current_u
+
+                        if not ((abs(current_u[0]) < tau_max + 1e-4 and abs(current_u[0]) > tau_max - 1e-4) or (abs(current_u[1]) < tau_max + 1e-4 and abs(current_u[1]) > tau_max - 1e-4)):
+                            is_u_at_limit = False
+                        else:
+                            is_u_at_limit = True
+                        
+                        if abs(current_val[0] - q_max) < 1e-4 or abs(current_val[0] - q_min) < 1e-4 or abs(current_val[1] - q_max) < 1e-4 or abs(current_val[1] - q_min) < 1e-4 or abs(current_val[2] - v_max) < 1e-4 or abs(current_val[2] - v_min) < 1e-4 or abs(current_val[3] - v_max) < 1e-4 or abs(current_val[3] - v_min) < 1e-4:
+                            is_x_at_limit = True
+                        else:
+                            is_x_at_limit = False
+
+                        # with torch.no_grad():
+                        #     print('x: ', x_sol[i], model((torch.from_numpy(np.float32([x_sol[i]])).to(device) - mean) / std).numpy(), is_x_at_limit, is_u_at_limit)
+
+                        # until is_x_at_limit, it is on dX and the unviable data can be generated and used
+                        # when is_x_at_limit switvhes to False there are two possibilities:
+                        #   if is_u_at_limit then the sol is on dV and it can be used
+                        #   alternatively the sol is not valid because it's not on the boundary
+
+                        if check_init:
+                            if is_x_at_limit:
+                                x_sym = np.copy(current_val[:4])
+
+                                if abs(current_val[0] - q_max) < 1e-4:
+                                    x_sym[0] = q_max + 1e-4
+                                if abs(current_val[0] - q_min) < 1e-4:
+                                    x_sym[0] = q_min - 1e-4
+                                if abs(current_val[1] - q_max) < 1e-4:
+                                    x_sym[1] = q_max + 1e-4
+                                if abs(current_val[1] - q_min) < 1e-4:
+                                    x_sym[1] = q_min - 1e-4
+                                if abs(current_val[2] - v_max) < 1e-4:
+                                    x_sym[2] = v_max + 1e-4
+                                if abs(current_val[2] - v_min) < 1e-4:
+                                    x_sym[2] = v_min - 1e-4
+                                if abs(current_val[3] - v_max) < 1e-4:
+                                    x_sym[3] = v_max + 1e-4
+                                if abs(current_val[3] - v_min) < 1e-4:
+                                    x_sym[3] = v_min - 1e-4
+                            
+                                X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
+                                X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
+
+                                with torch.no_grad():
+                                    out_v = model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std).numpy()
+                                    out_uv = model((torch.from_numpy(np.float32([x_sym])).to(device) - mean) / std).numpy()
+                                    if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                                        print('1 set, at the limit, x: ', current_val[:4], out_v)
+                                        print('1 set, at the limit, x_sym: ', x_sym, out_uv)
+                            else:
+                                if is_u_at_limit:
+                                    # idea: if I am on dV but not touching a state limit, at least one control is saturated and this is needed to remain in V. 
+                                    # If I apply a different control => i get an unviable state
+                                    print('The solution is valid, starting to simulate')
+                                    
+                                    u_sym = ocp.ocp_solver.get(i, "u")
+                                    x_sym = np.copy(current_val[:4])
+
+                                    if u_sym[0] > tau_max - 1e-4:
+                                        u_sym[0] = tau_max - 1e-2
+                                    if u_sym[0] < -tau_max + 1e-4:
+                                        u_sym[0] = -tau_max + 1e-2
+                                    if u_sym[1] > tau_max - 1e-4:
+                                        u_sym[1] = tau_max - 1e-2
+                                    if u_sym[1] < -tau_max + 1e-4:
+                                        u_sym[1] = -tau_max + 1e-2
+                                    
+                                    sim.acados_integrator.set("u", u_sym)
+                                    sim.acados_integrator.set("x", x_sym)
+                                    sim.acados_integrator.set("T", dt_sym)
+                                    status = sim.acados_integrator.solve()
+                                    x_sym = sim.acados_integrator.get("x")
+
+                                    X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
+                                    X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
+
+                                    with torch.no_grad():
+                                        out_v = model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std).numpy()
+                                        out_uv = model((torch.from_numpy(np.float32([x_sym])).to(device) - mean) / std).numpy()
+                                        if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                                            print('1 set, at the limit simulation, x: ', current_val[:4], out_v)
+                                            print('1 set, at the limit simulation, x_sym: ', x_sym, out_uv)
+                                    
+                                    check_init = False
+                                    status_in = True
+
+                                else:
+                                    # the solution is not min time
+                                    print('The solution is not min time')
+
+                                    # dt_sym_first = ocp.ocp_solver.get(0, "x")[4]
+                                    # print('FIRST MIN TIME SOLVED', dt_sym_first)
+
+                                    # p = np.array([0., 0., 0., 0., 0.])
+
+                                    # x_guess = np.empty((ocp.N+1,5))
+                                    # u_guess = np.empty((ocp.N,2))
+
+                                    # prev_sol = ocp.ocp_solver.get(0, "x")
+                                    # x_guess[0] = [prev_sol[0], prev_sol[1], prev_sol[2], prev_sol[3], 1.]
+                                    # u_guess[0] = ocp.ocp_solver.get(0, "u")
+                                    # ocp.ocp_solver.set(0, 'p', p)
+                                    # ocp.ocp_solver.constraints_set(0, 'lbx', x_guess[0]) 
+                                    # ocp.ocp_solver.constraints_set(0, 'ubx', x_guess[0])
+
+                                    # for i in range(1, ocp.N):
+                                    #     prev_sol = ocp.ocp_solver.get(i, "x")
+                                    #     x_guess[i] = [prev_sol[0], prev_sol[1], prev_sol[2], prev_sol[3], 1.]
+                                    #     u_guess[i] = ocp.ocp_solver.get(i, "u")
+                                    #     ocp.ocp_solver.set(i, 'p', p)
+                                    #     ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, 1.])) 
+                                    #     ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, 1.])) 
+
+                                    # prev_sol = ocp.ocp_solver.get(ocp.N, "x")
+                                    # x_guess[ocp.N] = [prev_sol[0], prev_sol[1], prev_sol[2], prev_sol[3], 1.]
+                                    # ocp.ocp_solver.set(ocp.N, 'p', p)
+                                    # ocp.ocp_solver.constraints_set(ocp.N, "lbx", np.array([q_max, q_fin, 0., 0., 1.]))
+                                    # ocp.ocp_solver.constraints_set(ocp.N, "ubx", np.array([q_max, q_fin, 0., 0., 1.]))
+
+                                    # time_up = dt_sym_first
+                                    # time_down = 0.
+
+                                    # it = 0
+
+                                    # while it <= 10:
+                                    # # for i, time in enumerate(np.linspace(0, dt_sym_first, 10, endpoint=True)):
+                                    #     time_dt = time_down + (time_up - time_down)/2
+                                    #     it = it + 1
+
+                                    #     ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), time_dt))
+
+                                    #     ocp.ocp_solver.reset()
+
+                                    #     for i in range(ocp.N):
+                                    #         ocp.ocp_solver.set(i, 'x', x_guess[i])
+                                    #         ocp.ocp_solver.set(i, 'u', u_guess[i])
+                                    #     ocp.ocp_solver.set(ocp.N, 'x', x_guess[ocp.N])
+
+                                    #     status = ocp.ocp_solver.solve()
+
+                                    #     if status == 0:
+                                    #         dt_sym_second = ocp.ocp_solver.get(0, "x")[4]
+                                    #         print('SECOND MIN TIME SOLVED', time_dt)
+
+                                    #         time_up = time_dt
+                                    #     else:
+                                    #         print('SECOND MIN TIME FAILED AT', time_dt)
+
+                                    #         time_down = time_dt
+
+                                    # print(time_up)
+
+                                    break
+                        else:
+                            if x_sym[0] >= q_min and x_sym[0] <= q_max and x_sym[1] >= q_min and x_sym[1] <= q_max and x_sym[2] <= v_max and x_sym[2] >= v_min and x_sym[3] <= v_max and x_sym[3] >= v_min and status_in:
+                                u_sym = ocp.ocp_solver.get(i, "u")   
+                                sim.acados_integrator.set("u", u_sym)
+                                sim.acados_integrator.set("x", x_sym)
+                                sim.acados_integrator.set("T", dt_sym)
+                                status = sim.acados_integrator.solve()
+                                x_sym = sim.acados_integrator.get("x")
+                            else:
+                                if status_in:
+                                    status_in = False
+                                    x_sym_out = x_sym
+
+                                x_sym = np.copy(current_val[:4])
+
+                                if x_sym_out[0] < q_min or x_sym_out[0] > q_max:
+                                    x_sym[0] = x_sym_out[0]
+                                if x_sym_out[2] < v_min or x_sym_out[2] > v_max:
+                                    x_sym[2] = x_sym_out[2]
+                                if x_sym_out[1] < q_min or x_sym_out[1] > q_max:
+                                    x_sym[1] = x_sym_out[1]
+                                if x_sym_out[3] < v_min or x_sym_out[3] > v_max:
+                                    x_sym[3] = x_sym_out[3]
+                            
+                            X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
+                            X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
+
+                            with torch.no_grad():
+                                out_v = model((torch.from_numpy(np.float32([current_val[:4]])).to(device) - mean) / std).numpy()
+                                out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
+                                if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                                    print('1 set, at the limit simulation, x: ', current_val[:4], out_v)
+                                    print('1 set, at the limit simulation, x_sym: ', x_sym, out_uv, 'status: ', status_in)
+
+                    current_val = ocp.ocp_solver.get(ocp.N, "x")
+                    x_sol[ocp.N] = np.copy(current_val[:4])
+
+                    if abs(current_val[0] - q_max) < 1e-4:
+                        x_sym[0] = q_max + 1e-4
+                    if abs(current_val[0] - q_min) < 1e-4:
+                        x_sym[0] = q_min - 1e-4
+                    if abs(current_val[1] - q_max) < 1e-4:
+                        x_sym[1] = q_max + 1e-4
+                    if abs(current_val[1] - q_min) < 1e-4:
+                        x_sym[1] = q_min - 1e-4
+                    if abs(current_val[2] - v_max) < 1e-4:
+                        x_sym[2] = v_max + 1e-4
+                    if abs(current_val[2] - v_min) < 1e-4:
+                        x_sym[2] = v_min - 1e-4
+                    if abs(current_val[3] - v_max) < 1e-4:
+                        x_sym[3] = v_max + 1e-4
+                    if abs(current_val[3] - v_min) < 1e-4:
+                        x_sym[3] = v_min - 1e-4
+                
+                    X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 0]], axis = 0)
+                    X_save = np.append(X_save, [[current_val[0], current_val[1], current_val[2], current_val[3], 1]], axis = 0)
+
+
+
+
+
+                    # dt_sym = ocp.ocp_solver.get(0, "x")[4]
+
+                    # tm = np.linspace(0, ocp.N*dt_sym, ocp.N+1)
+                    # to = np.linspace(0, 1., ocp.N+1)
+
+                    # plt.figure()
+                    # plt.subplot(2, 1, 1)
+                    # line, = plt.step(to, np.append([u_guess[0, 0]], u_guess[:, 0]))
+                    # line, = plt.step(tm, np.append([u_sol[0, 0]], u_sol[:, 0]))
+                    # plt.ylabel('$C1$')
+                    # plt.xlabel('$t$')
+                    # plt.hlines(ocp.Cmax, to[0], to[-1], linestyles='dashed', alpha=0.7)
+                    # plt.hlines(-ocp.Cmax, to[0], to[-1], linestyles='dashed', alpha=0.7)
+                    # plt.ylim([-1.2*ocp.Cmax, 1.2*ocp.Cmax])
+                    # plt.title('Controls, X0 AT THE LIMIT')
+                    # plt.grid()
+                    # plt.subplot(2, 1, 2)
+                    # line, = plt.step(to, np.append([u_guess[0, 1]], u_guess[:, 1]))
+                    # line, = plt.step(tm, np.append([u_sol[0, 1]], u_sol[:, 1]))
+                    # plt.ylabel('$C2$')
+                    # plt.xlabel('$t$')
+                    # plt.hlines(ocp.Cmax, to[0], to[-1], linestyles='dashed', alpha=0.7)
+                    # plt.hlines(-ocp.Cmax, to[0], to[-1], linestyles='dashed', alpha=0.7)
+                    # plt.ylim([-1.2*ocp.Cmax, 1.2*ocp.Cmax])
+                    # plt.grid()
+
+                    # plt.figure()
+                    # plt.subplot(4, 1, 1)
+                    # line, = plt.plot(to, x_guess[:, 0])
+                    # line, = plt.plot(tm, x_sol[:, 0])
+                    # plt.ylabel('$theta1$')
+                    # plt.xlabel('$t$')
+                    # plt.hlines(ocp.thetamax, to[0], to[-1], linestyles='dashed', alpha=0.7)
+                    # plt.hlines(ocp.thetamin, to[0], to[-1], linestyles='dashed', alpha=0.7)
+                    # plt.title('States, X0 AT THE LIMIT')
+                    # plt.grid()
+                    # plt.subplot(4, 1, 2)
+                    # line, = plt.plot(to, x_guess[:, 1])
+                    # line, = plt.plot(tm, x_sol[:, 1])
+                    # plt.ylabel('$theta2$')
+                    # plt.xlabel('$t$')
+                    # plt.hlines(ocp.thetamax, to[0], to[-1], linestyles='dashed', alpha=0.7)
+                    # plt.hlines(ocp.thetamin, to[0], to[-1], linestyles='dashed', alpha=0.7)
+                    # plt.grid()
+                    # plt.subplot(4, 1, 3)
+                    # line, = plt.plot(to, x_guess[:, 2])
+                    # line, = plt.plot(tm, x_sol[:, 2])
+                    # plt.ylabel('$dtheta1$')
+                    # plt.xlabel('$t$')
+                    # plt.hlines(ocp.dthetamax, to[0], to[-1], linestyles='dashed', alpha=0.7)
+                    # plt.hlines(-ocp.dthetamax, to[0], to[-1], linestyles='dashed', alpha=0.7)
+                    # plt.grid()
+                    # plt.subplot(4, 1, 4)
+                    # line, = plt.plot(to, x_guess[:, 3])
+                    # line, = plt.plot(tm, x_sol[:, 3])
+                    # plt.ylabel('$dtheta2$')
+                    # plt.xlabel('$t$')
+                    # plt.hlines(ocp.dthetamax, to[0], to[-1], linestyles='dashed', alpha=0.7)
+                    # plt.hlines(-ocp.dthetamax, to[0], to[-1], linestyles='dashed', alpha=0.7)
+                    # plt.grid()
+
+                    # plt.show()
+
+                    
    
-                    if is_min_time:
-                        # TODO: trova quando ti stacchi dai vincoli e inizia la simulazione da la
-                        pass
-                    else:
-                        # TODO: binary search
-                        pass
                     
             else:
                 print('NOT AT THE LIMIT')
 
-                with torch.no_grad():
-                    out_v = model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std).numpy()
-                    out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
-                    if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
-                        print('1 set, not at the limit, x0: ', x0, out_v)
-                        print('1 set, not at the limit, x_sym0: ', x_sym, out_uv)
+                # with torch.no_grad():
+                #     out_v = model((torch.from_numpy(np.float32([x0[:4]])).to(device) - mean) / std).numpy()
+                #     out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
+                #     if out_uv[0,0] < out_v[0,0] or np.argmax(out_uv, axis=1) == 1:
+                #         print('1 set, not at the limit, x0: ', x0, out_v)
+                #         print('1 set, not at the limit, x_sym0: ', x_sym, out_uv)
 
                 if status == 0:                 
                     x_sol = np.empty((ocp.N+1,4))
