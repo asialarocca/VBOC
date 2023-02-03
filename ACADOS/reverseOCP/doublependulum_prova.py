@@ -145,13 +145,6 @@ if __name__ == "__main__":
                 #         print('1 set, at the limit, x_sym0: ', x_sym, out_uv)
 
                 if status == 0:
-                    # if is_min_time:
-                    #     # TODO: trova quando ti stacchi dai vincoli e inizia la simulazione da la
-                    #     print('MIN TIME') 
-                    # else:
-                    #     # TODO: binary search
-                    #     print('NOT MIN TIME')
-
                     dt_sym = ocp.ocp_solver.get(0, "x")[4]
 
                     x_sol = np.empty((ocp.N+1,4))
