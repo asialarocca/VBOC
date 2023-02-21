@@ -117,6 +117,9 @@ class OCPpendulum:
         self.ocp.constraints.idxbxe_0 = np.array([0, 1])
         self.ocp.constraints.lbx_0 = np.array([0.0, 0.0])
         self.ocp.constraints.ubx_0 = np.array([0.0, 0.0])
+        self.ocp.constraints.lbu_0 = np.array([-self.Fmax])
+        self.ocp.constraints.ubu_0 = np.array([+self.Fmax])
+        self.ocp.constraints.idxbu_0 = np.array([0])
 
         # # options
         self.ocp.solver_options.nlp_solver_type = "SQP_RTI"

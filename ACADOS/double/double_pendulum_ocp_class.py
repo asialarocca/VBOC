@@ -181,6 +181,9 @@ class OCPdoublependulum:
             [self.thetamax, self.thetamax, self.dthetamax, self.dthetamax]
         )
         self.ocp.constraints.idxbx_e = np.array([0, 1, 2, 3])
+        self.ocp.constraints.lbu_0 = np.array([-self.Cmax, -self.Cmax])
+        self.ocp.constraints.ubu_0 = np.array([self.Cmax, self.Cmax])
+        self.ocp.constraints.idxbu_0 = np.array([0, 1])
 
         self.ocp.constraints.x0 = np.array([self.thetamin, self.thetamin, 0.0, 0.0])
 

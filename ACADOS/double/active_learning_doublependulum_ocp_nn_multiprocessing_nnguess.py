@@ -4,7 +4,7 @@ from scipy.stats import entropy, qmc
 import matplotlib.pyplot as plt
 from numpy.linalg import norm as norm
 import time
-from double_pendulum_ocp_class import OCPdoublependulumINIT
+from double_pendulum_ocp_class_highervellimits import OCPdoublependulumINIT 
 import random
 import warnings
 import torch
@@ -21,36 +21,42 @@ warnings.filterwarnings("ignore")
 def testing(s0):
     q0,v0 = s0[:2], s0[2:]
 
-    # Data testing:
-    res = ocp.compute_problem(q0, v0)
-
-    simX = np.ndarray((ocp.N+1, ocp_dim))
-
-    if res == 1:
-        for i in range(ocp.N+1):
-            simX[i, :] = ocp.ocp_solver.get(i, "x")
-        sim = np.reshape(simX,(ocp.N+1)*ocp_dim,).tolist()
-        return [q0[0], q0[1], v0[0], v0[1], 0, 1], sim
-
-    elif res == 0:
+    if q0[0] < q_min or q0[0] > q_max or v0[0] < v_min or v0[0] > v_max or q0[1] < q_min or q0[1] > q_max or v0[1] < v_min or v0[1] > v_max:
         return [q0[0], q0[1], v0[0], v0[1], 1, 0], None
+    else:
+        # Data testing:
+        res = ocp.compute_problem(q0, v0)
+
+        simX = np.ndarray((ocp.N+1, ocp_dim))
+
+        if res == 1:
+            for i in range(ocp.N+1):
+                simX[i, :] = ocp.ocp_solver.get(i, "x")
+            sim = np.reshape(simX,(ocp.N+1)*ocp_dim,).tolist()
+            return [q0[0], q0[1], v0[0], v0[1], 0, 1], sim
+
+        elif res == 0:
+            return [q0[0], q0[1], v0[0], v0[1], 1, 0], None
 
 def testing_guess(s0):
     q0,v0 = s0[:2], s0[2:]
 
-    # Data testing:
-    res = ocp.compute_problem_nnguess(q0, v0, model_guess, mean, std)
-
-    simX = np.ndarray((ocp.N+1, ocp_dim))
-
-    if res == 1:
-        for i in range(ocp.N+1):
-            simX[i, :] = ocp.ocp_solver.get(i, "x")
-        sim = np.reshape(simX,(ocp.N+1)*ocp_dim,).tolist()
-        return [q0[0], q0[1], v0[0], v0[1], 0, 1], sim
-
-    elif res == 0:
+    if q0[0] < q_min or q0[0] > q_max or v0[0] < v_min or v0[0] > v_max or q0[1] < q_min or q0[1] > q_max or v0[1] < v_min or v0[1] > v_max:
         return [q0[0], q0[1], v0[0], v0[1], 1, 0], None
+    else:
+        # Data testing:
+        res = ocp.compute_problem_nnguess(q0, v0, model_guess, mean, std)
+
+        simX = np.ndarray((ocp.N+1, ocp_dim))
+
+        if res == 1:
+            for i in range(ocp.N+1):
+                simX[i, :] = ocp.ocp_solver.get(i, "x")
+            sim = np.reshape(simX,(ocp.N+1)*ocp_dim,).tolist()
+            return [q0[0], q0[1], v0[0], v0[1], 0, 1], sim
+
+        elif res == 0:
+            return [q0[0], q0[1], v0[0], v0[1], 1, 0], None
 
 with cProfile.Profile() as pr:
 
@@ -90,7 +96,7 @@ with cProfile.Profile() as pr:
     n_minibatch = 512
     n_minibatch_model = pow(50,2)
     it_max = int(100 * B / n_minibatch)
-    gridp = 70
+    gridp = 50
 
     # Loss and optimizer
     criterion = nn.BCEWithLogitsLoss()
@@ -110,6 +116,8 @@ with cProfile.Profile() as pr:
     mean, std = torch.mean(Xu_iter_tensor).to(device), torch.std(Xu_iter_tensor).to(device)
     
     print(mean, std)
+
+    time.sleep(100)
 
     with Pool(cpu_num) as p:
         temp = list(p.map(testing, Xu_iter[:N_init]))
@@ -282,14 +290,16 @@ with cProfile.Profile() as pr:
         it = 0
         val = 1
 
-        qt = int(n_minibatch / 2)
+        qt = n_minibatch
 
-        end_ind = len(X_traj)
-        init_ind = len(X_traj) - pow(20,4)
-        if init_ind < 0:
-            init_ind = 0
+        # end_ind = len(X_traj)
+        # init_ind = len(X_traj) - pow(20,4)
+        # if init_ind < 0:
+        #     init_ind = 0
 
-        X_traj = X_traj[init_ind:end_ind]
+        # X_traj = X_traj[init_ind:end_ind]
+
+        # print(init_ind, end_ind)
 
         # Train the guess model
         while val > loss_stop and it <= it_max:
@@ -332,7 +342,9 @@ with cProfile.Profile() as pr:
 
         print("etpmax:", etpmax)
         
-        torch.save(model.state_dict(), 'model_2pendulum')
+    torch.save(model.state_dict(), 'model_2pendulum_20')
+
+    np.save('data_al_20.npy', np.asarray(X_iter))
 
     # model = NeuralNet(input_size, hidden_size, output_size).to(device)
     # model.load_state_dict(torch.load('model_2pendulum'))
