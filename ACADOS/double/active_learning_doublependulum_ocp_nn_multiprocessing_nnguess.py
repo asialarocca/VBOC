@@ -82,7 +82,7 @@ with cProfile.Profile() as pr:
     learning_rate = 0.001
 
     # Device configuration
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu") # "cuda" if torch.cuda.is_available() else 
 
     model = NeuralNet(input_size, hidden_size, output_size).to(device)
     model_guess = NeuralNetGuess(input_size, hidden_size, ocp_dim*ocp.N).to(device)
@@ -116,8 +116,6 @@ with cProfile.Profile() as pr:
     mean, std = torch.mean(Xu_iter_tensor).to(device), torch.std(Xu_iter_tensor).to(device)
     
     print(mean, std)
-
-    time.sleep(100)
 
     with Pool(cpu_num) as p:
         temp = list(p.map(testing, Xu_iter[:N_init]))

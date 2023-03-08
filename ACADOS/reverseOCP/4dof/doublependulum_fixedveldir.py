@@ -12,6 +12,7 @@ warnings.filterwarnings("ignore")
 import torch
 import torch.nn as nn
 from my_nn import NeuralNet, NeuralNetRegression
+import math
 
 
 if __name__ == "__main__":
@@ -29,513 +30,684 @@ if __name__ == "__main__":
     q_min = ocp.thetamin
     tau_max = ocp.Cmax
 
-    # NN settings:
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    beta = 0.95
-    n_minibatch = 512
-    B = 1e4
-    it_max = 1e5
-    learning_rate = 1e-3
+    # Pytorch device:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
 
-    # model_rev = NeuralNet(4, 400, 2).to(device)
-    # criterion = nn.BCEWithLogitsLoss()
-    # optimizer_rev = torch.optim.Adam(model_rev.parameters(), lr=learning_rate)
+    # Active Learning model and data (used as the "ground truth" to check correctness of the approach):
+    model_al = NeuralNet(4, 400, 2).to(device)
+    model_al.load_state_dict(torch.load('data_vel_20/model_2pendulum_20'))
+    # mean, std = torch.tensor(1.9635), torch.tensor(3.0036) # max vel = 5
+    # mean_al, std_al = torch.tensor(1.9635), torch.tensor(7.0253) # max vel = 15
+    # mean_al, std_al = torch.tensor(1.9635), torch.tensor(13.6191) # max vel = 30
+    mean_al, std_al = torch.tensor(1.9635).to(device), torch.tensor(9.2003).to(device) # max vel = 20
+    data_al = np.load('data_vel_20/data_al_20.npy')
 
-    model_dir = NeuralNetRegression(4, 256, 1).to(device)
-    criterion_dir = nn.MSELoss()
-    optimizer_dir = torch.optim.Adam(model_dir.parameters(), lr=learning_rate)
+    # Unviable data generation parameter:
+    eps = 1e-4
+    
+    # # Initialization of the array that will contain generated data:
+    # X_save = np.empty((0,6))
 
-    # # Data generation params:
-    # eps = 1e-2
-    
-    # X_save = np.array([[(q_min+q_max)/2, (q_min+q_max)/2, 0., 0., 0, 1]])
-    
+    # count_solved = 0
+    # count_tot = 0
+    # error_found = 0
+    # check_data = 0 # set to 1 to check the correctness of generated data (to be used only while debugging)
+    # min_time = 0 # set to 1 to also solve a minimum time problem to improve the solution
+
+    # # Data generation:
     # while True:
-    #     if X_save.shape[0] >= 750000:
+    #     # Stopping condition:
+    #     if X_save.shape[0] >= 1000:
     #         break
 
-    #     ran1 = -1 * random.random() 
-    #     ran2 = random.choice([-1, 1]) * random.random()
-    #     norm_weights = norm(np.array([ran1, ran2]))
-    #     p = np.array([ran1/norm_weights, ran2/norm_weights, 0.])
+    #     # Additional stopping condition when an error is found while checking data:
+    #     if check_data and error_found:
+    #         print('ERROR FOUND')
 
-    #     q_init = q_min + random.random() * (q_max-q_min)
-    #     if q_init > q_max - eps:
-    #         q_init = q_init - eps
-    #     if q_init < q_min + eps:
-    #         q_init = q_init + eps
-
-    #     # ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #     ocp.ocp_solver.constraints_set(ocp.N, "lbx", np.array([q_max, q_min, 0., 0., 1e-2]))
-    #     ocp.ocp_solver.constraints_set(ocp.N, "ubx", np.array([q_max, q_max, 0., 0., 1e-2]))
-
-    #     ocp.ocp_solver.reset()
-
-    #     ocp.ocp_solver.set(ocp.N, 'x', np.array([q_max, q_init, 0., 0., 1e-2]))
-    #     ocp.ocp_solver.set(ocp.N, 'p', p)
-
-    #     for i, tau in enumerate(np.linspace(0, 1, ocp.N, endpoint=False)):
-    #         x_guess = np.array([(1-tau)*q_min + tau*q_max, q_init, 2*(1-tau)*(q_max-q_min), 0., 1e-2]) 
-    #         # x_guess = np.array([(1-tau)*q_min + tau*q_max, q_init, v_max, 0., 1e-2]) # with lower vel limits
-    #         ocp.ocp_solver.set(i, 'x', x_guess)
-    #         ocp.ocp_solver.set(i, 'p', p)
-    #         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, 1e-2])) 
-    #         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, 1e-2])) 
-
-    #     ocp.ocp_solver.constraints_set(0, "lbx", np.array([q_min + eps, q_init, v_min, v_min, 1e-2]))
-    #     ocp.ocp_solver.constraints_set(0, "ubx", np.array([q_min + eps, q_init, v_max, v_max, 1e-2]))
-
-    #     status = ocp.ocp_solver.solve()
+    #         # Save the trajectory that resulted in an error:
+    #         np.save('x_sol.npy', x_sol)
+    #         np.save('u_sol.npy', u_sol)
+    #         np.save('x_sym.npy', x_sym)
+    #         break
 
     #     print('--------------------------------------------')
 
-    #     if status == 0:
+    #     count_tot += 1
+
+    #     # Reset the number of steps used in the OCP:
+    #     N = ocp.N
+    #     ocp.ocp_solver.set_new_time_steps(np.full((N,), 1.))
+    #     ocp.ocp_solver.update_qp_solver_cond_N(N)
+
+    #     # Time step duration:
+    #     dt_sym = 1e-2
+
+    #     # Initialization of the OCP: The OCP is set to find an extreme trajectory. The initial joint positions
+    #     # are set to random values, except for the reference joint whose position is set to an extreme value.
+    #     # The initial joint velocities are left free. The final velocities are all set to 0 and the final 
+    #     # position of the reference joint is set to the other extreme. The final positions of the other joints
+    #     # are left free. The OCP has to maximise the initial velocity module in a predefined direction.
+
+    #     # Selection of the eference joint:
+    #     joint_sel = random.choice([0, 1]) # 0 to select first joint as reference, 1 to select second joint
+    #     joint_oth = int(1 - joint_sel)
+
+    #     # Selection of the start and end position of the reference joint:
+    #     vel_sel = random.choice([-1, 1]) # -1 to maximise initial vel, + 1 to minimize it
+    #     if vel_sel == -1:
+    #         q_init_sel = q_min
+    #         q_fin_sel = q_max
+    #     else:
+    #         q_init_sel = q_max
+    #         q_fin_sel = q_min
+
+    #     # Initial velocity optimization direction (the cost is in the form p[0] * dtheta1 + p[1] * dtheta2 + p[2] * dt):
+    #     ran1 = vel_sel * random.random()
+    #     ran2 = random.choice([-1, 1]) * random.random() 
+    #     norm_weights = norm(np.array([ran1, ran2]))         
+    #     if joint_sel == 0:
+    #         p = np.array([ran1/norm_weights, ran2/norm_weights, 0.])
+    #     else:
+    #         p = np.array([ran2/norm_weights, ran1/norm_weights, 0.])
+
+    #     # Initial position of the other joint:
+    #     q_init_oth = q_min + random.random() * (q_max-q_min)
+    #     if q_init_oth > q_max - eps:
+    #         q_init_oth = q_init_oth - eps
+    #     if q_init_oth < q_min + eps:
+    #         q_init_oth = q_init_oth + eps
+
+    #     # Bounds on the initial state:
+    #     q_init_lb = np.array([q_min, q_min, v_min, v_min, dt_sym])
+    #     q_init_ub = np.array([q_max, q_max, v_max, v_max, dt_sym])
+    #     if q_init_sel == q_min:
+    #         q_init_lb[joint_sel] = q_min + eps
+    #         q_init_ub[joint_sel] = q_min + eps
+    #     else:
+    #         q_init_lb[joint_sel] = q_max - eps
+    #         q_init_ub[joint_sel] = q_max - eps
+    #     q_init_lb[joint_oth] = q_init_oth
+    #     q_init_ub[joint_oth] = q_init_oth
+
+    #     # Bounds on the final state:
+    #     q_fin_lb = np.array([q_min, q_min, 0., 0., dt_sym])
+    #     q_fin_ub = np.array([q_max, q_max, 0., 0., dt_sym])
+    #     q_fin_lb[joint_sel] = q_fin_sel
+    #     q_fin_ub[joint_sel] = q_fin_sel
+
+    #     # Guess:
+    #     x_sol_guess = np.empty((N, 5))
+    #     u_sol_guess = np.empty((N, 2))
+    #     for i, tau in enumerate(np.linspace(0, 1, N)):
+    #         x_guess = np.array([q_init_oth, q_init_oth, 0., 0., dt_sym])
+    #         x_guess[joint_sel] = (1-tau)*q_init_sel + tau*q_fin_sel
+    #         x_guess[joint_sel+2] = 2*(1-tau)*(q_fin_sel-q_init_sel) 
+    #         x_sol_guess[i] = x_guess
+    #         u_sol_guess[i] = np.array([ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_guess[0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_guess[1])])
+
+    #     cost = 1.
+    #     all_ok = False
+
+    #     # Iteratively solve the OCP with an increased number of time steps until the the solution does not change:
+    #     while True:
+    #         # Reset current iterate:
+    #         ocp.ocp_solver.reset()
+
+    #         # Set parameters, guesses and constraints:
+    #         for i in range(N):
+    #             ocp.ocp_solver.set(i, 'x', x_sol_guess[i])
+    #             ocp.ocp_solver.set(i, 'u', u_sol_guess[i])
+    #             ocp.ocp_solver.set(i, 'p', p)
+    #             ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
+    #             ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
+    #             ocp.ocp_solver.constraints_set(i, 'lbu', np.array([-tau_max, -tau_max]))
+    #             ocp.ocp_solver.constraints_set(i, 'ubu', np.array([tau_max, tau_max]))
+    #             ocp.ocp_solver.constraints_set(i, 'C', np.array([[0., 0., 0., 0., 0.]]))
+    #             ocp.ocp_solver.constraints_set(i, 'D', np.array([[0., 0.]]))
+    #             ocp.ocp_solver.constraints_set(i, 'lg', np.array([0.]))
+    #             ocp.ocp_solver.constraints_set(i, 'ug', np.array([0.]))
+
+    #         ocp.ocp_solver.constraints_set(0, "lbx", q_init_lb)
+    #         ocp.ocp_solver.constraints_set(0, "ubx", q_init_ub)
+    #         ocp.ocp_solver.constraints_set(0, "C", np.array([[0., 0., p[1], -p[0], 0.]])) 
+
+    #         ocp.ocp_solver.constraints_set(N, "lbx", q_fin_lb)
+    #         ocp.ocp_solver.constraints_set(N, "ubx", q_fin_ub)
+    #         ocp.ocp_solver.set(N, 'x', x_sol_guess[-1])
+    #         ocp.ocp_solver.set(N, 'p', p)
+
+    #         # Solve the OCP:
+    #         status = ocp.ocp_solver.solve()
+
+    #         if status == 0: # the solver has found a solution
+    #             # Compare the current cost with the previous one:
+    #             cost_new = ocp.ocp_solver.get_cost()
+    #             if cost_new > float(f'{cost:.6f}') - 1e-6:
+    #                 all_ok = True # the time is sufficient to have achieved an optimal solution
+    #                 break
+    #             cost = cost_new
+
+    #             # Update the guess with the current solution:
+    #             x_sol_guess = np.empty((N+1,5))
+    #             u_sol_guess = np.empty((N+1,2))
+    #             for i in range(N):
+    #                 x_sol_guess[i] = ocp.ocp_solver.get(i, "x")
+    #                 u_sol_guess[i] = ocp.ocp_solver.get(i, "u")
+    #             x_sol_guess[N] = ocp.ocp_solver.get(N, "x")
+    #             u_sol_guess[N] = np.array([ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol_guess[N][0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol_guess[N][1])])
+
+    #             # Increase the number of time steps:
+    #             N = N + 1
+    #             ocp.ocp_solver.set_new_time_steps(np.full((N,), 1.))
+    #             ocp.ocp_solver.update_qp_solver_cond_N(N)
+    #         else:
+    #             print('FAILED')
+    #             all_ok = False # the solution is either not available or not guaranteed to be optimal
+    #             break
+
+    #     if all_ok: 
+    #         count_solved += 1
+            
     #         print('INITIAL OCP SOLVED')
+    #         print(ocp.ocp_solver.get(0, "x"))
+    #         print(p)
+    #         if check_data:
+    #             np.save('p.npy', p)
 
-    #         x0 = ocp.ocp_solver.get(0, "x")
-    #         u0 = ocp.ocp_solver.get(0, "u")
-
-    #         x_sol = np.empty((ocp.N+1,5))
-    #         u_sol = np.empty((ocp.N,2))
-
-    #         dt_sym = ocp.ocp_solver.get(0, "x")[4]
-
-    #         x_sol[0] = x0
-    #         u_sol[0] = u0
-
-    #         for i in range(1, ocp.N):
+    #         # Save the optimal trajectory:
+    #         x_sol = np.empty((N+1,5))
+    #         u_sol = np.empty((N,2))
+    #         for i in range(N):
     #             x_sol[i] = ocp.ocp_solver.get(i, "x")
     #             u_sol[i] = ocp.ocp_solver.get(i, "u")
+    #         x_sol[N] = ocp.ocp_solver.get(N, "x")
 
-    #         x_sol[ocp.N] = ocp.ocp_solver.get(ocp.N, "x")
+    #         # Minimum time OCP:
+    #         if min_time:
+    #             # Reset current iterate:
+    #             ocp.ocp_solver.reset()
 
-    #         # p_mintime = np.array([0., 0., 1.])
+    #             # Cost:
+    #             p_mintime = np.array([0., 0., 1.]) # p[2] = 1 corresponds to the minimization of time
 
-    #         # ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
+    #             # Set parameters, guesses and constraints:
+    #             for i in range(N):
+    #                 ocp.ocp_solver.set(i, 'x', x_sol[i])
+    #                 ocp.ocp_solver.set(i, 'u', u_sol[i])
+    #                 ocp.ocp_solver.set(i, 'p', p_mintime)
+    #                 ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, 0.])) 
+    #                 ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
 
-    #         # ocp.ocp_solver.reset()
+    #             # Initial and final states are fixed (except for the time step duration):
+    #             ocp.ocp_solver.constraints_set(N, "lbx", np.array([x_sol[N][0], x_sol[N][1], 0., 0., 0.]))
+    #             ocp.ocp_solver.constraints_set(N, "ubx", np.array([x_sol[N][0], x_sol[N][1], 0., 0., dt_sym]))
+    #             ocp.ocp_solver.set(N, 'x', x_sol[N])
+    #             ocp.ocp_solver.set(N, 'p', p_mintime)
 
-    #         # for i in range(1, ocp.N):
-    #         #     ocp.ocp_solver.set(i, 'x', x_sol[i])
-    #         #     ocp.ocp_solver.set(i, 'u', u_sol[i])
-    #         #     ocp.ocp_solver.set(i, 'p', p_mintime)
-    #         #     ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, 0., v_min, 0.])) 
-    #         #     ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, 1e-2])) 
+    #             ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x_sol[0][0], x_sol[0][1], x_sol[0][2], x_sol[0][3], 0.])) 
+    #             ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x_sol[0][0], x_sol[0][1], x_sol[0][2], x_sol[0][3], dt_sym])) 
+    #             ocp.ocp_solver.constraints_set(0, "C", np.array([[0., 0., 0., 0., 0.]])) 
 
-    #         # ocp.ocp_solver.constraints_set(ocp.N, "lbx", np.array([q_max, q_fin, 0., 0., 0.]))
-    #         # ocp.ocp_solver.constraints_set(ocp.N, "ubx", np.array([q_max, q_fin, 0., 0., 1e-2]))
+    #             # Solve the OCP:
+    #             status = ocp.ocp_solver.solve()
 
-    #         # ocp.ocp_solver.set(ocp.N, 'x', x_sol[ocp.N])
-    #         # ocp.ocp_solver.set(ocp.N, 'p', p_mintime)
+    #             if status == 0:
+    #                 # Save the new optimal trajectory:
+    #                 for i in range(N):
+    #                     x_sol[i] = ocp.ocp_solver.get(i, "x")
+    #                     u_sol[i] = ocp.ocp_solver.get(i, "u")
+    #                 x_sol[N] = ocp.ocp_solver.get(N, "x")
 
-    #         # ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x0[0], x0[1], x0[2], x0[3], 0.])) 
-    #         # ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x0[0], x0[1], x0[2], x0[3], 1e-2])) 
+    #                 # Save the optimized time step duration:
+    #                 dt_sym = ocp.ocp_solver.get(0, "x")[4]
 
-    #         # ocp.ocp_solver.set(0, 'x', x_sol[0])
-    #         # ocp.ocp_solver.set(0, 'u', u_sol[0])
-    #         # ocp.ocp_solver.set(0, 'p', p_mintime)
+    #                 print('MIN TIME SOLVED')
 
-    #         # status = ocp.ocp_solver.solve()
+    #         # Save the last state of the optimal trajectory and its corresponding unviable one:
+    #         x_fin_out = [x_sol[N][0], x_sol[N][1], x_sol[N][2], x_sol[N][3], 1, 0]
+    #         x_fin_out[joint_sel] = x_fin_out[joint_sel] - vel_sel * eps
+    #         X_save = np.append(X_save, [x_fin_out], axis = 0)
+    #         X_save = np.append(X_save, [[x_sol[N][0], x_sol[N][1], x_sol[N][2], x_sol[N][3], 0, 1]], axis = 0)
 
-    #         # if status == 0:
-    #         #     x_sol[0] = ocp.ocp_solver.get(0, "x")
-    #         #     u_sol[0] = ocp.ocp_solver.get(0, "u")
+    #         # Generate the unviable sample in the cost direction:
+    #         x_out = np.copy(x_sol[0][:4])
+    #         x_out[2] = x_out[2] - eps * p[0]
+    #         x_out[3] = x_out[3] - eps * p[1]
+    #         x_sym = np.empty((N+1,4))
+    #         x_sym[0] = x_out
 
-    #         #     for i in range(1, ocp.N):
-    #         #         x_sol[i] = ocp.ocp_solver.get(i, "x")
-    #         #         u_sol[i] = ocp.ocp_solver.get(i, "u")
+    #         # Save the initial state of the optimal trajectory and its corresponding unviable one:
+    #         X_save = np.append(X_save, [[x_out[0], x_out[1], x_out[2], x_out[3], 1, 0]], axis = 0)
+    #         X_save = np.append(X_save, [[x_sol[0][0], x_sol[0][1], x_sol[0][2], x_sol[0][3], 0, 1]], axis = 0)
 
-    #         #     x_sol[ocp.N] = ocp.ocp_solver.get(ocp.N, "x")
+    #         # xv_state = np.full((N+1,1),2)
+    #         # xv_state[N] = 1
 
-    #         #     dt_sym = ocp.ocp_solver.get(0, "x")[4]
-
-    #         #     print('MIN TIME SOLVED')
-
-    #         x0 = np.copy(x_sol[0])
-    #         x3_eps = x0[2] - eps * p[0]
-    #         x4_eps = x0[3] - eps * p[1]
-    #         x_sym = np.array([x0[0], x0[1], x3_eps, x4_eps])
-
-    #         X_save = np.append(X_save, [[x_sol[ocp.N][0] + eps, x_sol[ocp.N][1], x_sol[ocp.N][2], x_sol[ocp.N][3], 1, 0]], axis = 0)
-    #         X_save = np.append(X_save, [[x_sol[ocp.N][0], x_sol[ocp.N][1], x_sol[ocp.N][2], x_sol[ocp.N][3], 0, 1]], axis = 0)
-
-    #         # xv_state = np.full((ocp.N+1,1),2)
-    #         # xv_state[ocp.N] = 1
-
-    #         if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #             is_x_at_limit = True
+    #         # Check if initial velocities lie on a limit:
+    #         if x_out[2] > v_max or x_out[2] < v_min or x_out[3] > v_max or x_out[3] < v_min:
+    #             is_x_at_limit = True # the state is on dX
     #             print('Initial state at the limit')
     #             # xv_state[0] = 1
     #         else:
-    #             is_x_at_limit = False
+    #             is_x_at_limit = False # the state is on dV
     #             print('Initial state not at the limit')
     #             # xv_state[0] = 0
 
-    #         X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 1, 0]], axis = 0)
-    #         X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 0, 1]], axis = 0)
-
-    #         for f in range(1, ocp.N):
+    #         # Iterate through the trajectory to verify the location of the states with respect to V:
+    #         for f in range(1, N):
     #             print('State ', f)
 
     #             if is_x_at_limit:
+    #                 # If the previous state was on a limit, the current state location cannot be identified using
+    #                 # the corresponding unviable state but it has to rely on the proximity to the state limits 
+    #                 # (more restrictive):
     #                 if x_sol[f][0] > q_max - eps or x_sol[f][0] < q_min + eps or x_sol[f][1] > q_max - eps or x_sol[f][1] < q_min + eps or x_sol[f][2] > v_max - eps or x_sol[f][2] < v_min + eps or x_sol[f][3] > v_max - eps or x_sol[f][3] < v_min + eps:
-    #                     is_x_at_limit = True
+    #                     is_x_at_limit = True # the state is on dX
     #                     print('State on dX')
     #                     # xv_state[f] = 1
 
-    #                     x_sym = np.copy(x_sol[f][:4])
-
+    #                     # Generate the corresponding unviable state:
+    #                     x_out = np.copy(x_sol[f][:4])
     #                     if x_sol[f][0] > q_max - eps:
-    #                         x_sym[0] = q_max + eps
+    #                         x_out[0] = q_max + eps
     #                     if x_sol[f][0] < q_min + eps:
-    #                         x_sym[0] = q_min - eps
+    #                         x_out[0] = q_min - eps
     #                     if x_sol[f][1] > q_max - eps:
-    #                         x_sym[1] = q_max + eps
+    #                         x_out[1] = q_max + eps
     #                     if x_sol[f][1] < q_min + eps:
-    #                         x_sym[1] = q_min - eps
+    #                         x_out[1] = q_min - eps
     #                     if x_sol[f][2] > v_max - eps:
-    #                         x_sym[2] = v_max + eps
+    #                         x_out[2] = v_max + eps
     #                     if x_sol[f][2] < v_min + eps:
-    #                         x_sym[2] = v_min - eps
+    #                         x_out[2] = v_min - eps
     #                     if x_sol[f][3] > v_max - eps:
-    #                         x_sym[3] = v_max + eps
+    #                         x_out[3] = v_max + eps
     #                     if x_sol[f][3] < v_min + eps:
-    #                         x_sym[3] = v_min - eps
+    #                         x_out[3] = v_min - eps
+
+    #                     # Save the unviable state:
+    #                     x_sym[f] = x_out
     #                 else:
-    #                     is_x_at_limit = False
+    #                     is_x_at_limit = False # the state is either on the interior of V or on dV
 
-    #                     if x_sol[f-1][0] > q_max - eps or x_sol[f-1][0] < q_min + eps:
-    #                         print('Detouching from the limit on q1, break')
-    #                         break
+    #                     # if x_sol[f-1][joint_sel] > q_max - eps or x_sol[f-1][joint_sel] < q_min + eps:
+    #                     #     print('Detouching from the limit on the reference joint, break')
+    #                     #     break
 
-    #                     if x_sol[f-1][2] < v_min + eps:
-    #                         print('Detouching from the limit on -v1, break')
-    #                         break
+    #                     # Solve an OCP to verify whether the following part of the trajectory is on V or dV. To do so
+    #                     # the initial joint positions are set to the current ones and the final state is fixed to the
+    #                     # final state of the trajectory. The initial velocities are left free and maximized in the 
+    #                     # direction of the current joint velocities.
 
+    #                     # Reset current iterate:
     #                     ocp.ocp_solver.reset()
 
-    #                     p = np.array([-1., 0., 0.])
+    #                     # Cost:
+    #                     norm_weights = norm(np.array([x_sol[f][2], x_sol[f][3]]))    
+    #                     p = np.array([-(x_sol[f][2])/norm_weights, -(x_sol[f][3])/norm_weights, 0.]) # the cost direction is based on the current velocity direction
 
-    #                     # ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
+    #                     # Bounds on the initial state:
+    #                     lbx_init = np.array([x_sol[f][0], x_sol[f][1], v_min, v_min, dt_sym])
+    #                     ubx_init = np.array([x_sol[f][0], x_sol[f][1], v_max, v_max, dt_sym])
+    #                     if x_sol[f][2] < 0.:
+    #                         ubx_init[2] = x_sol[f][2]
+    #                     else:
+    #                         lbx_init[2] = x_sol[f][2]
+    #                     if x_sol[f][3] < 0.:
+    #                         ubx_init[3] = x_sol[f][3]
+    #                     else:
+    #                         lbx_init[3] = x_sol[f][3]
 
-    #                     ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3], dt_sym])) 
-    #                     ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x_sol[f][0], x_sol[f][1], v_max, x_sol[f][3], dt_sym])) 
-    #                     ocp.ocp_solver.set(0, 'x', x_sol[f])
-    #                     ocp.ocp_solver.set(0, 'u', u_sol[f])
-    #                     ocp.ocp_solver.set(0, 'p', p)
-
-    #                     for i in range(ocp.N - f, ocp.N+1):
-    #                         ocp.ocp_solver.set(i, 'x', x_sol[ocp.N])
-    #                         ocp.ocp_solver.set(i, 'p', p)
-    #                         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #                         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
-
-    #                     ocp.ocp_solver.constraints_set(ocp.N - f, "lbx", x_sol[ocp.N])
-    #                     ocp.ocp_solver.constraints_set(ocp.N - f, "ubx", x_sol[ocp.N])
-
-    #                     for i in range(1, ocp.N - f):
+    #                     # Set parameters, guesses and constraints:
+    #                     for i in range(N-f):
     #                         ocp.ocp_solver.set(i, 'x', x_sol[i+f])
     #                         ocp.ocp_solver.set(i, 'u', u_sol[i+f])
     #                         ocp.ocp_solver.set(i, 'p', p)
     #                         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
     #                         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
 
-    #                     ocp.ocp_solver.options_set('qp_tol_stat', 1e-2)
+    #                     ocp.ocp_solver.constraints_set(0, 'lbx', lbx_init) 
+    #                     ocp.ocp_solver.constraints_set(0, 'ubx', ubx_init) 
+    #                     ocp.ocp_solver.constraints_set(0, "C", np.array([[0., 0., p[1], -p[0], 0.]])) 
 
+    #                     u_g = np.array([ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol[N][0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol[N][1])])
+                        
+    #                     # The OCP is set with N time steps instead of N-f (corresponding with the remaining states of the
+    #                     # optimal trajectory) because it is also necessary to check if the maximum velocity norm assume the same value 
+    #                     # also with more time:
+    #                     for i in range(N - f, N):
+    #                         ocp.ocp_solver.set(i, 'x', x_sol[N])
+    #                         ocp.ocp_solver.set(i, 'u', u_g)
+    #                         ocp.ocp_solver.set(i, 'p', p)
+    #                         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
+    #                         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
+
+    #                     ocp.ocp_solver.set(N, 'x', x_sol[N])
+    #                     ocp.ocp_solver.set(N, 'p', p)
+    #                     ocp.ocp_solver.constraints_set(N, 'lbx', x_sol[N]) 
+    #                     ocp.ocp_solver.constraints_set(N, 'ubx', x_sol[N]) 
+
+    #                     # Solve the OCP:
     #                     status = ocp.ocp_solver.solve()
-
-    #                     ocp.ocp_solver.options_set('qp_tol_stat', 1e-6)
 
     #                     if status == 0:
     #                         print('INTERMEDIATE OCP SOLVED')
+    #                         print(x_sol[f], x_out)
 
-    #                         if ocp.ocp_solver.get(0, "x")[2] > x_sol[f][2] + 1e-2:
-    #                             print('new vel: ', ocp.ocp_solver.get(0, "x")[2], 'old vel: ', x_sol[f][2])
+    #                         # Compare the old and new velocity norms:
+    #                         x0_new = ocp.ocp_solver.get(0, "x")
+    #                         norm_old = norm(np.array([x_sol[f][2:4]]))    
+    #                         norm_new = norm(np.array([x0_new[2:4]]))    
+
+    #                         if norm_new > norm_old + 1e-6: # the state is inside V
+    #                             print('new vel: ', x0_new[2:4], 'old vel: ', x_sol[f][2:4])
+    #                             print('new vel norm: ', norm_new, 'old vel norm: ', norm_old)
     #                             print('Test failed, state inside V, break')
 
-    #                             # for l in range(max(0, f-5), min(ocp.N, f+5)):
-    #                             #     with torch.no_grad():
-    #                             #         plt.figure()
-    #                             #         inp = torch.from_numpy(
-    #                             #             np.float32(
-    #                             #                 np.c_[
-    #                             #                     x_sol[l][0] * np.ones(xrav.shape[0]),
-    #                             #                     xrav,
-    #                             #                     x_sol[l][2] * np.ones(yrav.shape[0]),
-    #                             #                     yrav,
-    #                             #                 ]
-    #                             #             )
-    #                             #         )
-    #                             #         inp = (inp - mean_al) / std_al
-    #                             #         out = model_al(inp)
-    #                             #         y_pred = np.argmax(out.numpy(), axis=1)
-    #                             #         Z = y_pred.reshape(xx.shape)
-    #                             #         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    #                             #         plt.plot(
-    #                             #             x_sol[l][1],
-    #                             #             x_sol[l][3],
-    #                             #             "ko",
-    #                             #         )
-    #                             #         xit = []
-    #                             #         yit = []
-    #                             #         cit = []
-    #                             #         for i in range(len(data_al)):
-    #                             #             if (
-    #                             #                 norm(data_al[i][0] - x_sol[l][0]) < 0.1/5
-    #                             #                 and norm(data_al[i][2] - x_sol[l][2]) < 1./5
-    #                             #             ):
-    #                             #                 xit.append(data_al[i][1])
-    #                             #                 yit.append(data_al[i][3])
-    #                             #                 if data_al[i][5] < 0.5:
-    #                             #                     cit.append(0)
-    #                             #                 else:
-    #                             #                     cit.append(1)
-    #                             #         plt.scatter(
-    #                             #             xit,
-    #                             #             yit,
-    #                             #             c=cit,
-    #                             #             marker=".",
-    #                             #             alpha=0.5,
-    #                             #             cmap=plt.cm.Paired,
-    #                             #         )
-    #                             #         plt.xlim([q_min, q_max])
-    #                             #         plt.ylim([v_min, v_max])
-    #                             #         plt.grid()
-    #                             #         if l == f:
-    #                             #             plt.title("CURRENT SOL in the plane q2 vs v2, original solution")
-    #                             #         else:
-    #                             #             plt.title("Current sol in the plane q2 vs v2, original solution")
-
-    #                             #         plt.figure()
-    #                             #         inp = torch.from_numpy(
-    #                             #             np.float32(
-    #                             #                 np.c_[
-    #                             #                     xrav,
-    #                             #                     x_sol[l][1] * np.ones(xrav.shape[0]),
-    #                             #                     yrav,
-    #                             #                     x_sol[l][3] * np.ones(yrav.shape[0]),
-    #                             #                 ]
-    #                             #             )
-    #                             #         )
-    #                             #         inp = (inp - mean_al) / std_al
-    #                             #         out = model_al(inp)
-    #                             #         y_pred = np.argmax(out.numpy(), axis=1)
-    #                             #         Z = y_pred.reshape(xx.shape)
-    #                             #         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    #                             #         plt.plot(
-    #                             #             x_sol[l][0],
-    #                             #             x_sol[l][2],
-    #                             #             "ko",
-    #                             #         )
-    #                             #         xit = []
-    #                             #         yit = []
-    #                             #         cit = []
-    #                             #         for i in range(len(data_al)):
-    #                             #             if (
-    #                             #                 norm(data_al[i][1] - x_sol[l][1]) < 0.1/5
-    #                             #                 and norm(data_al[i][3] - x_sol[l][3]) < 1./5
-    #                             #             ):
-    #                             #                 xit.append(data_al[i][0])
-    #                             #                 yit.append(data_al[i][2])
-    #                             #                 if data_al[i][5] < 0.5:
-    #                             #                     cit.append(0)
-    #                             #                 else:
-    #                             #                     cit.append(1)
-    #                             #         plt.scatter(
-    #                             #             xit,
-    #                             #             yit,
-    #                             #             c=cit,
-    #                             #             marker=".",
-    #                             #             alpha=0.5,
-    #                             #             cmap=plt.cm.Paired,
-    #                             #         )
-    #                             #         plt.xlim([q_min, q_max])
-    #                             #         plt.ylim([v_min, v_max])
-    #                             #         plt.grid()
-    #                             #         if l == f:
-    #                             #             plt.title("CURRENT SOL in the plane q1 vs v1")
-    #                             #         else:
-    #                             #             plt.title("Current sol in the plane q1 vs v1")
-    #                             # plt.show()
-
     #                             break
-
-    #                             # # sono o su dv o su dx
-    #                             # for i in range(f, ocp.N):
-    #                             #     x_sol[i] = ocp.ocp_solver.get(i-f, "x")
-    #                             #     u_sol[i] = ocp.ocp_solver.get(i-f, "u")
-
-    #                             # x_sym = np.copy(x_sol[f])
-    #                             # x1_eps = x_sym[0] - eps * p[0]
-    #                             # x2_eps = x_sym[1] - eps * p[1]
-    #                             # x3_eps = x_sym[2] - eps * p[2]
-    #                             # x4_eps = x_sym[3] - eps * p[3]
-    #                             # x_sym = np.array([x1_eps, x2_eps, x3_eps, x4_eps])
-
-    #                             # if x_sym[0] > q_max - eps or x_sym[0] < q_min + eps or x_sym[1] > q_max - eps or x_sym[1] < q_min + eps or x_sym[2] > v_max - eps or x_sym[2] < v_min+ eps or x_sym[3] > v_max - eps or x_sym[3] < v_min + eps:
-    #                             #     print('Sono su dX, ottenuto tramite la nuova soluzione')
-    #                             #     print(x_sol[f], x_sym)
-    #                             #     is_x_at_limit = True
-    #                             #     xv_state[f] = 1
-    #                             # else:
-    #                             #     print('Sono su dV, ottenuto tramite la nuova soluzione')
-    #                             #     print(x_sol[f], x_sym)
-    #                             #     is_x_at_limit = False
-    #                             #     xv_state[f] = 0
     #                         else:
     #                             print('State on dV, test passed')
-    #                             is_x_at_limit = False
+    #                             is_x_at_limit = False # the state is on dV
     #                             # xv_state[f] = 0
 
-    #                             x_sym = np.copy(x_sol[f][:4])
-    #                             x3_eps = x_sym[2] - eps * p[0]
-    #                             x4_eps = x_sym[3] - eps * p[1]
-    #                             x_sym = np.array([x_sym[0], x_sym[1], x3_eps, x4_eps])
+    #                             # Generate the new corresponding unviable state in the cost direction:
+    #                             x_out = np.copy(x_sol[f][:4])
+    #                             x_out[2] = x_out[2] - eps * p[0]
+    #                             x_out[3] = x_out[3] - eps * p[1]
+    #                             if x_out[joint_sel+2] > v_max:
+    #                                 x_out[joint_sel+2] = v_max
+    #                             if x_out[joint_sel+2] < v_min:
+    #                                 x_out[joint_sel+2] = v_min
+    #                             x_sym[f] = x_out
 
-    #                             if x_sym[2] > v_max:
-    #                                 x_sym[2] = v_max
-    #                     else:
+    #                     else: # we cannot say whether the state is on dV or inside V
     #                         print('INTERMEDIATE OCP FAILED, break')
     #                         break
                         
     #             else:
+    #                 # If the previous state was not on a limit, the current state location can be identified using
+    #                 # the corresponding unviable state which can be computed by simulating the system starting from 
+    #                 # the previous unviable state:
     #                 u_sym = np.copy(u_sol[f-1])
     #                 sim.acados_integrator.set("u", u_sym)
-    #                 sim.acados_integrator.set("x", x_sym)
+    #                 sim.acados_integrator.set("x", x_out)
     #                 sim.acados_integrator.set("T", dt_sym)
     #                 status = sim.acados_integrator.solve()
-    #                 x_sym = sim.acados_integrator.get("x")
+    #                 x_out = sim.acados_integrator.get("x")
 
-    #                 if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
+    #                 x_sym[f] = x_out
+
+    #                 # When the state of the unviable simulated trajectory violates a limit, the corresponding viable state
+    #                 # of the optimal trajectory is on dX:
+    #                 if x_out[0] > q_max or x_out[0] < q_min or x_out[1] > q_max or x_out[1] < q_min or x_out[2] > v_max or x_out[2] < v_min or x_out[3] > v_max or x_out[3] < v_min:
     #                     print('State on dX')
-    #                     is_x_at_limit = True
+    #                     is_x_at_limit = True # the state is on dX
     #                     # xv_state[f] = 1
     #                 else:
     #                     print('State on dV')
-    #                     is_x_at_limit = False
+    #                     is_x_at_limit = False # the state is on dV
     #                     # xv_state[f] = 0
 
-    #             X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 1, 0]], axis = 0)
+    #             # Save the viable and unviable states:
+    #             X_save = np.append(X_save, [[x_out[0], x_out[1], x_out[2], x_out[3], 1, 0]], axis = 0)
     #             X_save = np.append(X_save, [[x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3], 0, 1]], axis = 0)
+    #             print(x_sol[f], x_out)
 
-    #             # sigmoid = nn.Sigmoid()
+    #             # Empiric check if data correctness base on the classifier trained on the Active Learning data:
+    #             if check_data and is_x_at_limit == False:
+    #                 with torch.no_grad():
+    #                     # Compute the entropy of the current viable and unviable samples wrt the AL classifier:
+    #                     sigmoid = nn.Sigmoid()
+    #                     out_v = model_al((torch.from_numpy(np.float32([x_sol[f][:4]])).to(device) - mean_al) / std_al).cpu().numpy()
+    #                     out_uv = model_al((torch.from_numpy(np.float32([x_out[:4]])).to(device) - mean_al) / std_al).cpu().numpy()
+    #                     prob_xu = sigmoid(model_al((torch.from_numpy(np.float32([x_out[:4]])).to(device) - mean_al) / std_al)).cpu()
+    #                     etp = entropy(prob_xu, axis=1)
 
-    #             # with torch.no_grad():
-    #             #     out_v = model((torch.from_numpy(np.float32([x_sol[f][:4]])).to(device) - mean) / std).numpy()
-    #             #     out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
-    #             #     prob_xu = sigmoid(model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std))
-    #             #     etp = entropy(prob_xu, axis=1)
+    #                     if out_uv[0,0] < out_v[0,0]: # the classifier would most likely classify as 0 the viable state than the unviable one
+    #                         print('Possible direction error') 
 
-    #                 # if out_uv[0,0] < out_v[0,0]: # or np.argmax(out_uv, axis=1) == 1:
-    #                 #     print('possibile errore di direzione')
-    #                 #     print('1 set, at the limit, x: ', x_sol[f], out_v)
-    #                 #     print('1 set, at the limit, x_sym: ', x_sym, out_uv)
+    #                     if out_v[0,1] < 0:
+    #                     # if etp < 1e-2: # the classifier would be almost certain in classifing the unviable sample as viable
+    #                         print('Possible classification error')
+    #                         print('1 set, at the limit, x: ', x_sol[f], out_v)
+    #                         print('1 set, at the limit, x_out: ', x_out, out_uv)
 
-    #                 # if etp < 1e-2:
-    #                 #     print('Possibile errore')
-    #                 #     print('1 set, at the limit, x: ', x_sol[f], out_v)
-    #                 #     print('1 set, at the limit, x_sym: ', x_sym, out_uv)
+    #                         # Reset current iterate:
+    #                         ocp.ocp_solver.reset()
 
-    #                 #     # u_sym = np.copy(u_sol[f-1])
+    #                         # Cost:
+    #                         norm_weights = norm(np.array([x_sol[f][2], x_sol[f][3]]))    
+    #                         p = np.array([-(x_sol[f][2])/norm_weights, -(x_sol[f][3])/norm_weights, 0.]) # the cost direction is based on the current velocity direction
+
+    #                         # Bounds on the initial state:
+    #                         lbx_init = np.array([x_sol[f][0], x_sol[f][1], v_min, v_min, dt_sym])
+    #                         ubx_init = np.array([x_sol[f][0], x_sol[f][1], v_max, v_max, dt_sym])
+    #                         if x_sol[f][2] < 0.:
+    #                             ubx_init[2] = x_sol[f][2]
+    #                         else:
+    #                             lbx_init[2] = x_sol[f][2]
+    #                         if x_sol[f][3] < 0.:
+    #                             ubx_init[3] = x_sol[f][3]
+    #                         else:
+    #                             lbx_init[3] = x_sol[f][3]
+
+    #                         # Set parameters, guesses and constraints:
+    #                         for i in range(N-f):
+    #                             ocp.ocp_solver.set(i, 'x', x_sol[i+f])
+    #                             ocp.ocp_solver.set(i, 'u', u_sol[i+f])
+    #                             ocp.ocp_solver.set(i, 'p', p)
+    #                             ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
+    #                             ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
+
+    #                         ocp.ocp_solver.constraints_set(0, 'lbx', lbx_init) 
+    #                         ocp.ocp_solver.constraints_set(0, 'ubx', ubx_init) 
+    #                         ocp.ocp_solver.constraints_set(0, "C", np.array([[0., 0., p[1], -p[0], 0.]])) 
+
+    #                         u_g = np.array([ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol[N][0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol[N][1])])
                             
-    #                 #     # if u_sym[0] < -tau_max + eps:
-    #                 #     #     u_sym[0] = u_sym[0] + eps
-    #                 #     #     tlim = True
-    #                 #     # else:
-    #                 #     #     if u_sym[0] > tau_max - eps:
-    #                 #     #         u_sym[0] = u_sym[0] - eps
-    #                 #     #         tlim = True
-    #                 #     #     else:
-    #                 #     #         if u_sym[1] > tau_max - eps:
-    #                 #     #             u_sym[1] = u_sym[1] - eps
-    #                 #     #             tlim = True
-    #                 #     #         else:
-    #                 #     #             if u_sym[1] < -tau_max + eps:
-    #                 #     #                 u_sym[1] = u_sym[1] + eps
-    #                 #     #                 tlim = True
-    #                 #     #             else:
-    #                 #     #                 print('no torque at limit!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    #                 #     #                 tlim = False
+    #                         # The OCP is set with N time steps instead of N-f (corresponding with the remaining states of the
+    #                         # optimal trajectory) because it is also necessary to check if the maximum velocity norm assume the same value 
+    #                         # also with more time:
+    #                         for i in range(N - f, N):
+    #                             ocp.ocp_solver.set(i, 'x', x_sol[N])
+    #                             ocp.ocp_solver.set(i, 'u', u_g)
+    #                             ocp.ocp_solver.set(i, 'p', p)
+    #                             ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
+    #                             ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
 
-    #                 #     # if tlim:
-    #                 #     #     sim.acados_integrator.set("u", u_sym)
-    #                 #     #     sim.acados_integrator.set("x", x_sym)
-    #                 #     #     sim.acados_integrator.set("T", dt_sym)
-    #                 #     #     status = sim.acados_integrator.solve()
-    #                 #     #     x_sym = sim.acados_integrator.get("x")
+    #                         ocp.ocp_solver.set(N, 'x', x_sol[N])
+    #                         ocp.ocp_solver.set(N, 'p', p)
+    #                         ocp.ocp_solver.constraints_set(N, 'lbx', x_sol[N]) 
+    #                         ocp.ocp_solver.constraints_set(N, 'ubx', x_sol[N]) 
 
-    #                 #     #     isout = False
+    #                         # Solve the OCP:
+    #                         status = ocp.ocp_solver.solve()
 
-    #                 #     #     if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #                 #     #         print('tutto ok')
-    #                 #     #         isout = True
-    #                 #     #     else:
-    #                 #     #         for i in range(f+1, ocp.N):
-    #                 #     #             u_sym = np.copy(u_sol[i-1])
+    #                         if status == 0:
+    #                             # Compare the old and new velocity norms:
+    #                             x0_new = ocp.ocp_solver.get(0, "x")
+    #                             norm_old = norm(np.array([x_sol[f][2:4]]))    
+    #                             norm_new = norm(np.array([x0_new[2:4]]))    
 
-    #                 #     #             sim.acados_integrator.set("u", u_sym)
-    #                 #     #             sim.acados_integrator.set("x", x_sym)
-    #                 #     #             sim.acados_integrator.set("T", dt_sym)
-    #                 #     #             status = sim.acados_integrator.solve()
-    #                 #     #             x_sym = sim.acados_integrator.get("x")
+    #                             if norm_new > norm_old + 1e-4:
+    #                                 print('new vel: ', x0_new[2:4], 'old vel: ', x_sol[f][2:4])
+    #                                 print('new vel norm: ', norm_new, 'old vel norm: ', norm_old)
+    #                                 print('ERROR FOUND!!!!!!!!!!!!!!!!!!!!')
+    #                                 error_found = 1
 
-    #                 #     #             if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #                 #     #                 print('tutto ok')
-    #                 #     #                 isout = True
-    #                 #     #                 break
+    #                                 # for l in range(min(N, f+5)):
+    #                                 #     with torch.no_grad():
+    #                                 #         plt.figure()
+    #                                 #         h = 0.02
+    #                                 #         x_min, x_max = q_min-(q_max-q_min)/100, q_max+(q_max-q_min)/100
+    #                                 #         y_min, y_max = v_min-(v_max-v_min)/100, v_max+(v_max-v_min)/100
+    #                                 #         xx, yy = np.meshgrid(np.arange(x_min, x_max+h, h), np.arange(y_min, y_max, h))
+    #                                 #         xrav = xx.ravel()
+    #                                 #         yrav = yy.ravel()
 
-    #                 #     #         if isout == False:
-    #                 #     #             print('ERROR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    #                                 #         inp = torch.from_numpy(
+    #                                 #             np.float32(
+    #                                 #                 np.c_[
+    #                                 #                     x_sol[l][0] * np.ones(xrav.shape[0]),
+    #                                 #                     xrav,
+    #                                 #                     x_sol[l][2] * np.ones(yrav.shape[0]),
+    #                                 #                     yrav,
+    #                                 #                 ]
+    #                                 #             )
+    #                                 #         )
+    #                                 #         inp = (inp - mean_al) / std_al
+    #                                 #         out = model_al(inp)
+    #                                 #         y_pred = np.argmax(out.numpy(), axis=1)
+    #                                 #         Z = y_pred.reshape(xx.shape)
+    #                                 #         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+    #                                 #         plt.plot(
+    #                                 #             x_sol[l][1],
+    #                                 #             x_sol[l][3],
+    #                                 #             "ko",
+    #                                 #         )
+    #                                 #         xit = []
+    #                                 #         yit = []
+    #                                 #         cit = []
+    #                                 #         for i in range(len(data_al)):
+    #                                 #             if (
+    #                                 #                 norm(data_al[i][0] - x_sol[l][0]) < 0.1/5
+    #                                 #                 and norm(data_al[i][2] - x_sol[l][2]) < 1./5
+    #                                 #             ):
+    #                                 #                 xit.append(data_al[i][1])
+    #                                 #                 yit.append(data_al[i][3])
+    #                                 #                 if data_al[i][5] < 0.5:
+    #                                 #                     cit.append(0)
+    #                                 #                 else:
+    #                                 #                     cit.append(1)
+    #                                 #         plt.scatter(
+    #                                 #             xit,
+    #                                 #             yit,
+    #                                 #             c=cit,
+    #                                 #             marker=".",
+    #                                 #             alpha=0.5,
+    #                                 #             cmap=plt.cm.Paired,
+    #                                 #         )
+    #                                 #         plt.xlim([q_min, q_max])
+    #                                 #         plt.ylim([v_min, v_max])
+    #                                 #         plt.grid()
+    #                                 #         if l == f:
+    #                                 #             plt.title("CURRENT SOL in the plane q2 vs v2")
+    #                                 #         else:
+    #                                 #             plt.title("Current sol in the plane q2 vs v2")
 
-    #                 #     p = np.array([0., 0., -1., 0., 0.])
+    #                                 #         plt.figure()
+    #                                 #         inp = torch.from_numpy(
+    #                                 #             np.float32(
+    #                                 #                 np.c_[
+    #                                 #                     xrav,
+    #                                 #                     x_sol[l][1] * np.ones(xrav.shape[0]),
+    #                                 #                     yrav,
+    #                                 #                     x_sol[l][3] * np.ones(yrav.shape[0]),
+    #                                 #                 ]
+    #                                 #             )
+    #                                 #         )
+    #                                 #         inp = (inp - mean_al) / std_al
+    #                                 #         out = model_al(inp)
+    #                                 #         y_pred = np.argmax(out.numpy(), axis=1)
+    #                                 #         Z = y_pred.reshape(xx.shape)
+    #                                 #         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+    #                                 #         plt.plot(
+    #                                 #             x_sol[l][0],
+    #                                 #             x_sol[l][2],
+    #                                 #             "ko",
+    #                                 #         )
+    #                                 #         xit = []
+    #                                 #         yit = []
+    #                                 #         cit = []
+    #                                 #         for i in range(len(data_al)):
+    #                                 #             if (
+    #                                 #                 norm(data_al[i][1] - x_sol[l][1]) < 0.1/5
+    #                                 #                 and norm(data_al[i][3] - x_sol[l][3]) < 1./5
+    #                                 #             ):
+    #                                 #                 xit.append(data_al[i][0])
+    #                                 #                 yit.append(data_al[i][2])
+    #                                 #                 if data_al[i][5] < 0.5:
+    #                                 #                     cit.append(0)
+    #                                 #                 else:
+    #                                 #                     cit.append(1)
+    #                                 #         plt.scatter(
+    #                                 #             xit,
+    #                                 #             yit,
+    #                                 #             c=cit,
+    #                                 #             marker=".",
+    #                                 #             alpha=0.5,
+    #                                 #             cmap=plt.cm.Paired,
+    #                                 #         )
+    #                                 #         plt.xlim([q_min, q_max])
+    #                                 #         plt.ylim([v_min, v_max])
+    #                                 #         plt.grid()
+    #                                 #         if l == f:
+    #                                 #             plt.title("CURRENT SOL in the plane q1 vs v1")
+    #                                 #         else:
+    #                                 #             plt.title("Current sol in the plane q1 vs v1")
 
-    #                 #     ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
+    #                                 # h = 0.02
+    #                                 # xx, yy = np.meshgrid(np.arange(v_min, v_max, h), np.arange(v_min, v_max, h))
+    #                                 # xrav = xx.ravel()
+    #                                 # yrav = yy.ravel()
 
-    #                 #     ocp.ocp_solver.reset()
+    #                                 # for l in range(min(N, f+5)):
+    #                                 #     with torch.no_grad():
+    #                                 #         q1ran = x_sol[l][0]
+    #                                 #         q2ran = x_sol[l][1]
 
-    #                 #     for i in range(ocp.N - f, ocp.N+1):
-    #                 #         ocp.ocp_solver.set(i, 'x', np.array([q_max, q_fin, 0., 0., dt_sym]))
-    #                 #         ocp.ocp_solver.set(i, 'p', p)
+    #                                 #         plt.figure()
+    #                                 #         inp = torch.from_numpy(
+    #                                 #             np.float32(
+    #                                 #                 np.c_[
+    #                                 #                     q1ran * np.ones(xrav.shape[0]),
+    #                                 #                     q2ran * np.ones(xrav.shape[0]),
+    #                                 #                     xrav,
+    #                                 #                     yrav, 
+    #                                 #                 ]
+    #                                 #             )
+    #                                 #         )
+    #                                 #         inp = (inp - mean_al) / std_al
+    #                                 #         out = model_al(inp)
+    #                                 #         y_pred = np.argmax(out.numpy(), axis=1)
+    #                                 #         Z = y_pred.reshape(xx.shape)
+    #                                 #         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+    #                                 #         plt.plot(
+    #                                 #             x_sol[l][2],
+    #                                 #             x_sol[l][3],
+    #                                 #             "ko",
+    #                                 #         )
+    #                                 #         xit = []
+    #                                 #         yit = []
+    #                                 #         cit = []
+    #                                 #         for i in range(len(data_al)):
+    #                                 #             if (
+    #                                 #                 norm(data_al[i][0] - q1ran) < 0.01
+    #                                 #                 and norm(data_al[i][1] - q2ran) < 0.01
+    #                                 #             ):
+    #                                 #                 xit.append(data_al[i][2])
+    #                                 #                 yit.append(data_al[i][3])
+    #                                 #                 if data_al[i][5] < 0.5:
+    #                                 #                     cit.append(0)
+    #                                 #                 else:
+    #                                 #                     cit.append(1)
+    #                                 #         plt.scatter(
+    #                                 #             xit,
+    #                                 #             yit,
+    #                                 #             c=cit,
+    #                                 #             marker=".",
+    #                                 #             alpha=0.5,
+    #                                 #             cmap=plt.cm.Paired,
+    #                                 #         )
+    #                                 #         plt.xlim([v_min, v_max])
+    #                                 #         plt.ylim([v_min, v_max])
+    #                                 #         plt.grid()
+    #                                 #         plt.title("q1="+str(q1ran)+"q2="+str(q2ran))
 
-    #                 #         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #                 #         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
+    #                                 # plt.show()
 
-    #                 #     ocp.ocp_solver.constraints_set(ocp.N - f, "lbx", np.array([q_max, q_fin, 0., 0., dt_sym]))
-    #                 #     ocp.ocp_solver.constraints_set(ocp.N - f, "ubx", np.array([q_max, q_fin, 0., 0., dt_sym]))
-
-    #                 #     for i in range(1, ocp.N - f):
-    #                 #         ocp.ocp_solver.set(i, 'x', x_sol[i+f])
-    #                 #         ocp.ocp_solver.set(i, 'u', u_sol[i+f])
-    #                 #         ocp.ocp_solver.set(i, 'p', p)
-
-    #                 #         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, 0., v_min, dt_sym])) 
-    #                 #         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
-
-    #                 #     ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3], dt_sym])) 
-    #                 #     ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x_sol[f][0], x_sol[f][1], v_max, x_sol[f][3], dt_sym])) 
-
-    #                 #     ocp.ocp_solver.set(0, 'x', x_sol[f])
-    #                 #     ocp.ocp_solver.set(0, 'u', u_sol[f])
-    #                 #     ocp.ocp_solver.set(0, 'p', p)
-
-    #                 #     ocp.ocp_solver.options_set('qp_tol_stat', 1e-2)
-
-    #                 #     status = ocp.ocp_solver.solve()
-
-    #                 #     ocp.ocp_solver.options_set('qp_tol_stat', 1e-6)
-
-    #                 #     if status == 0:
-    #                 #         if abs(ocp.ocp_solver.get(0, "x")[2] - x_sol[f][2]) > 1e-2:
-    #                 #             print('velocita piu estrema trovata!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    #                 #             print('v1 max: ', ocp.ocp_solver.get(0, "x")[2], 'v1 used: ', x_sol[f][2])
-    #                 #             break
-    #                 #         else:
-    #                 #             print('in realtà sembra tutto ok')
-
-    #         # t = np.linspace(0, ocp.N*dt_sym, ocp.N+1)
-    #         # t = range(ocp.N+1)
+    #         # t = np.linspace(0, N*dt_sym, N+1)
+    #         # t = range(N+1)
 
     #         # plt.figure()
     #         # plt.subplot(2, 1, 1)
@@ -587,1125 +759,36 @@ if __name__ == "__main__":
     #         # plt.hlines(-ocp.dthetamax, t[0], t[-1], linestyles='dashed', alpha=0.7)
     #         # plt.grid()
 
-    #     ran1 = random.random()
-    #     ran2 = random.choice([-1, 1]) * random.random()
-    #     norm_weights = norm(np.array([ran1, ran2]))
-    #     p = np.array([ran1/norm_weights, ran2/norm_weights, 0.])
-
-    #     q_init = q_min + random.random() * (q_max-q_min)
-    #     if q_init > q_max - eps:
-    #         q_init = q_init - eps
-    #     if q_init < q_min + eps:
-    #         q_init = q_init + eps
-
-    #     # ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #     ocp.ocp_solver.constraints_set(ocp.N, "lbx", np.array([q_min, q_min, 0., 0., 1e-2]))
-    #     ocp.ocp_solver.constraints_set(ocp.N, "ubx", np.array([q_min, q_max, 0., 0., 1e-2]))
-
-    #     ocp.ocp_solver.reset()
-
-    #     ocp.ocp_solver.set(ocp.N, 'x', np.array([q_min, q_init, 0., 0., 1e-2]))
-    #     ocp.ocp_solver.set(ocp.N, 'p', p)
-
-    #     for i, tau in enumerate(np.linspace(0, 1, ocp.N, endpoint=False)):
-    #         x_guess = np.array([(1-tau)*q_max + tau*q_min, q_init, -2*(1-tau)*(q_max-q_min), 0., 1e-2])
-    #         # x_guess = np.array([(1-tau)*q_max + tau*q_min, q_init, v_min, 0., 1e-2])
-    #         ocp.ocp_solver.set(i, 'x', x_guess)
-    #         ocp.ocp_solver.set(i, 'p', p)
-    #         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, 1e-2])) 
-    #         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, 1e-2])) 
-
-    #     ocp.ocp_solver.constraints_set(0, "lbx", np.array([q_max - eps, q_init, v_min, v_min, 1e-2]))
-    #     ocp.ocp_solver.constraints_set(0, "ubx", np.array([q_max - eps, q_init, v_max, v_max, 1e-2]))
-
-    #     status = ocp.ocp_solver.solve()
-
-    #     print('--------------------------------------------')
-
-    #     if status == 0:
-    #         print('INITIAL OCP SOLVED')
-
-    #         x0 = ocp.ocp_solver.get(0, "x")
-    #         u0 = ocp.ocp_solver.get(0, "u")
-
-    #         x_sol = np.empty((ocp.N+1,5))
-    #         u_sol = np.empty((ocp.N,2))
-
-    #         dt_sym = ocp.ocp_solver.get(0, "x")[4]
-
-    #         x_sol[0] = x0
-    #         u_sol[0] = u0
-
-    #         for i in range(1, ocp.N):
-    #             x_sol[i] = ocp.ocp_solver.get(i, "x")
-    #             u_sol[i] = ocp.ocp_solver.get(i, "u")
-
-    #         x_sol[ocp.N] = ocp.ocp_solver.get(ocp.N, "x")
-
-    #         # p_mintime = np.array([0., 0., 1.])
-
-    #         # ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #         # ocp.ocp_solver.reset()
-
-    #         # for i in range(1, ocp.N):
-    #         #     ocp.ocp_solver.set(i, 'x', x_sol[i])
-    #         #     ocp.ocp_solver.set(i, 'u', u_sol[i])
-    #         #     ocp.ocp_solver.set(i, 'p', p_mintime)
-    #         #     ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, 0.])) 
-    #         #     ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, 0., v_max, 1e-2])) 
-
-    #         # ocp.ocp_solver.constraints_set(ocp.N, "lbx", np.array([q_min, q_fin, 0., 0., 0.]))
-    #         # ocp.ocp_solver.constraints_set(ocp.N, "ubx", np.array([q_min, q_fin, 0., 0., 1e-2]))
-
-    #         # ocp.ocp_solver.set(ocp.N, 'x', x_sol[ocp.N])
-    #         # ocp.ocp_solver.set(ocp.N, 'p', p_mintime)
-
-    #         # ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x0[0], x0[1], x0[2], x0[3], 0.])) 
-    #         # ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x0[0], x0[1], x0[2], x0[3], 1e-2])) 
-
-    #         # ocp.ocp_solver.set(0, 'x', x_sol[0])
-    #         # ocp.ocp_solver.set(0, 'u', u_sol[0])
-    #         # ocp.ocp_solver.set(0, 'p', p_mintime)
-
-    #         # status = ocp.ocp_solver.solve()
-
-    #         # if status == 0:
-    #         #     x_sol[0] = ocp.ocp_solver.get(0, "x")
-    #         #     u_sol[0] = ocp.ocp_solver.get(0, "u")
-
-    #         #     for i in range(1, ocp.N):
-    #         #         x_sol[i] = ocp.ocp_solver.get(i, "x")
-    #         #         u_sol[i] = ocp.ocp_solver.get(i, "u")
-
-    #         #     x_sol[ocp.N] = ocp.ocp_solver.get(ocp.N, "x")
-
-    #         #     dt_sym = ocp.ocp_solver.get(0, "x")[4]
-
-    #         #     print('MIN TIME SOLVED')
-
-    #         x0 = np.copy(x_sol[0])
-    #         x3_eps = x0[2] - eps * p[0]
-    #         x4_eps = x0[3] - eps * p[1]
-    #         x_sym = np.array([x0[0], x0[1], x3_eps, x4_eps])
-
-    #         X_save = np.append(X_save, [[x_sol[ocp.N][0] - eps, x_sol[ocp.N][1], x_sol[ocp.N][2], x_sol[ocp.N][3], 1, 0]], axis = 0)
-    #         X_save = np.append(X_save, [[x_sol[ocp.N][0], x_sol[ocp.N][1], x_sol[ocp.N][2], x_sol[ocp.N][3], 0, 1]], axis = 0)
-
-    #         # xv_state = np.full((ocp.N+1,1),2)
-    #         # xv_state[ocp.N] = 1
-
-    #         if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #             is_x_at_limit = True
-    #             print('Initial state at the limit')
-    #             # xv_state[0] = 1
-    #         else:
-    #             is_x_at_limit = False
-    #             print('Initial state not at the limit')
-    #             # xv_state[0] = 0
-
-    #         X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 1, 0]], axis = 0)
-    #         X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 0, 1]], axis = 0)
-
-    #         for f in range(1, ocp.N):
-    #             print('State ', f)
-
-    #             if is_x_at_limit:
-    #                 if x_sol[f][0] > q_max - eps or x_sol[f][0] < q_min + eps or x_sol[f][1] > q_max - eps or x_sol[f][1] < q_min + eps or x_sol[f][2] > v_max - eps or x_sol[f][2] < v_min + eps or x_sol[f][3] > v_max - eps or x_sol[f][3] < v_min + eps:
-    #                     is_x_at_limit = True
-    #                     print('State on dX')
-    #                     # xv_state[f] = 1
-
-    #                     x_sym = np.copy(x_sol[f][:4])
-
-    #                     if x_sol[f][0] > q_max - eps:
-    #                         x_sym[0] = q_max + eps
-    #                     if x_sol[f][0] < q_min + eps:
-    #                         x_sym[0] = q_min - eps
-    #                     if x_sol[f][1] > q_max - eps:
-    #                         x_sym[1] = q_max + eps
-    #                     if x_sol[f][1] < q_min + eps:
-    #                         x_sym[1] = q_min - eps
-    #                     if x_sol[f][2] > v_max - eps:
-    #                         x_sym[2] = v_max + eps
-    #                     if x_sol[f][2] < v_min + eps:
-    #                         x_sym[2] = v_min - eps
-    #                     if x_sol[f][3] > v_max - eps:
-    #                         x_sym[3] = v_max + eps
-    #                     if x_sol[f][3] < v_min + eps:
-    #                         x_sym[3] = v_min - eps
-    #                 else:
-    #                     is_x_at_limit = False
-
-    #                     if x_sol[f-1][0] > q_max - eps or x_sol[f-1][0] < q_min + eps:
-    #                         print('Detouching from the limit on q1, break')
-    #                         break
-
-    #                     if x_sol[f-1][2] > v_max - eps:
-    #                         print('Detouching from the limit on +v1, break')
-    #                         break
-
-    #                     ocp.ocp_solver.reset()
-
-    #                     p = np.array([1., 0., 0.])
-
-    #                     # ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #                     ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x_sol[f][0], x_sol[f][1], v_min, x_sol[f][3], dt_sym])) 
-    #                     ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3], dt_sym])) 
-    #                     ocp.ocp_solver.set(0, 'x', x_sol[f])
-    #                     ocp.ocp_solver.set(0, 'u', u_sol[f])
-    #                     ocp.ocp_solver.set(0, 'p', p)
-
-    #                     for i in range(ocp.N - f, ocp.N+1):
-    #                         ocp.ocp_solver.set(i, 'x', x_sol[ocp.N])
-    #                         ocp.ocp_solver.set(i, 'p', p)
-    #                         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #                         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
-
-    #                     ocp.ocp_solver.constraints_set(ocp.N - f, "lbx", x_sol[ocp.N])
-    #                     ocp.ocp_solver.constraints_set(ocp.N - f, "ubx", x_sol[ocp.N])
-
-    #                     for i in range(1, ocp.N - f):
-    #                         ocp.ocp_solver.set(i, 'x', x_sol[i+f])
-    #                         ocp.ocp_solver.set(i, 'u', u_sol[i+f])
-    #                         ocp.ocp_solver.set(i, 'p', p)
-    #                         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #                         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
-
-    #                     ocp.ocp_solver.options_set('qp_tol_stat', 1e-2)
-
-    #                     status = ocp.ocp_solver.solve()
-
-    #                     ocp.ocp_solver.options_set('qp_tol_stat', 1e-6)
-
-    #                     if status == 0:
-    #                         print('INTERMEDIATE OCP SOLVED')
-
-    #                         if ocp.ocp_solver.get(0, "x")[2] < x_sol[f][2] - 1e-2:
-    #                             print('new vel: ', ocp.ocp_solver.get(0, "x")[2], 'old vel: ', x_sol[f][2])
-    #                             print('Test failed, state inside V, break')
-    #                             break
-
-    #                             # # sono o su dv o su dx
-    #                             # for i in range(f, ocp.N):
-    #                             #     x_sol[i] = ocp.ocp_solver.get(i-f, "x")
-    #                             #     u_sol[i] = ocp.ocp_solver.get(i-f, "u")
-
-    #                             # x_sym = np.copy(x_sol[f])
-    #                             # x1_eps = x_sym[0] - eps * p[0]
-    #                             # x2_eps = x_sym[1] - eps * p[1]
-    #                             # x3_eps = x_sym[2] - eps * p[2]
-    #                             # x4_eps = x_sym[3] - eps * p[3]
-    #                             # x_sym = np.array([x1_eps, x2_eps, x3_eps, x4_eps])
-
-    #                             # if x_sym[0] > q_max - eps or x_sym[0] < q_min + eps or x_sym[1] > q_max - eps or x_sym[1] < q_min + eps or x_sym[2] > v_max - eps or x_sym[2] < v_min+ eps or x_sym[3] > v_max - eps or x_sym[3] < v_min + eps:
-    #                             #     print('Sono su dX, ottenuto tramite la nuova soluzione')
-    #                             #     print(x_sol[f], x_sym)
-    #                             #     is_x_at_limit = True
-    #                             #     xv_state[f] = 1
-    #                             # else:
-    #                             #     print('Sono su dV, ottenuto tramite la nuova soluzione')
-    #                             #     print(x_sol[f], x_sym)
-    #                             #     is_x_at_limit = False
-    #                             #     xv_state[f] = 0
-    #                         else:
-    #                             print('State on dV, test passed')
-    #                             is_x_at_limit = False
-    #                             # xv_state[f] = 0
-
-    #                             x_sym = np.copy(x_sol[f][:4])
-    #                             x3_eps = x_sym[2] - eps * p[0]
-    #                             x4_eps = x_sym[3] - eps * p[1]
-    #                             x_sym = np.array([x_sym[0], x_sym[1], x3_eps, x4_eps])
-
-    #                             if x_sym[2] < v_min:
-    #                                 x_sym[2] = v_min
-    #                     else:
-    #                         print('INTERMEDIATE OCP FAILED, break')
-    #                         break
-                        
-    #             else:
-    #                 u_sym = np.copy(u_sol[f-1])
-    #                 sim.acados_integrator.set("u", u_sym)
-    #                 sim.acados_integrator.set("x", x_sym)
-    #                 sim.acados_integrator.set("T", dt_sym)
-    #                 status = sim.acados_integrator.solve()
-    #                 x_sym = sim.acados_integrator.get("x")
-
-    #                 if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #                     print('State on dX')
-    #                     is_x_at_limit = True
-    #                     # xv_state[f] = 1
-    #                 else:
-    #                     print('State on dV')
-    #                     is_x_at_limit = False
-    #                     # xv_state[f] = 0
-
-    #             X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 1, 0]], axis = 0)
-    #             X_save = np.append(X_save, [[x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3], 0, 1]], axis = 0)
-
-    #             # with torch.no_grad():
-    #             #     out_v = model((torch.from_numpy(np.float32([x_sol[f][:4]])).to(device) - mean) / std).numpy()
-    #             #     out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
-    #             #     # if out_uv[0,0] < out_v[0,0]: # or np.argmax(out_uv, axis=1) == 1:
-    #             #     #     print('2 set, at the limit, x: ', x_sol[f], out_v)
-    #             #     #     print('2 set, at the limit, x_sym: ', x_sym, out_uv)
-
-    #             #     if out_uv[0,1] > 5:
-    #             #         print('Possibile errore!')
-    #             #         print('2 set, at the limit, x: ', x_sol[f], out_v)
-    #             #         print('2 set, at the limit, x_sym: ', x_sym, out_uv)
-
-    #             #         # u_sym = np.copy(u_sol[f-1])
-                            
-    #             #         # if u_sym[0] > tau_max - eps:
-    #             #         #     u_sym[0] = u_sym[0] - eps
-    #             #         #     tlim = True
-    #             #         # else:
-    #             #         #     if u_sym[0] < -tau_max + eps:
-    #             #         #         u_sym[0] = u_sym[0] + eps
-    #             #         #         tlim = True
-    #             #         #     else:
-    #             #         #         if u_sym[1] > tau_max - eps:
-    #             #         #             u_sym[1] = u_sym[1] - eps
-    #             #         #             tlim = True
-    #             #         #         else:
-    #             #         #             if u_sym[1] < -tau_max + eps:
-    #             #         #                 u_sym[1] = u_sym[1] + eps
-    #             #         #                 tlim = True
-    #             #         #             else:
-    #             #         #                 print('no torque at limit!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    #             #         #                 tlim = False
-
-    #             #         # if tlim:
-    #             #         #     sim.acados_integrator.set("u", u_sym)
-    #             #         #     sim.acados_integrator.set("x", x_sym)
-    #             #         #     sim.acados_integrator.set("T", dt_sym)
-    #             #         #     status = sim.acados_integrator.solve()
-    #             #         #     x_sym = sim.acados_integrator.get("x")
-
-    #             #         #     isout = False
-
-    #             #         #     if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #             #         #         print('tutto ok')
-    #             #         #         isout = True
-    #             #         #     else:
-    #             #         #         for i in range(f+1, ocp.N):
-    #             #         #             u_sym = np.copy(u_sol[i-1])
-
-    #             #         #             sim.acados_integrator.set("u", u_sym)
-    #             #         #             sim.acados_integrator.set("x", x_sym)
-    #             #         #             sim.acados_integrator.set("T", dt_sym)
-    #             #         #             status = sim.acados_integrator.solve()
-    #             #         #             x_sym = sim.acados_integrator.get("x")
-
-    #             #         #             if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #             #         #                 print('tutto ok')
-    #             #         #                 isout = True
-    #             #         #                 break
-
-    #             #         #         if isout == False:
-    #             #         #             print('ERROR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-
-    #             #         p = np.array([0., 0., 1., 0., 0.])
-
-    #             #         ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #             #         ocp.ocp_solver.reset()
-
-    #             #         for i in range(ocp.N - f, ocp.N+1):
-    #             #             ocp.ocp_solver.set(i, 'x', np.array([q_min, q_fin, 0., 0., dt_sym]))
-    #             #             ocp.ocp_solver.set(i, 'p', p)
-
-    #             #             ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #             #             ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
-
-    #             #         ocp.ocp_solver.constraints_set(ocp.N - f, "lbx", np.array([q_min, q_fin, 0., 0., dt_sym]))
-    #             #         ocp.ocp_solver.constraints_set(ocp.N - f, "ubx", np.array([q_min, q_fin, 0., 0., dt_sym]))
-
-    #             #         for i in range(1, ocp.N - f):
-    #             #             ocp.ocp_solver.set(i, 'x', x_sol[i+f])
-    #             #             ocp.ocp_solver.set(i, 'u', u_sol[i+f])
-    #             #             ocp.ocp_solver.set(i, 'p', p)
-
-    #             #             ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #             #             ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, 0., v_max, dt_sym])) 
-
-    #             #         ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x_sol[f][0], x_sol[f][1], v_min, x_sol[f][3], dt_sym])) 
-    #             #         ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3], dt_sym])) 
-
-    #             #         ocp.ocp_solver.set(0, 'x', x_sol[f])
-    #             #         ocp.ocp_solver.set(0, 'u', u_sol[f])
-    #             #         ocp.ocp_solver.set(0, 'p', p)
-
-    #             #         ocp.ocp_solver.options_set('qp_tol_stat', eps)
-
-    #             #         status = ocp.ocp_solver.solve()
-
-    #             #         ocp.ocp_solver.options_set('qp_tol_stat', 1e-6)
-
-    #             #         if status == 0:
-    #             #             if abs(ocp.ocp_solver.get(0, "x")[2] - x_sol[f][2]) > eps:
-    #             #                 print('velocita piu estrema trovata!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    #             #                 print('v1 max: ', ocp.ocp_solver.get(0, "x")[2], 'v1 used: ', x_sol[f][2])
-    #             #             else:
-    #             #                 print('in realtà sembra tutto ok')
-
-    #     ran1 = -1 * random.random()
-    #     ran2 = random.choice([-1, 1]) * random.random()
-    #     norm_weights = norm(np.array([ran1, ran2]))
-    #     p = np.array([ran2/norm_weights, ran1/norm_weights, 0.])
-
-    #     q_init = q_min + random.random() * (q_max-q_min)
-    #     if q_init > q_max - eps:
-    #         q_init = q_init - eps
-    #     if q_init < q_min + eps:
-    #         q_init = q_init + eps
-
-    #     # ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #     ocp.ocp_solver.constraints_set(ocp.N, "lbx", np.array([q_min, q_max, 0., 0., 1e-2]))
-    #     ocp.ocp_solver.constraints_set(ocp.N, "ubx", np.array([q_max, q_max, 0., 0., 1e-2]))
-
-    #     ocp.ocp_solver.reset()
-
-    #     ocp.ocp_solver.set(ocp.N, 'x', np.array([q_init, q_max, 0., 0., 1e-2]))
-    #     ocp.ocp_solver.set(ocp.N, 'p', p)
-
-    #     for i, tau in enumerate(np.linspace(0, 1, ocp.N, endpoint=False)):
-    #         x_guess = np.array([q_init, (1-tau)*q_min + tau*q_max, 0., 2*(1-tau)*(q_max-q_min), 1e-2])
-    #         # x_guess = np.array([q_init, (1-tau)*q_min + tau*q_max, 0., v_max, 1e-2])
-    #         ocp.ocp_solver.set(i, 'x', x_guess)
-    #         ocp.ocp_solver.set(i, 'p', p)
-    #         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, 1e-2])) 
-    #         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, 1e-2])) 
-
-    #     ocp.ocp_solver.constraints_set(0, "lbx", np.array([q_min, q_min + eps, v_min, v_min, 1e-2]))
-    #     ocp.ocp_solver.constraints_set(0, "ubx", np.array([q_max, q_min + eps, v_max, v_max, 1e-2]))
-
-    #     status = ocp.ocp_solver.solve()
-
-    #     print('--------------------------------------------')
-
-    #     if status == 0:
-    #         print('INITIAL OCP SOLVED')
-
-    #         x0 = ocp.ocp_solver.get(0, "x")
-    #         u0 = ocp.ocp_solver.get(0, "u")
-
-    #         x_sol = np.empty((ocp.N+1,5))
-    #         u_sol = np.empty((ocp.N,2))
-
-    #         dt_sym = ocp.ocp_solver.get(0, "x")[4]
-
-    #         x_sol[0] = x0
-    #         u_sol[0] = u0
-
-    #         for i in range(1, ocp.N):
-    #             x_sol[i] = ocp.ocp_solver.get(i, "x")
-    #             u_sol[i] = ocp.ocp_solver.get(i, "u")
-
-    #         x_sol[ocp.N] = ocp.ocp_solver.get(ocp.N, "x")
-
-    #         # p_mintime = np.array([0., 0., 0., 0., 1.])
-
-    #         # ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #         # ocp.ocp_solver.reset()
-
-    #         # for i in range(1, ocp.N):
-    #         #     ocp.ocp_solver.set(i, 'x', x_sol[i])
-    #         #     ocp.ocp_solver.set(i, 'u', u_sol[i])
-    #         #     ocp.ocp_solver.set(i, 'p', p_mintime)
-    #         #     ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, 0., 0.])) 
-    #         #     ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, 1e-2])) 
-
-    #         # ocp.ocp_solver.constraints_set(ocp.N, "lbx", np.array([q_fin, q_max, 0., 0., 0.]))
-    #         # ocp.ocp_solver.constraints_set(ocp.N, "ubx", np.array([q_fin, q_max, 0., 0., 1e-2]))
-
-    #         # ocp.ocp_solver.set(ocp.N, 'x', x_sol[ocp.N])
-    #         # ocp.ocp_solver.set(ocp.N, 'p', p_mintime)
-
-    #         # ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x0[0], x0[1], x0[2], x0[3], 0.])) 
-    #         # ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x0[0], x0[1], x0[2], x0[3], 1e-2])) 
-
-    #         # ocp.ocp_solver.set(0, 'x', x_sol[0])
-    #         # ocp.ocp_solver.set(0, 'u', u_sol[0])
-    #         # ocp.ocp_solver.set(0, 'p', p_mintime)
-
-    #         # status = ocp.ocp_solver.solve()
-
-    #         # if status == 0:
-    #         #     x_sol[0] = ocp.ocp_solver.get(0, "x")
-    #         #     u_sol[0] = ocp.ocp_solver.get(0, "u")
-
-    #         #     for i in range(1, ocp.N):
-    #         #         x_sol[i] = ocp.ocp_solver.get(i, "x")
-    #         #         u_sol[i] = ocp.ocp_solver.get(i, "u")
-
-    #         #     x_sol[ocp.N] = ocp.ocp_solver.get(ocp.N, "x")
-
-    #         #     dt_sym = ocp.ocp_solver.get(0, "x")[4]
-
-    #         #     print('MIN TIME SOLVED')
-
-    #         x0 = np.copy(x_sol[0])
-    #         x3_eps = x0[2] - eps * p[0]
-    #         x4_eps = x0[3] - eps * p[1]
-    #         x_sym = np.array([x0[0], x0[1], x3_eps, x4_eps])
-
-    #         X_save = np.append(X_save, [[x_sol[ocp.N][0], x_sol[ocp.N][1] + eps, x_sol[ocp.N][2], x_sol[ocp.N][3], 1, 0]], axis = 0)
-    #         X_save = np.append(X_save, [[x_sol[ocp.N][0], x_sol[ocp.N][1], x_sol[ocp.N][2], x_sol[ocp.N][3], 0, 1]], axis = 0)
-
-    #         # xv_state = np.full((ocp.N+1,1),2)
-    #         # xv_state[ocp.N] = 1
-
-    #         if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #             is_x_at_limit = True
-    #             print('Initial state at the limit')
-    #             # xv_state[0] = 1
-    #         else:
-    #             is_x_at_limit = False
-    #             print('Initial state not at the limit')
-    #             # xv_state[0] = 0
-
-    #         X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 1, 0]], axis = 0)
-    #         X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 0, 1]], axis = 0)
-
-    #         for f in range(1, ocp.N):
-    #             print('State ', f)
-
-    #             if is_x_at_limit:
-    #                 if x_sol[f][0] > q_max - eps or x_sol[f][0] < q_min + eps or x_sol[f][1] > q_max - eps or x_sol[f][1] < q_min + eps or x_sol[f][2] > v_max - eps or x_sol[f][2] < v_min + eps or x_sol[f][3] > v_max - eps or x_sol[f][3] < v_min + eps:
-    #                     is_x_at_limit = True
-    #                     print('State on dX')
-    #                     # xv_state[f] = 1
-
-    #                     x_sym = np.copy(x_sol[f][:4])
-
-    #                     if x_sol[f][0] > q_max - eps:
-    #                         x_sym[0] = q_max + eps
-    #                     if x_sol[f][0] < q_min + eps:
-    #                         x_sym[0] = q_min - eps
-    #                     if x_sol[f][1] > q_max - eps:
-    #                         x_sym[1] = q_max + eps
-    #                     if x_sol[f][1] < q_min + eps:
-    #                         x_sym[1] = q_min - eps
-    #                     if x_sol[f][2] > v_max - eps:
-    #                         x_sym[2] = v_max + eps
-    #                     if x_sol[f][2] < v_min + eps:
-    #                         x_sym[2] = v_min - eps
-    #                     if x_sol[f][3] > v_max - eps:
-    #                         x_sym[3] = v_max + eps
-    #                     if x_sol[f][3] < v_min + eps:
-    #                         x_sym[3] = v_min - eps
-    #                 else:
-    #                     is_x_at_limit = False
-
-    #                     if x_sol[f-1][1] > q_max - eps or x_sol[f-1][1] < q_min + eps:
-    #                         print('Detouching from the limit on q2, break')
-    #                         break
-
-    #                     if x_sol[f-1][3] < v_min + eps:
-    #                         print('Detouching from the limit on -v2, break')
-    #                         break
-
-    #                     ocp.ocp_solver.reset()
-
-    #                     p = np.array([0., -1., 0.])
-
-    #                     # ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #                     ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3], dt_sym])) 
-    #                     ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x_sol[f][0], x_sol[f][1], x_sol[f][2], v_max, dt_sym])) 
-    #                     ocp.ocp_solver.set(0, 'x', x_sol[f])
-    #                     ocp.ocp_solver.set(0, 'u', u_sol[f])
-    #                     ocp.ocp_solver.set(0, 'p', p)
-
-    #                     for i in range(ocp.N - f, ocp.N+1):
-    #                         ocp.ocp_solver.set(i, 'x', x_sol[ocp.N])
-    #                         ocp.ocp_solver.set(i, 'p', p)
-    #                         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #                         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
-
-    #                     ocp.ocp_solver.constraints_set(ocp.N - f, "lbx", x_sol[ocp.N])
-    #                     ocp.ocp_solver.constraints_set(ocp.N - f, "ubx", x_sol[ocp.N])
-
-    #                     for i in range(1, ocp.N - f):
-    #                         ocp.ocp_solver.set(i, 'x', x_sol[i+f])
-    #                         ocp.ocp_solver.set(i, 'u', u_sol[i+f])
-    #                         ocp.ocp_solver.set(i, 'p', p)
-    #                         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #                         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
-
-    #                     ocp.ocp_solver.options_set('qp_tol_stat', 1e-2)
-
-    #                     status = ocp.ocp_solver.solve()
-
-    #                     ocp.ocp_solver.options_set('qp_tol_stat', 1e-6)
-
-    #                     if status == 0:
-    #                         print('INTERMEDIATE OCP SOLVED')
-
-    #                         if ocp.ocp_solver.get(0, "x")[3] > x_sol[f][3] + 1e-2:
-    #                             print('new vel: ', ocp.ocp_solver.get(0, "x")[3], 'old vel: ', x_sol[f][3])
-    #                             print('Test failed, state inside V, break')
-    #                             break
-
-    #                             # # sono o su dv o su dx
-    #                             # for i in range(f, ocp.N):
-    #                             #     x_sol[i] = ocp.ocp_solver.get(i-f, "x")
-    #                             #     u_sol[i] = ocp.ocp_solver.get(i-f, "u")
-
-    #                             # x_sym = np.copy(x_sol[f])
-    #                             # x1_eps = x_sym[0] - eps * p[0]
-    #                             # x2_eps = x_sym[1] - eps * p[1]
-    #                             # x3_eps = x_sym[2] - eps * p[2]
-    #                             # x4_eps = x_sym[3] - eps * p[3]
-    #                             # x_sym = np.array([x1_eps, x2_eps, x3_eps, x4_eps])
-
-    #                             # if x_sym[0] > q_max - eps or x_sym[0] < q_min + eps or x_sym[1] > q_max - eps or x_sym[1] < q_min + eps or x_sym[2] > v_max - eps or x_sym[2] < v_min+ eps or x_sym[3] > v_max - eps or x_sym[3] < v_min + eps:
-    #                             #     print('Sono su dX, ottenuto tramite la nuova soluzione')
-    #                             #     print(x_sol[f], x_sym)
-    #                             #     is_x_at_limit = True
-    #                             #     xv_state[f] = 1
-    #                             # else:
-    #                             #     print('Sono su dV, ottenuto tramite la nuova soluzione')
-    #                             #     print(x_sol[f], x_sym)
-    #                             #     is_x_at_limit = False
-    #                             #     xv_state[f] = 0
-    #                         else:
-    #                             print('State on dV, test passed')
-    #                             is_x_at_limit = False
-    #                             # xv_state[f] = 0
-
-    #                             # sono su dv, posso simulare
-    #                             x_sym = np.copy(x_sol[f][:4])
-    #                             x3_eps = x_sym[2] - eps * p[0]
-    #                             x4_eps = x_sym[3] - eps * p[1]
-    #                             x_sym = np.array([x_sym[0], x_sym[1], x3_eps, x4_eps])
-
-    #                             if x_sym[3] > v_max:
-    #                                 x_sym[3] = v_max
-    #                     else:
-    #                         print('INTERMEDIATE OCP FAILED, break')
-    #                         break
-                        
-    #             else:
-    #                 u_sym = np.copy(u_sol[f-1])
-    #                 sim.acados_integrator.set("u", u_sym)
-    #                 sim.acados_integrator.set("x", x_sym)
-    #                 sim.acados_integrator.set("T", dt_sym)
-    #                 status = sim.acados_integrator.solve()
-    #                 x_sym = sim.acados_integrator.get("x")
-
-    #                 if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #                     print('State on dX')
-    #                     is_x_at_limit = True
-    #                     # xv_state[f] = 1
-    #                 else:
-    #                     print('State on dV')
-    #                     is_x_at_limit = False
-    #                     # xv_state[f] = 0
-
-    #             X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 1, 0]], axis = 0)
-    #             X_save = np.append(X_save, [[x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3], 0, 1]], axis = 0)
-
-    #             # with torch.no_grad():
-    #             #     out_v = model((torch.from_numpy(np.float32([x_sol[f][:4]])).to(device) - mean) / std).numpy()
-    #             #     out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
-    #             #     # if out_uv[0,0] < out_v[0,0]: # or np.argmax(out_uv, axis=1) == 1:
-    #             #     #     print('3 set, at the limit, x: ', x_sol[f], out_v)
-    #             #     #     print('3 set, at the limit, x_sym: ', x_sym, out_uv)
-
-    #             #     if out_uv[0,1] > 5:
-    #             #         print('Possibile errore!')
-    #             #         print('3 set, at the limit, x: ', x_sol[f], out_v)
-    #             #         print('3 set, at the limit, x_sym: ', x_sym, out_uv)
-
-    #             #         # u_sym = np.copy(u_sol[f-1])
-                            
-    #             #         # if u_sym[1] < -tau_max + eps:
-    #             #         #     u_sym[1] = u_sym[1] + eps
-    #             #         #     tlim = True
-    #             #         # else:
-    #             #         #     if u_sym[1] > tau_max - eps:
-    #             #         #         u_sym[1] = u_sym[1] - eps
-    #             #         #         tlim = True
-    #             #         #     else:
-    #             #         #         if u_sym[0] > tau_max - eps:
-    #             #         #             u_sym[0] = u_sym[0] - eps
-    #             #         #             tlim = True
-    #             #         #         else:
-    #             #         #             if u_sym[0] < -tau_max + eps:
-    #             #         #                 u_sym[0] = u_sym[0] + eps
-    #             #         #                 tlim = True
-    #             #         #             else:
-    #             #         #                 print('no torque at limit!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    #             #         #                 tlim = False
-
-    #             #         # if tlim:
-    #             #         #     sim.acados_integrator.set("u", u_sym)
-    #             #         #     sim.acados_integrator.set("x", x_sym)
-    #             #         #     sim.acados_integrator.set("T", dt_sym)
-    #             #         #     status = sim.acados_integrator.solve()
-    #             #         #     x_sym = sim.acados_integrator.get("x")
-
-    #             #         #     isout = False
-
-    #             #         #     if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #             #         #         print('tutto ok')
-    #             #         #         isout = True
-    #             #         #     else:
-    #             #         #         for i in range(f+1, ocp.N):
-    #             #         #             u_sym = np.copy(u_sol[i-1])
-
-    #             #         #             sim.acados_integrator.set("u", u_sym)
-    #             #         #             sim.acados_integrator.set("x", x_sym)
-    #             #         #             sim.acados_integrator.set("T", dt_sym)
-    #             #         #             status = sim.acados_integrator.solve()
-    #             #         #             x_sym = sim.acados_integrator.get("x")
-
-    #             #         #             if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #             #         #                 print('tutto ok')
-    #             #         #                 isout = True
-    #             #         #                 break
-
-    #             #         #         if isout == False:
-    #             #         #             print('ERROR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-
-    #             #         p = np.array([0., 0., 0., -1., 0.])
-
-    #             #         ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #             #         ocp.ocp_solver.reset()
-
-    #             #         for i in range(ocp.N - f, ocp.N+1):
-    #             #             ocp.ocp_solver.set(i, 'x', np.array([q_fin, q_max, 0., 0., dt_sym]))
-    #             #             ocp.ocp_solver.set(i, 'p', p)
-
-    #             #             ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #             #             ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
-
-    #             #         ocp.ocp_solver.constraints_set(ocp.N - f, "lbx", np.array([q_fin, q_max, 0., 0., dt_sym]))
-    #             #         ocp.ocp_solver.constraints_set(ocp.N - f, "ubx", np.array([q_fin, q_max, 0., 0., dt_sym]))
-
-    #             #         for i in range(1, ocp.N - f):
-    #             #             ocp.ocp_solver.set(i, 'x', x_sol[i+f])
-    #             #             ocp.ocp_solver.set(i, 'u', u_sol[i+f])
-    #             #             ocp.ocp_solver.set(i, 'p', p)
-
-    #             #             ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, 0., dt_sym])) 
-    #             #             ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
-
-    #             #         ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3], dt_sym])) 
-    #             #         ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x_sol[f][0], x_sol[f][1], x_sol[f][2], v_max, dt_sym])) 
-
-    #             #         ocp.ocp_solver.set(0, 'x', x_sol[f])
-    #             #         ocp.ocp_solver.set(0, 'u', u_sol[f])
-    #             #         ocp.ocp_solver.set(0, 'p', p)
-
-    #             #         ocp.ocp_solver.options_set('qp_tol_stat', eps)
-
-    #             #         status = ocp.ocp_solver.solve()
-
-    #             #         ocp.ocp_solver.options_set('qp_tol_stat', 1e-6)
-
-    #             #         if status == 0:
-    #             #             if abs(ocp.ocp_solver.get(0, "x")[3] - x_sol[f][3]) > eps:
-    #             #                 print('velocita piu estrema trovata!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    #             #                 print('v2 max: ', ocp.ocp_solver.get(0, "x")[3], 'v2 used: ', x_sol[f][3])
-    #             #             else:
-    #             #                 print('in realtà sembra tutto ok')
-
-    #     ran1 = random.random()
-    #     ran2 = random.choice([-1, 1]) * random.random()
-    #     norm_weights = norm(np.array([ran1, ran2]))
-    #     p = np.array([ran2/norm_weights, ran1/norm_weights, 0.])
-
-    #     q_init = q_min + random.random() * (q_max-q_min)
-    #     if q_init > q_max - eps:
-    #         q_init = q_init - eps
-    #     if q_init < q_min + eps:
-    #         q_init = q_init + eps
-
-    #     # ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #     ocp.ocp_solver.constraints_set(ocp.N, "lbx", np.array([q_min, q_min, 0., 0., 1e-2]))
-    #     ocp.ocp_solver.constraints_set(ocp.N, "ubx", np.array([q_max, q_min, 0., 0., 1e-2]))
-
-    #     ocp.ocp_solver.reset()
-
-    #     ocp.ocp_solver.set(ocp.N, 'x', np.array([q_init, q_min, 0., 0., 1e-2]))
-    #     ocp.ocp_solver.set(ocp.N, 'p', p)
-
-    #     for i, tau in enumerate(np.linspace(0, 1, ocp.N, endpoint=False)):
-    #         x_guess = np.array([q_init, (1-tau)*q_max + tau*q_min, 0., -2*(1-tau)*(q_max-q_min), 1e-2])
-    #         # x_guess = np.array([q_init, (1-tau)*q_max + tau*q_min, 0., v_min, 1e-2])
-    #         ocp.ocp_solver.set(i, 'x', x_guess)
-    #         ocp.ocp_solver.set(i, 'p', p)
-    #         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, 1e-2])) 
-    #         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, 1e-2])) 
-
-    #     ocp.ocp_solver.constraints_set(0, "lbx", np.array([q_init, q_max - eps, v_min, v_min, 1e-2]))
-    #     ocp.ocp_solver.constraints_set(0, "ubx", np.array([q_init, q_max - eps, v_max, v_max, 1e-2]))
-
-    #     status = ocp.ocp_solver.solve()
-
-    #     print('--------------------------------------------')
-
-    #     if status == 0:
-    #         print('INITIAL OCP SOLVED')
-
-    #         x0 = ocp.ocp_solver.get(0, "x")
-    #         u0 = ocp.ocp_solver.get(0, "u")
-
-    #         x_sol = np.empty((ocp.N+1,5))
-    #         u_sol = np.empty((ocp.N,2))
-
-    #         dt_sym = 1e-2
-
-    #         x_sol[0] = x0
-    #         u_sol[0] = u0
-
-    #         for i in range(1, ocp.N):
-    #             x_sol[i] = ocp.ocp_solver.get(i, "x")
-    #             u_sol[i] = ocp.ocp_solver.get(i, "u")
-
-    #         x_sol[ocp.N] = ocp.ocp_solver.get(ocp.N, "x")
-
-    #         # p_mintime = np.array([0., 0., 0., 0., 1.])
-
-    #         # ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #         # ocp.ocp_solver.reset()
-
-    #         # for i in range(1, ocp.N):
-    #         #     ocp.ocp_solver.set(i, 'x', x_sol[i])
-    #         #     ocp.ocp_solver.set(i, 'u', u_sol[i])
-    #         #     ocp.ocp_solver.set(i, 'p', p_mintime)
-    #         #     ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, 0.])) 
-    #         #     ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, 0., 1e-2])) 
-
-    #         # ocp.ocp_solver.constraints_set(ocp.N, "lbx", np.array([q_fin, q_min, 0., 0., 0.]))
-    #         # ocp.ocp_solver.constraints_set(ocp.N, "ubx", np.array([q_fin, q_min, 0., 0., 1e-2]))
-
-    #         # ocp.ocp_solver.set(ocp.N, 'x', x_sol[ocp.N])
-    #         # ocp.ocp_solver.set(ocp.N, 'p', p_mintime)
-
-    #         # ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x0[0], x0[1], x0[2], x0[3], 0.])) 
-    #         # ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x0[0], x0[1], x0[2], x0[3], 1e-2])) 
-
-    #         # ocp.ocp_solver.set(0, 'x', x_sol[0])
-    #         # ocp.ocp_solver.set(0, 'u', u_sol[0])
-    #         # ocp.ocp_solver.set(0, 'p', p_mintime)
-
-    #         # status = ocp.ocp_solver.solve()
-
-    #         # if status == 0:
-    #         #     x_sol[0] = ocp.ocp_solver.get(0, "x")
-    #         #     u_sol[0] = ocp.ocp_solver.get(0, "u")
-
-    #         #     for i in range(1, ocp.N):
-    #         #         x_sol[i] = ocp.ocp_solver.get(i, "x")
-    #         #         u_sol[i] = ocp.ocp_solver.get(i, "u")
-
-    #         #     x_sol[ocp.N] = ocp.ocp_solver.get(ocp.N, "x")
-
-    #         #     dt_sym = ocp.ocp_solver.get(0, "x")[4]
-
-    #         #     print('MIN TIME SOLVED')
-
-    #         x0 = np.copy(x_sol[0])
-    #         x3_eps = x0[2] - eps * p[0] 
-    #         x4_eps = x0[3] - eps * p[1]
-    #         x_sym = np.array([x0[0], x0[1], x3_eps, x4_eps])
-
-    #         X_save = np.append(X_save, [[x_sol[ocp.N][0], x_sol[ocp.N][1] - eps, x_sol[ocp.N][2], x_sol[ocp.N][3], 1, 0]], axis = 0)
-    #         X_save = np.append(X_save, [[x_sol[ocp.N][0], x_sol[ocp.N][1], x_sol[ocp.N][2], x_sol[ocp.N][3], 0, 1]], axis = 0)
-
-    #         # xv_state = np.full((ocp.N+1,1),2)
-    #         # xv_state[ocp.N] = 1
-
-    #         if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #             is_x_at_limit = True
-    #             print('Initial state at the limit')
-    #             # xv_state[0] = 1
-    #         else:
-    #             is_x_at_limit = False
-    #             print('Initial state not at the limit')
-    #             # xv_state[0] = 0
-
-    #         X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 1, 0]], axis = 0)
-    #         X_save = np.append(X_save, [[x0[0], x0[1], x0[2], x0[3], 0, 1]], axis = 0)
-
-    #         for f in range(1, ocp.N):
-    #             print('State ', f)
-
-    #             if is_x_at_limit:
-    #                 if x_sol[f][0] > q_max - eps or x_sol[f][0] < q_min + eps or x_sol[f][1] > q_max - eps or x_sol[f][1] < q_min + eps or x_sol[f][2] > v_max - eps or x_sol[f][2] < v_min + eps or x_sol[f][3] > v_max - eps or x_sol[f][3] < v_min + eps:
-    #                     is_x_at_limit = True
-    #                     print('State on dX')
-    #                     # xv_state[f] = 1
-
-    #                     x_sym = np.copy(x_sol[f][:4])
-
-    #                     if x_sol[f][0] > q_max - eps:
-    #                         x_sym[0] = q_max + eps
-    #                     if x_sol[f][0] < q_min + eps:
-    #                         x_sym[0] = q_min - eps
-    #                     if x_sol[f][1] > q_max - eps:
-    #                         x_sym[1] = q_max + eps
-    #                     if x_sol[f][1] < q_min + eps:
-    #                         x_sym[1] = q_min - eps
-    #                     if x_sol[f][2] > v_max - eps:
-    #                         x_sym[2] = v_max + eps
-    #                     if x_sol[f][2] < v_min + eps:
-    #                         x_sym[2] = v_min - eps
-    #                     if x_sol[f][3] > v_max - eps:
-    #                         x_sym[3] = v_max + eps
-    #                     if x_sol[f][3] < v_min + eps:
-    #                         x_sym[3] = v_min - eps
-    #                 else:
-    #                     # sono o su dV o in V
-    #                     is_x_at_limit = False
-
-    #                     if x_sol[f-1][1] > q_max - eps or x_sol[f-1][1] < q_min + eps:
-    #                         print('Detouching from the limit on q2, break')
-    #                         break
-
-    #                     if x_sol[f-1][3] > v_max - eps:
-    #                         print('Detouching from the limit on +v2, break')
-    #                         break
-
-    #                     ocp.ocp_solver.reset()
-
-    #                     p = np.array([0., 1., 0.])
-
-    #                     # ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #                     ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x_sol[f][0], x_sol[f][1], x_sol[f][2], v_min, dt_sym])) 
-    #                     ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3], dt_sym])) 
-    #                     ocp.ocp_solver.set(0, 'x', x_sol[f])
-    #                     ocp.ocp_solver.set(0, 'u', u_sol[f])
-    #                     ocp.ocp_solver.set(0, 'p', p)
-
-    #                     for i in range(ocp.N - f, ocp.N+1):
-    #                         ocp.ocp_solver.set(i, 'x', x_sol[ocp.N])
-    #                         ocp.ocp_solver.set(i, 'p', p)
-    #                         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #                         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
-
-    #                     ocp.ocp_solver.constraints_set(ocp.N - f, "lbx", x_sol[ocp.N])
-    #                     ocp.ocp_solver.constraints_set(ocp.N - f, "ubx", x_sol[ocp.N])
-
-    #                     for i in range(1, ocp.N - f):
-    #                         ocp.ocp_solver.set(i, 'x', x_sol[i+f])
-    #                         ocp.ocp_solver.set(i, 'u', u_sol[i+f])
-    #                         ocp.ocp_solver.set(i, 'p', p)
-    #                         ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #                         ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
-
-    #                     ocp.ocp_solver.options_set('qp_tol_stat', 1e-2)
-
-    #                     status = ocp.ocp_solver.solve()
-
-    #                     ocp.ocp_solver.options_set('qp_tol_stat', 1e-6)
-
-    #                     if status == 0:
-    #                         print('INTERMEDIATE OCP SOLVED')
-
-    #                         if ocp.ocp_solver.get(0, "x")[3] < x_sol[f][3] - 1e-2:
-    #                             print('new vel: ', ocp.ocp_solver.get(0, "x")[3], 'old vel: ', x_sol[f][3])
-    #                             print('Test failed, state inside V, break')
-    #                             break
-
-    #                             # # sono o su dv o su dx
-    #                             # for i in range(f, ocp.N):
-    #                             #     x_sol[i] = ocp.ocp_solver.get(i-f, "x")
-    #                             #     u_sol[i] = ocp.ocp_solver.get(i-f, "u")
-
-    #                             # x_sym = np.copy(x_sol[f])
-    #                             # x1_eps = x_sym[0] - eps * p[0]
-    #                             # x2_eps = x_sym[1] - eps * p[1]
-    #                             # x3_eps = x_sym[2] - eps * p[2]
-    #                             # x4_eps = x_sym[3] - eps * p[3]
-    #                             # x_sym = np.array([x1_eps, x2_eps, x3_eps, x4_eps])
-
-    #                             # if x_sym[0] > q_max - eps or x_sym[0] < q_min + eps or x_sym[1] > q_max - eps or x_sym[1] < q_min + eps or x_sym[2] > v_max - eps or x_sym[2] < v_min+ eps or x_sym[3] > v_max - eps or x_sym[3] < v_min + eps:
-    #                             #     print('Sono su dX, ottenuto tramite la nuova soluzione')
-    #                             #     print(x_sol[f], x_sym)
-    #                             #     is_x_at_limit = True
-    #                             #     xv_state[f] = 1
-    #                             # else:
-    #                             #     print('Sono su dV, ottenuto tramite la nuova soluzione')
-    #                             #     print(x_sol[f], x_sym)
-    #                             #     is_x_at_limit = False
-    #                             #     xv_state[f] = 0
-    #                         else:
-    #                             print('State on dV, test passed')
-    #                             is_x_at_limit = False
-    #                             # xv_state[f] = 0
-
-    #                             # sono su dv, posso simulare
-    #                             x_sym = np.copy(x_sol[f][:4])
-    #                             x3_eps = x_sym[2] - eps * p[0]
-    #                             x4_eps = x_sym[3] - eps * p[1]
-    #                             x_sym = np.array([x_sym[0], x_sym[1], x3_eps, x4_eps])
-
-    #                             if x_sym[3] < v_min:
-    #                                 x_sym[3] = v_min
-    #                     else:
-    #                         print('INTERMEDIATE OCP FAILED, break')
-    #                         break
-                        
-    #             else:
-    #                 u_sym = np.copy(u_sol[f-1])
-    #                 sim.acados_integrator.set("u", u_sym)
-    #                 sim.acados_integrator.set("x", x_sym)
-    #                 sim.acados_integrator.set("T", dt_sym)
-    #                 status = sim.acados_integrator.solve()
-    #                 x_sym = sim.acados_integrator.get("x")
-
-    #                 if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #                     print('State on dX')
-    #                     is_x_at_limit = True
-    #                     # xv_state[f] = 1
-    #                 else:
-    #                     print('State on dV')
-    #                     is_x_at_limit = False
-    #                     # xv_state[f] = 0
-
-    #             X_save = np.append(X_save, [[x_sym[0], x_sym[1], x_sym[2], x_sym[3], 1, 0]], axis = 0)
-    #             X_save = np.append(X_save, [[x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3], 0, 1]], axis = 0)
-
-    #             # with torch.no_grad():
-    #             #     out_v = model((torch.from_numpy(np.float32([x_sol[f][:4]])).to(device) - mean) / std).numpy()
-    #             #     out_uv = model((torch.from_numpy(np.float32([x_sym[:4]])).to(device) - mean) / std).numpy()
-    #             #     # if out_uv[0,0] < out_v[0,0]: # or np.argmax(out_uv, axis=1) == 1:
-    #             #     #     print('4 set, at the limit, x: ', x_sol[f], out_v)
-    #             #     #     print('4 set, at the limit, x_sym: ', x_sym, out_uv)
-
-    #             #     if out_uv[0,1] > 5:
-    #             #         print('Possibile errore!')
-    #             #         print('4 set, at the limit, x: ', x_sol[f], out_v)
-    #             #         print('4 set, at the limit, x_sym: ', x_sym, out_uv)
-
-    #             #         # u_sym = np.copy(u_sol[f-1])
-                            
-    #             #         # if u_sym[0] > tau_max - eps:
-    #             #         #     u_sym[0] = u_sym[0] - eps
-    #             #         #     tlim = True
-    #             #         # else:
-    #             #         #     if u_sym[0] < -tau_max + eps:
-    #             #         #         u_sym[0] = u_sym[0] + eps
-    #             #         #         tlim = True
-    #             #         #     else:
-    #             #         #         if u_sym[1] > tau_max - eps:
-    #             #         #             u_sym[1] = u_sym[1] - eps
-    #             #         #             tlim = True
-    #             #         #         else:
-    #             #         #             if u_sym[1] < -tau_max + eps:
-    #             #         #                 u_sym[1] = u_sym[1] + eps
-    #             #         #                 tlim = True
-    #             #         #             else:
-    #             #         #                 print('no torque at limit!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    #             #         #                 tlim = False
-
-    #             #         # if tlim:
-    #             #         #     sim.acados_integrator.set("u", u_sym)
-    #             #         #     sim.acados_integrator.set("x", x_sym)
-    #             #         #     sim.acados_integrator.set("T", dt_sym)
-    #             #         #     status = sim.acados_integrator.solve()
-    #             #         #     x_sym = sim.acados_integrator.get("x")
-
-    #             #         #     isout = False
-
-    #             #         #     if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #             #         #         print('tutto ok')
-    #             #         #         isout = True
-    #             #         #     else:
-    #             #         #         for i in range(f+1, ocp.N):
-    #             #         #             u_sym = np.copy(u_sol[i-1])
-
-    #             #         #             sim.acados_integrator.set("u", u_sym)
-    #             #         #             sim.acados_integrator.set("x", x_sym)
-    #             #         #             sim.acados_integrator.set("T", dt_sym)
-    #             #         #             status = sim.acados_integrator.solve()
-    #             #         #             x_sym = sim.acados_integrator.get("x")
-
-    #             #         #             if x_sym[0] > q_max or x_sym[0] < q_min or x_sym[1] > q_max or x_sym[1] < q_min or x_sym[2] > v_max or x_sym[2] < v_min or x_sym[3] > v_max or x_sym[3] < v_min:
-    #             #         #                 print('tutto ok')
-    #             #         #                 isout = True
-    #             #         #                 break
-
-    #             #         #         if isout == False:
-    #             #         #             print('ERROR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-
-    #             #         p = np.array([0., 0., 0., 1., 0.])
-
-    #             #         ocp.ocp_solver.set_new_time_steps(np.full((ocp.N,), 1.))
-
-    #             #         ocp.ocp_solver.reset()
-
-    #             #         for i in range(ocp.N - f, ocp.N+1):
-    #             #             ocp.ocp_solver.set(i, 'x', np.array([q_fin, q_min, 0., 0., dt_sym]))
-    #             #             ocp.ocp_solver.set(i, 'p', p)
-
-    #             #             ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #             #             ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
-
-    #             #         ocp.ocp_solver.constraints_set(ocp.N - f, "lbx", np.array([q_fin, q_min, 0., 0., dt_sym]))
-    #             #         ocp.ocp_solver.constraints_set(ocp.N - f, "ubx", np.array([q_fin, q_min, 0., 0., dt_sym]))
-
-    #             #         for i in range(1, ocp.N - f):
-    #             #             ocp.ocp_solver.set(i, 'x', x_sol[i+f])
-    #             #             ocp.ocp_solver.set(i, 'u', u_sol[i+f])
-    #             #             ocp.ocp_solver.set(i, 'p', p)
-
-    #             #             ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, dt_sym])) 
-    #             #             ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, 0., dt_sym])) 
-
-    #             #         ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x_sol[f][0], x_sol[f][1], x_sol[f][2], v_min, dt_sym])) 
-    #             #         ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3], dt_sym])) 
-
-    #             #         ocp.ocp_solver.set(0, 'x', x_sol[f])
-    #             #         ocp.ocp_solver.set(0, 'u', u_sol[f])
-    #             #         ocp.ocp_solver.set(0, 'p', p)
-
-    #             #         ocp.ocp_solver.options_set('qp_tol_stat', eps)
-
-    #             #         status = ocp.ocp_solver.solve()
-
-    #             #         ocp.ocp_solver.options_set('qp_tol_stat', 1e-6)
-
-    #             #         if status == 0:
-    #             #             if abs(ocp.ocp_solver.get(0, "x")[3] - x_sol[f][3]) > eps:
-    #             #                 print('velocita piu estrema trovata!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    #             #                 print('v2 max: ', ocp.ocp_solver.get(0, "x")[3], 'v2 used: ', x_sol[f][3])
-    #             #             else:
-    #             #                 print('in realtà sembra tutto ok')
-
-    X_save = np.load('data_reverse_100000.npy')
-    # np.save = np.save('data_reverse_750000.npy', np.asarray(X_save))
+    # print(count_solved/count_tot)
+    # print("Execution time: %s seconds" % (time.time() - start_time))
+
+    # model_rev = NeuralNet(4, 400, 2).to(device)
+    # criterion = nn.BCEWithLogitsLoss()
+    # optimizer_rev = torch.optim.Adam(model_rev.parameters(), lr=learning_rate)
+
+    X_save = np.load('data_reverse_100000_20_new.npy')
+    # np.save = np.save('data_reverse_700000_20_new.npy', np.asarray(X_save))
+
+    model_dir = NeuralNetRegression(4, 512, 1).to(device)
+    criterion_dir = nn.MSELoss()
+    optimizer_dir = torch.optim.Adam(model_dir.parameters(), lr=1e-2)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer_dir, gamma=0.99)
 
     X_save = X_save[1:]
+    X_save = np.array([X_save[i] for i in range(len(X_save)) if X_save[i][5] > 0.5])
 
-    X_pos = np.array([X_save[i] for i in range(len(X_save)) if X_save[i][5] > 0.5])
-    X_train_dir = np.empty((X_pos.shape[0],5))
+    X_train_dir = np.empty((X_save.shape[0],5))
 
-    for i in range(X_pos.shape[0]):
-        X_train_dir[i][0] = X_pos[i][0]
-        X_train_dir[i][1] = X_pos[i][1]
-        vel_norm = norm([X_pos[i][2],X_pos[i][3]])
+    for i in range(X_save.shape[0]):
+        X_train_dir[i][0] = X_save[i][0]
+        X_train_dir[i][1] = X_save[i][1]
+        vel_norm = norm([X_save[i][2],X_save[i][3]])
         if vel_norm == 0:
             X_train_dir[i][2] = 0.
             X_train_dir[i][3] = 0.
         else:
-            X_train_dir[i][2] = X_pos[i][2]/vel_norm
-            X_train_dir[i][3] = X_pos[i][3]/vel_norm
+            X_train_dir[i][2] = X_save[i][2]/vel_norm
+            X_train_dir[i][3] = X_save[i][3]/vel_norm
         X_train_dir[i][4] = vel_norm
 
     X_test_dir = np.empty((X_save.shape[0],6))
@@ -1723,193 +806,196 @@ if __name__ == "__main__":
         X_test_dir[i][4] = vel_norm
         X_test_dir[i][5] = X_save[i][5]
 
-    it = 1
-    val = 1
-    val_prev = 1
-
     mean_dir, std_dir = torch.mean(torch.tensor(X_train_dir[:,:4].tolist())).to(device), torch.std(torch.tensor(X_train_dir[:,:4].tolist())).to(device)
-    mean_dir_out, std_dir_out = torch.mean(torch.tensor(X_train_dir[:,4].tolist())).to(device), torch.std(torch.tensor(X_train_dir[:,4].tolist())).to(device)
+    out_max = torch.tensor(X_train_dir[:,4].tolist()).max()
 
-    # model_dir.load_state_dict(torch.load('model_2pendulum_dir_20'))
+    # it = 1
+    # val = out_max.item()
+    # val_prev = out_max.item()
 
-    training_evol = [val]
-    changed = False
+    # beta = 0.95
+    # n_minibatch = 512
+    # B = int(X_save.shape[0]*100/n_minibatch) # number of iterations for 100 epoch
+    # it_max = B * 100
 
-    # Train the model
-    while val > 1e-3:
-        ind = random.sample(range(len(X_train_dir)), n_minibatch)
+    # # model_dir.load_state_dict(torch.load('model_2pendulum_dir_20'))
 
-        X_iter_tensor = torch.Tensor([X_train_dir[i][:4] for i in ind]).to(device)
-        y_iter_tensor = torch.Tensor([[X_train_dir[i][4]] for i in ind]).to(device)
-        X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
-        y_iter_tensor = (y_iter_tensor - mean_dir_out) / std_dir_out
+    # training_evol = []
 
-        # Zero the gradients
-        for param in model_dir.parameters():
-            param.grad = None
+    # # Train the model
+    # while val > 1e-2:
+    #     ind = random.sample(range(len(X_train_dir)), n_minibatch)
 
-        # Forward pass
-        outputs = model_dir(X_iter_tensor)
-        loss = criterion_dir(outputs, y_iter_tensor)
+    #     X_iter_tensor = torch.Tensor([X_train_dir[i][:4] for i in ind]).to(device)
+    #     y_iter_tensor = torch.Tensor([[X_train_dir[i][4]] for i in ind]).to(device)
+    #     X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
+    #     y_iter_tensor = y_iter_tensor / out_max
 
-        # Backward and optimize
-        loss.backward()
-        optimizer_dir.step()
+    #     # Zero the gradients
+    #     for param in model_dir.parameters():
+    #         param.grad = None
 
-        val = beta * val + (1 - beta) * loss.item()
+    #     # Forward pass
+    #     outputs = model_dir(X_iter_tensor)
+    #     loss = criterion_dir(outputs, y_iter_tensor)
 
-        it += 1
+    #     # Backward and optimize
+    #     loss.backward()
+    #     optimizer_dir.step()
 
-        if it % B == 0: 
-            training_evol.append(val)
-            print(val)
+    #     val = beta * val + (1 - beta) * (torch.sqrt(loss) * out_max).item()
 
-            if it >= it_max and val > val_prev - 1e-4:
-                if changed == False:
-                    optimizer_dir = torch.optim.Adam(model_dir.parameters(), lr=learning_rate/10)
-                    changed = True
-                    print('Learning Rate reduced')
-                else:
-                    break
+    #     it += 1
 
-            val_prev = beta * val_prev + (1 - beta) * val
+    #     if it % B == 0: 
+    #         training_evol.append(val)
+    #         print(val)
 
-    plt.figure()
-    plt.plot(training_evol)
-    plt.show()
+    #         scheduler.step()
+
+    #         if it > it_max:
+    #             current_mean = sum(training_evol[-20:]) / 10
+    #             previous_mean = sum(training_evol[-40:-20]) / 10
+    #             if current_mean > previous_mean - 1e-4:
+    #                 break
+
+    # plt.figure()
+    # plt.plot(training_evol)
+    # plt.show()
 
     # torch.save(model_dir.state_dict(), 'model_2pendulum_dir_20')
+    model_dir.load_state_dict(torch.load('model_2pendulum_dir_20'))
 
-    correct = 0
+    # correct = 0
 
-    with torch.no_grad():
-        X_iter_tensor = torch.Tensor(X_train_dir[:,:4]).to(device)
-        X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
-        outputs = model_dir(X_iter_tensor) * std_dir_out + mean_dir_out
-        for i in range(X_train_dir.shape[0]):
-            if X_train_dir[i][4] < outputs[i]:
-                correct += 1
+    # with torch.no_grad():
+    #     X_iter_tensor = torch.Tensor(X_train_dir[:,:4]).to(device)
+    #     X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
+    #     outputs = model_dir(X_iter_tensor) * out_max
+    #     for i in range(X_train_dir.shape[0]):
+    #         if X_train_dir[i][4] < outputs[i]:
+    #             correct += 1
 
-        print('Accuracy data training: ', correct/X_train_dir.shape[0])
+    #     print('Accuracy data training: ', correct/X_train_dir.shape[0])
 
-    correct = 0
+    # correct = 0
 
-    with torch.no_grad():
-        X_iter_tensor = torch.Tensor(X_test_dir[:,:4]).to(device)
-        X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
-        outputs = model_dir(X_iter_tensor) * std_dir_out + mean_dir_out
-        for i in range(X_test_dir.shape[0]):
-            if X_test_dir[i][4] < outputs[i] and X_test_dir[i][5] > 0.5:
-                correct += 1
-            if X_test_dir[i][4] > outputs[i] and X_test_dir[i][5] < 0.5:
-                correct += 1
+    # with torch.no_grad():
+    #     X_iter_tensor = torch.Tensor(X_test_dir[:,:4]).to(device)
+    #     X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
+    #     outputs = model_dir(X_iter_tensor) * out_max
+    #     for i in range(X_test_dir.shape[0]):
+    #         if X_test_dir[i][4] < outputs[i] and X_test_dir[i][5] > 0.5:
+    #             correct += 1
+    #         if X_test_dir[i][4] > outputs[i] and X_test_dir[i][5] < 0.5:
+    #             correct += 1
 
-        print('Accuracy data testing: ', correct/X_test_dir.shape[0])
+    #     print('Accuracy data testing: ', correct/X_test_dir.shape[0])
 
-    with torch.no_grad():
-        X_iter_tensor = torch.Tensor(X_train_dir[:,:4]).to(device)
-        y_iter_tensor = torch.Tensor([[X_train_dir[i][4]] for i in range(len(X_train_dir))]).to(device)
-        X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
-        outputs = model_dir(X_iter_tensor) * std_dir_out + mean_dir_out
-        print('RMSE train data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor)))
+    # with torch.no_grad():
+    #     X_iter_tensor = torch.Tensor(X_train_dir[:,:4]).to(device)
+    #     y_iter_tensor = torch.Tensor([[X_train_dir[i][4]] for i in range(len(X_train_dir))]).to(device)
+    #     X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
+    #     outputs = model_dir(X_iter_tensor) * out_max
+    #     print('RMSE train data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor)))
 
-    data_al = np.load('data_vel_20/data_al_20.npy')
-    X_dir_al = np.empty((data_al.shape[0],6))
+    # data_al = np.load('data_vel_20/data_al_20.npy')
+    # X_dir_al = np.empty((data_al.shape[0],6))
 
-    model_al = NeuralNet(4, 400, 2).to(device)
-    model_al.load_state_dict(torch.load('data_vel_20/model_2pendulum_20'))
+    # model_al = NeuralNet(4, 400, 2).to(device)
+    # model_al.load_state_dict(torch.load('data_vel_20/model_2pendulum_20'))
 
-    # mean, std = torch.tensor(1.9635), torch.tensor(3.0036) # max vel = 5
-    #mean_al, std_al = torch.tensor(1.9635), torch.tensor(7.0253) # max vel = 15
-    # mean_al, std_al = torch.tensor(1.9635), torch.tensor(13.6191) # max vel = 30
-    mean_al, std_al = torch.tensor(1.9635).to(device), torch.tensor(9.2003).to(device) # max vel = 20
+    # # mean, std = torch.tensor(1.9635), torch.tensor(3.0036) # max vel = 5
+    # #mean_al, std_al = torch.tensor(1.9635), torch.tensor(7.0253) # max vel = 15
+    # # mean_al, std_al = torch.tensor(1.9635), torch.tensor(13.6191) # max vel = 30
+    # mean_al, std_al = torch.tensor(1.9635).to(device), torch.tensor(9.2003).to(device) # max vel = 20
 
-    for i in range(data_al.shape[0]):
-        X_dir_al[i][0] = data_al[i][0]
-        X_dir_al[i][1] = data_al[i][1]
-        vel_norm = norm([data_al[i][2],data_al[i][3]])
-        if vel_norm == 0:
-            X_dir_al[i][2] = 0.
-            X_dir_al[i][3] = 0.
-        else:
-            X_dir_al[i][2] = data_al[i][2]/vel_norm
-            X_dir_al[i][3] = data_al[i][3]/vel_norm
-        X_dir_al[i][4] = vel_norm
-        X_dir_al[i][5] = data_al[i][5]
+    # for i in range(data_al.shape[0]):
+    #     X_dir_al[i][0] = data_al[i][0]
+    #     X_dir_al[i][1] = data_al[i][1]
+    #     vel_norm = norm([data_al[i][2],data_al[i][3]])
+    #     if vel_norm == 0:
+    #         X_dir_al[i][2] = 0.
+    #         X_dir_al[i][3] = 0.
+    #     else:
+    #         X_dir_al[i][2] = data_al[i][2]/vel_norm
+    #         X_dir_al[i][3] = data_al[i][3]/vel_norm
+    #     X_dir_al[i][4] = vel_norm
+    #     X_dir_al[i][5] = data_al[i][5]
 
-    correct = 0
+    # correct = 0
 
-    with torch.no_grad():
-        X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
-        X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
-        outputs = model_dir(X_iter_tensor) * std_dir_out + mean_dir_out
-        for i in range(X_dir_al.shape[0]):
-            if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
-                correct += 1
-            if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
-                correct += 1
+    # with torch.no_grad():
+    #     X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
+    #     X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
+    #     outputs = model_dir(X_iter_tensor) * out_max
+    #     for i in range(X_dir_al.shape[0]):
+    #         if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
+    #             correct += 1
+    #         if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
+    #             correct += 1
 
-        print('Accuracy AL data: ', correct/X_dir_al.shape[0])
+    #     print('Accuracy AL data: ', correct/X_dir_al.shape[0])
 
-    data_boundary = np.array([data_al[i] for i in range(len(data_al)) if abs(model_al((torch.Tensor(data_al[i,:4]).to(device) - mean_al) / std_al)[0]) < 5])
-    X_dir_al = np.empty((data_boundary.shape[0],6))
+    # data_boundary = np.array([data_al[i] for i in range(len(data_al)) if abs(model_al((torch.Tensor(data_al[i,:4]).to(device) - mean_al) / std_al)[0]) < 5])
+    # X_dir_al = np.empty((data_boundary.shape[0],6))
 
-    for i in range(data_boundary.shape[0]):
-        X_dir_al[i][0] = data_boundary[i][0]
-        X_dir_al[i][1] = data_boundary[i][1]
-        vel_norm = norm([data_boundary[i][2],data_boundary[i][3]])
-        if vel_norm == 0:
-            X_dir_al[i][2] = 0.
-            X_dir_al[i][3] = 0.
-        else:
-            X_dir_al[i][2] = data_boundary[i][2]/vel_norm
-            X_dir_al[i][3] = data_boundary[i][3]/vel_norm
-        X_dir_al[i][4] = vel_norm
-        X_dir_al[i][5] = data_boundary[i][5]
+    # for i in range(data_boundary.shape[0]):
+    #     X_dir_al[i][0] = data_boundary[i][0]
+    #     X_dir_al[i][1] = data_boundary[i][1]
+    #     vel_norm = norm([data_boundary[i][2],data_boundary[i][3]])
+    #     if vel_norm == 0:
+    #         X_dir_al[i][2] = 0.
+    #         X_dir_al[i][3] = 0.
+    #     else:
+    #         X_dir_al[i][2] = data_boundary[i][2]/vel_norm
+    #         X_dir_al[i][3] = data_boundary[i][3]/vel_norm
+    #     X_dir_al[i][4] = vel_norm
+    #     X_dir_al[i][5] = data_boundary[i][5]
 
-    correct = 0
+    # correct = 0
 
-    with torch.no_grad():
-        X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
-        X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
-        outputs = model_dir(X_iter_tensor) * std_dir_out + mean_dir_out
-        for i in range(X_dir_al.shape[0]):
-            if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
-                correct += 1
-            if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
-                correct += 1
+    # with torch.no_grad():
+    #     X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
+    #     X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
+    #     outputs = model_dir(X_iter_tensor) * out_max
+    #     for i in range(X_dir_al.shape[0]):
+    #         if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
+    #             correct += 1
+    #         if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
+    #             correct += 1
 
-        print('Accuracy AL boundary: ', correct/X_dir_al.shape[0])
+    #     print('Accuracy AL boundary: ', correct/X_dir_al.shape[0])
 
-    data_boundary = np.array([data_al[i] for i in range(len(data_al)) if abs(model_al((torch.Tensor(data_al[i,:4]).to(device) - mean_al) / std_al)[0]) > 5])
-    X_dir_al = np.empty((data_boundary.shape[0],6))
+    # data_boundary = np.array([data_al[i] for i in range(len(data_al)) if abs(model_al((torch.Tensor(data_al[i,:4]).to(device) - mean_al) / std_al)[0]) > 5])
+    # X_dir_al = np.empty((data_boundary.shape[0],6))
 
-    for i in range(data_boundary.shape[0]):
-        X_dir_al[i][0] = data_boundary[i][0]
-        X_dir_al[i][1] = data_boundary[i][1]
-        vel_norm = norm([data_boundary[i][2],data_boundary[i][3]])
-        if vel_norm == 0:
-            X_dir_al[i][2] = 0.
-            X_dir_al[i][3] = 0.
-        else:
-            X_dir_al[i][2] = data_boundary[i][2]/vel_norm
-            X_dir_al[i][3] = data_boundary[i][3]/vel_norm
-        X_dir_al[i][4] = vel_norm
-        X_dir_al[i][5] = data_boundary[i][5]
+    # for i in range(data_boundary.shape[0]):
+    #     X_dir_al[i][0] = data_boundary[i][0]
+    #     X_dir_al[i][1] = data_boundary[i][1]
+    #     vel_norm = norm([data_boundary[i][2],data_boundary[i][3]])
+    #     if vel_norm == 0:
+    #         X_dir_al[i][2] = 0.
+    #         X_dir_al[i][3] = 0.
+    #     else:
+    #         X_dir_al[i][2] = data_boundary[i][2]/vel_norm
+    #         X_dir_al[i][3] = data_boundary[i][3]/vel_norm
+    #     X_dir_al[i][4] = vel_norm
+    #     X_dir_al[i][5] = data_boundary[i][5]
 
-    correct = 0
+    # correct = 0
 
-    with torch.no_grad():
-        X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
-        X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
-        outputs = model_dir(X_iter_tensor) * std_dir_out + mean_dir_out
-        for i in range(X_dir_al.shape[0]):
-            if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
-                correct += 1
-            if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
-                correct += 1
+    # with torch.no_grad():
+    #     X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
+    #     X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
+    #     outputs = model_dir(X_iter_tensor) * out_max
+    #     for i in range(X_dir_al.shape[0]):
+    #         if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
+    #             correct += 1
+    #         if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
+    #             correct += 1
 
-        print('Accuracy AL not boundary: ', correct/X_dir_al.shape[0])
+    #     print('Accuracy AL not boundary: ', correct/X_dir_al.shape[0])
 
     # np.save('data_reverse_100_new.npy', np.asarray(X_save))
 
@@ -2034,7 +1120,7 @@ if __name__ == "__main__":
             )
         ).to(device)
         inp = (inp - mean_dir) / std_dir
-        out = (model_dir(inp) * std_dir_out + mean_dir_out).cpu().numpy()
+        out = (model_dir(inp) * out_max).cpu().numpy()
         y_pred = np.empty(out.shape)
         for i in range(len(out)):
             if out[i] > abs(yrav[i]):
@@ -2082,7 +1168,7 @@ if __name__ == "__main__":
             )
         ).to(device)
         inp = (inp - mean_dir) / std_dir
-        out = (model_dir(inp) * std_dir_out + mean_dir_out).cpu().numpy() 
+        out = (model_dir(inp) * out_max).cpu().numpy() 
         y_pred = np.empty(out.shape)
         for i in range(len(out)):
             if out[i] > abs(yrav[i]):
@@ -2117,6 +1203,63 @@ if __name__ == "__main__":
         plt.ylim([v_min, v_max])
         plt.grid()
         plt.title("First actuator")
+
+        h = 0.02
+        xx, yy = np.meshgrid(np.arange(v_min, v_max, h), np.arange(v_min, v_max, h))
+        xrav = xx.ravel()
+        yrav = yy.ravel()
+
+        for l in range(10):
+            q1ran = q_min + random.random() * (q_max-q_min)
+            q2ran = q_min + random.random() * (q_max-q_min)
+
+            plt.figure()
+            inp = torch.from_numpy(
+                np.float32(
+                    np.c_[
+                        q1ran * np.ones(xrav.shape[0]),
+                        q2ran * np.ones(xrav.shape[0]),
+                        xrav,
+                        yrav,
+                    ]
+                )
+            ).to(device)
+            inp = (inp - mean_dir) / std_dir
+            out = (model_dir(inp) * out_max).cpu().numpy() 
+            y_pred = np.empty(out.shape)
+            for i in range(len(out)):
+                if out[i] > abs(yrav[i]):
+                    y_pred[i] = 1
+                else:
+                    y_pred[i] = 0
+            Z = y_pred.reshape(xx.shape)
+            plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+            xit = []
+            yit = []
+            cit = []
+            for i in range(len(X_save)):
+                if (
+                    norm(X_save[i][0] - q1ran) < 0.01
+                    and norm(X_save[i][1] - q2ran) < 0.01
+                ):
+                    xit.append(X_save[i][2])
+                    yit.append(X_save[i][3])
+                    if X_save[i][5] < 0.5:
+                        cit.append(0)
+                    else:
+                        cit.append(1)
+            plt.scatter(
+                xit,
+                yit,
+                c=cit,
+                marker=".",
+                alpha=0.5,
+                cmap=plt.cm.Paired,
+            )
+            plt.xlim([v_min, v_max])
+            plt.ylim([v_min, v_max])
+            plt.grid()
+            plt.title(str(l)+"q1="+str(q1ran)+"q2="+str(q2ran))
 
     # # Plot the results:
     # plt.figure()

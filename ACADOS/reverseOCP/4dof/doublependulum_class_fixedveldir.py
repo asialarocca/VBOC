@@ -110,7 +110,7 @@ class OCPdoublependulumR:
 
         # times
         Tf = 100
-        self.N = 100
+        self.N = Tf
         self.ocp.solver_options.tf = Tf
         self.ocp.dims.N = self.N
 
@@ -121,7 +121,7 @@ class OCPdoublependulumR:
         self.Cmax = 10.
         self.thetamax = np.pi / 2 + np.pi
         self.thetamin = np.pi
-        self.dthetamax = 15.
+        self.dthetamax = 20.
 
         # cost
         self.ocp.cost.cost_type_0 = 'EXTERNAL'
@@ -152,17 +152,21 @@ class OCPdoublependulumR:
         self.ocp.constraints.ubx_0 = np.array([self.thetamax, self.thetamax, self.dthetamax, self.dthetamax, 1e-2]) 
         self.ocp.constraints.idxbx_0 = np.array([0, 1, 2, 3, 4])
 
-        # nonlinear terminal constraints
-        self.model.con_h_expr_0 = w2 * dtheta1 - w1 * dtheta2
-        self.ocp.constraints.lh_0 = np.array([0.])
-        self.ocp.constraints.uh_0 = np.array([0.])
+        self.ocp.constraints.C = np.array([[0., 0., 0., 0., 0.]])
+        self.ocp.constraints.D = np.array([[0., 0.]])
+        self.ocp.constraints.lg = np.array([0.])
+        self.ocp.constraints.ug = np.array([0.])
+
+        # self.model.con_h_expr = w2 * dtheta1 - w1 * dtheta2
+        # self.ocp.constraints.lh = np.array([-2 * self.dthetamax])
+        # self.ocp.constraints.uh = np.array([2 * self.dthetamax])
 
         # -------------------------------------------------
 
         self.ocp.solver_options.nlp_solver_type = "SQP"
         self.ocp.solver_options.hessian_approx = 'EXACT'
         self.ocp.solver_options.exact_hess_constr = 0
-        # self.ocp.solver_options.exact_exact_hess_cost = 0
+        # self.ocp.solver_options.exact_hess_cost = 0
         self.ocp.solver_options.exact_hess_dyn = 0
         self.ocp.solver_options.qp_solver_iter_max = 100
         self.ocp.solver_options.nlp_solver_max_iter = 1000
@@ -261,7 +265,5 @@ class SYMdoublependulumINIT(OCPdoublependulumR):
         sim = AcadosSim()
         sim.model = self.model
         sim.solver_options.T = 1e-2
-        sim.solver_options.integrator_type = 'ERK'
         sim.solver_options.num_stages = 4
-        sim.solver_options.num_steps = 3
         self.acados_integrator = AcadosSimSolver(sim)

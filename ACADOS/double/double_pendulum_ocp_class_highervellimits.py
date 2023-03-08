@@ -117,7 +117,7 @@ class OCPdoublependulum:
         self.ocp = AcadosOcp()
 
         # dimensions
-        self.Tf = 0.4
+        self.Tf = 1.
         self.ocp.solver_options.tf = self.Tf  # prediction horizon
 
         self.N = int(100 * self.Tf)
