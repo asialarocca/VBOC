@@ -119,8 +119,8 @@ class OCPdoublependulumR:
 
         # set constraints
         self.Cmax = 10.
-        self.thetamax = np.pi / 2 + np.pi
-        self.thetamin = np.pi
+        self.thetamax = np.pi / 4 + np.pi # np.pi / 2 + np.pi
+        self.thetamin = - np.pi / 4 + np.pi #np.pi
         self.dthetamax = 20.
 
         # cost
@@ -166,14 +166,15 @@ class OCPdoublependulumR:
         self.ocp.solver_options.nlp_solver_type = "SQP"
         self.ocp.solver_options.hessian_approx = 'EXACT'
         self.ocp.solver_options.exact_hess_constr = 0
-        # self.ocp.solver_options.exact_hess_cost = 0
+        self.ocp.solver_options.exact_hess_cost = 0
         self.ocp.solver_options.exact_hess_dyn = 0
-        self.ocp.solver_options.qp_solver_iter_max = 100
+        self.ocp.solver_options.nlp_solver_tol_stat = 1e-4
+        # self.ocp.solver_options.qp_solver_iter_max = 100
         self.ocp.solver_options.nlp_solver_max_iter = 1000
         self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"
         self.ocp.solver_options.alpha_reduction = 0.3
         self.ocp.solver_options.alpha_min = 1e-2
-        self.ocp.solver_options.levenberg_marquardt = 1e-6
+        self.ocp.solver_options.levenberg_marquardt = 1e-5
 
 class OCPdoublependulumRINIT(OCPdoublependulumR):
     def __init__(self):

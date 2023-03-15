@@ -15,8 +15,7 @@ from my_nn import NeuralNet, NeuralNetRegression
 import math
 from multiprocessing import Pool
 
-def testing(_):
-
+def testing(v):
     valid_data = np.ndarray((0, 4))
 
     # Reset the number of steps used in the OCP:
@@ -33,7 +32,7 @@ def testing(_):
     # position of the reference joint is set to the other extreme. The final positions of the other joints
     # are left free. The OCP has to maximise the initial velocity module in a predefined direction.
 
-    # Selection of the eference joint:
+    # Selection of the reference joint:
     joint_sel = random.choice([0, 1]) # 0 to select first joint as reference, 1 to select second joint
     joint_oth = int(1 - joint_sel)
 
@@ -62,6 +61,8 @@ def testing(_):
     if q_init_oth < q_min + eps:
         q_init_oth = q_init_oth + eps
 
+    tmp = [vel_sel+1+joint_sel,ran1,ran2,q_init_oth]
+
     # Bounds on the initial state:
     q_init_lb = np.array([q_min, q_min, v_min, v_min, dt_sym])
     q_init_ub = np.array([q_max, q_max, v_max, v_max, dt_sym])
@@ -77,8 +78,8 @@ def testing(_):
     # Bounds on the final state:
     q_fin_lb = np.array([q_min, q_min, 0., 0., dt_sym])
     q_fin_ub = np.array([q_max, q_max, 0., 0., dt_sym])
-    q_fin_lb[joint_sel] = q_fin_sel
-    q_fin_ub[joint_sel] = q_fin_sel
+    # q_fin_lb[joint_sel] = q_fin_sel
+    # q_fin_ub[joint_sel] = q_fin_sel
 
     # Guess:
     x_sol_guess = np.empty((N, 5))
@@ -150,7 +151,6 @@ def testing(_):
             break
 
     if all_ok: 
-
         # Save the optimal trajectory:
         x_sol = np.empty((N+1,5))
         u_sol = np.empty((N,2))
@@ -159,10 +159,51 @@ def testing(_):
             u_sol[i] = ocp.ocp_solver.get(i, "u")
         x_sol[N] = ocp.ocp_solver.get(N, "x")
 
+        # Minimum time OCP:
+        if min_time:
+            # Reset current iterate:
+            ocp.ocp_solver.reset()
+
+            # Cost:
+            p_mintime = np.array([0., 0., 1.]) # p[2] = 1 corresponds to the minimization of time
+
+            # Set parameters, guesses and constraints:
+            for i in range(N):
+                ocp.ocp_solver.set(i, 'x', x_sol[i])
+                ocp.ocp_solver.set(i, 'u', u_sol[i])
+                ocp.ocp_solver.set(i, 'p', p_mintime)
+                ocp.ocp_solver.constraints_set(i, 'lbx', np.array([q_min, q_min, v_min, v_min, 0.])) 
+                ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
+
+            # Initial and final states are fixed (except for the time step duration):
+            ocp.ocp_solver.constraints_set(N, "lbx", np.array([x_sol[N][0], x_sol[N][1], 0., 0., 0.]))
+            ocp.ocp_solver.constraints_set(N, "ubx", np.array([x_sol[N][0], x_sol[N][1], 0., 0., dt_sym]))
+            ocp.ocp_solver.set(N, 'x', x_sol[N])
+            ocp.ocp_solver.set(N, 'p', p_mintime)
+
+            ocp.ocp_solver.constraints_set(0, 'lbx', np.array([x_sol[0][0], x_sol[0][1], x_sol[0][2], x_sol[0][3], 0.])) 
+            ocp.ocp_solver.constraints_set(0, 'ubx', np.array([x_sol[0][0], x_sol[0][1], x_sol[0][2], x_sol[0][3], dt_sym])) 
+            ocp.ocp_solver.constraints_set(0, "C", np.array([[0., 0., 0., 0., 0.]])) 
+
+            # Solve the OCP:
+            status = ocp.ocp_solver.solve()
+
+            if status == 0:
+                # Save the new optimal trajectory:
+                for i in range(N):
+                    x_sol[i] = ocp.ocp_solver.get(i, "x")
+                    u_sol[i] = ocp.ocp_solver.get(i, "u")
+                x_sol[N] = ocp.ocp_solver.get(N, "x")
+
+                # Save the optimized time step duration:
+                dt_sym = ocp.ocp_solver.get(0, "x")[4]
+
         # Save the last state of the optimal trajectory and its corresponding unviable one:
-        x_fin_out = [x_sol[N][0], x_sol[N][1], x_sol[N][2], x_sol[N][3], 1, 0]
+        x_fin_out = np.copy(x_sol[N])
         x_fin_out[joint_sel] = x_fin_out[joint_sel] - vel_sel * eps
-        valid_data = np.append(valid_data, [[x_sol[N][0], x_sol[N][1], x_sol[N][2], x_sol[N][3]]], axis = 0)
+
+        # if abs(x_sol[N][2]) > 1e-3 and abs(x_sol[N][3]) > 1e-3:
+        #     valid_data = np.append(valid_data, [[x_sol[N][0], x_sol[N][1], x_sol[N][2], x_sol[N][3]]], axis = 0)
 
         # Generate the unviable sample in the cost direction:
         x_out = np.copy(x_sol[0][:4])
@@ -171,7 +212,6 @@ def testing(_):
         x_sym = np.empty((N+1,4))
         x_sym[0] = x_out
 
-        # Save the initial state of the optimal trajectory and its corresponding unviable one:
         valid_data = np.append(valid_data, [[x_sol[0][0], x_sol[0][1], x_sol[0][2], x_sol[0][3]]], axis = 0)
 
         # xv_state = np.full((N+1,1),2)
@@ -186,7 +226,7 @@ def testing(_):
             # xv_state[0] = 0
 
         # Iterate through the trajectory to verify the location of the states with respect to V:
-        for f in range(1, N):
+        for f in range(1, N+1):
 
             if is_x_at_limit:
                 # If the previous state was on a limit, the current state location cannot be identified using
@@ -324,15 +364,14 @@ def testing(_):
                     is_x_at_limit = False # the state is on dV
                     # xv_state[f] = 0
 
-            # Save the viable and unviable states:
-            valid_data = np.append(valid_data, [[x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3]]], axis = 0)
+            if is_x_at_limit == False and abs(x_sol[f][2]) > 1e-3 and abs(x_sol[f][3]) > 1e-3:
+                # Save the viable and unviable states:
+                valid_data = np.append(valid_data, [[x_sol[f][0], x_sol[f][1], x_sol[f][2], x_sol[f][3]]], axis = 0)
 
-        return  valid_data.tolist()
+        return  valid_data.tolist(), tmp, None
 
     else:
-        return None
-
-start_time = time.time()
+        return None, None, tmp
 
 # Ocp initialization:
 ocp = OCPdoublependulumRINIT()
@@ -351,397 +390,421 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Unviable data generation parameter:
 eps = 1e-4
 
-# Initialization of the array that will contain generated data:
-X_save = np.empty((0,6))
+min_time = 1 # set to 1 to also solve a minimum time problem to improve the solution
 
-error_found = 0
-check_data = 0 # set to 1 to check the correctness of generated data (to be used only while debugging)
-min_time = 0 # set to 1 to also solve a minimum time problem to improve the solution
+cpu_num = 30
 
-cpu_num = 31
+num_prob = 10000
+
+start_time = time.time()
 
 # Data generation:
 with Pool(cpu_num) as p:
-    temp = p.map(testing, range(10))
+    temp = p.map(testing, range(num_prob))
 
-X_save = [i for i in temp if i is not None]
-X_save = [[i for i in X_save[f]] for f in X_save]
+print("Execution time: %s seconds" % (time.time() - start_time))
 
-print(X_save)
+traj, statpos, statneg = zip(*temp)
+X_save = [i for i in traj if i is not None]
+X_solved = [i for i in statpos if i is not None]
+X_failed = [i for i in statneg if i is not None]
 
-print(sum(len(l) for l in X_save))
+print('Solved/tot', len(X_save)/num_prob)
 
-# # X_save = np.load('data_reverse_100000_20_neww.npy')
-# np.save = np.save('data_reverse_700000_20_new.npy', np.asarray(X_save))
+X_save = np.array([i for f in X_save for i in f])
 
-# print(count_solved/count_tot)
+np.save('data_reverse_10000_20_newlimits_highertol.npy', np.asarray(X_save))
+np.save('data_reverse_10000_20_newlimits_solvedstat_highertol.npy', np.asarray(X_solved))
+np.save('data_reverse_10000_20_newlimits_failedstat_highertol.npy', np.asarray(X_failed))
 
-# print("Execution time: %s seconds" % (time.time() - start_time))
+# X_save = np.load('data_reverse_10000_20_newlimits_highertol.npy')
+# X_solved = np.load('data_reverse_10000_20_newlimits_solvedstat_highertol.npy')
+# X_failed = np.load('data_reverse_10000_20_newlimits_failedstat_highertol.npy')
 
-# model_dir = NeuralNetRegression(4, 512, 1).to(device)
-# criterion_dir = nn.MSELoss()
-# optimizer_dir = torch.optim.Adam(model_dir.parameters(), lr=1e-3)
-# scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer_dir, gamma=0.98)
+solved_firstmax = [i[1:] for i in X_solved if round(i[0]) == 0]
+solved_firstmin = [i[1:] for i in X_solved if round(i[0]) == 2]
+solved_secondmax = [i[1:] for i in X_solved if round(i[0]) == 1]
+solved_secondmin = [i[1:] for i in X_solved if round(i[0]) == 3]
+failed_firstmax = [i[1:] for i in X_failed if round(i[0]) == 0]
+failed_firstmin = [i[1:] for i in X_failed if round(i[0]) == 2]
+failed_secondmax = [i[1:] for i in X_failed if round(i[0]) == 1]
+failed_secondmin = [i[1:] for i in X_failed if round(i[0]) == 3]
 
-# X_save = X_save[1:]
+for k in range(4):
+    solved_tot = [i[1:] for i in X_solved if round(i[0]) == k]
+    failed_tot  = [i[1:] for i in X_failed if round(i[0]) == k]
+    if len(solved_tot )+len(failed_tot ) != 0:
+        ratio = round(len(solved_tot )/(len(solved_tot )+len(failed_tot )),3)
+    else:
+        ratio = None
+    if k == 0:
+        print('first joint max velocity')
+    if k == 1:
+        print('second joint max velocity')
+    if k == 2:
+        print('first joint min velocity')
+    if k == 3:
+        print('second joint min velocity')
+    print('solved/total:', ratio)
 
-# X_pos = np.array([X_save[i] for i in range(len(X_save)) if X_save[i][5] > 0.5])
-# X_train_dir = np.empty((X_pos.shape[0],5))
+    num_setpoints = 5
 
-# for i in range(X_pos.shape[0]):
-#     X_train_dir[i][0] = X_pos[i][0]
-#     X_train_dir[i][1] = X_pos[i][1]
-#     vel_norm = norm([X_pos[i][2],X_pos[i][3]])
-#     if vel_norm == 0:
-#         X_train_dir[i][2] = 0.
-#         X_train_dir[i][3] = 0.
-#     else:
-#         X_train_dir[i][2] = X_pos[i][2]/vel_norm
-#         X_train_dir[i][3] = X_pos[i][3]/vel_norm
-#     X_train_dir[i][4] = vel_norm
+    pos_setpoints = np.linspace(q_min,q_max,num=num_setpoints)
+    ang_setpoints = np.linspace(-np.pi/2,np.pi/2,num=num_setpoints)
+    ratios = np.empty((num_setpoints-1,num_setpoints-1))
+    for j in range(num_setpoints-1):
+        for l in range(num_setpoints-1):
+            solved = sum([1 for i in solved_tot if i[2] < pos_setpoints[j+1] and i[2] >= pos_setpoints[j] and math.atan(i[1]/i[0]) < ang_setpoints[l+1] and math.atan(i[1]/i[0]) > ang_setpoints[l]])
+            failed = sum([1 for i in failed_tot if i[2] < pos_setpoints[j+1] and i[2] >= pos_setpoints[j] and math.atan(i[1]/i[0]) < ang_setpoints[l+1] and math.atan(i[1]/i[0]) > ang_setpoints[l]])
+            if solved+failed != 0:
+                ratios[j,l] = round(solved/(solved+failed),3)
+            else:
+                ratios[j,l] = None
+        print(ratios[j])
 
-# X_test_dir = np.empty((X_save.shape[0],6))
+    print('')
 
-# for i in range(X_save.shape[0]):
-#     X_test_dir[i][0] = X_save[i][0]
-#     X_test_dir[i][1] = X_save[i][1]
-#     vel_norm = norm([X_save[i][2],X_save[i][3]])
-#     if vel_norm == 0:
-#         X_test_dir[i][2] = 0.
-#         X_test_dir[i][3] = 0.
-#     else:
-#         X_test_dir[i][2] = X_save[i][2]/vel_norm
-#         X_test_dir[i][3] = X_save[i][3]/vel_norm
-#     X_test_dir[i][4] = vel_norm
-#     X_test_dir[i][5] = X_save[i][5]
+plt.figure()
+plt.scatter(X_save[:,0],X_save[:,1],s=0.1)
+plt.legend(loc="best", shadow=False, scatterpoints=1)
+plt.title("OCP dataset positions")
 
-# mean_dir, std_dir = torch.mean(torch.tensor(X_train_dir[:,:4].tolist())).to(device), torch.std(torch.tensor(X_train_dir[:,:4].tolist())).to(device)
-# out_max = torch.tensor(X_train_dir[:,4].tolist()).max()
+plt.figure()
+plt.scatter(X_save[:,2],X_save[:,3],s=0.1)
+plt.legend(loc="best", shadow=False, scatterpoints=1)
+plt.title("OCP dataset velocities")
 
-# it = 1
-# val = out_max.item()
-# val_prev = out_max.item()
+plt.show()
 
-# beta = 0.95
-# n_minibatch = 512
-# B = int(X_pos.shape[0]*100/n_minibatch) # number of iterations for 100 epoch
-# it_max = B * 100
+model_dir = NeuralNetRegression(4, 512, 1).to(device)
+criterion_dir = nn.MSELoss()
+optimizer_dir = torch.optim.Adam(model_dir.parameters(), lr=1e-3)
+scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer_dir, gamma=0.98)
 
-# # model_dir.load_state_dict(torch.load('model_2pendulum_dir_20'))
+# X_save = np.array([X_save[i] for i in range(len(X_save)) if abs(X_save[i][2]) > 1e-3 and abs(X_save[i][3]) > 1e-3])
 
-# training_evol = []
+mean_dir, std_dir = torch.mean(torch.tensor(X_save[:,:2].tolist())).to(device).item(), torch.std(torch.tensor(X_save[:,:2].tolist())).to(device).item()
+std_out_dir = torch.std(torch.tensor(X_save[:,2:].tolist())).to(device).item()
 
-# # Train the model
-# while val > 1e-2:
-#     ind = random.sample(range(len(X_train_dir)), n_minibatch)
+X_save_dir = np.empty((X_save.shape[0],5))
 
-#     X_iter_tensor = torch.Tensor([X_train_dir[i][:4] for i in ind]).to(device)
-#     y_iter_tensor = torch.Tensor([[X_train_dir[i][4]] for i in ind]).to(device)
-#     X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
-#     y_iter_tensor = y_iter_tensor / out_max
+for i in range(X_save_dir.shape[0]):
+    X_save_dir[i][0] = (X_save[i][0] - mean_dir) / std_dir
+    X_save_dir[i][1] = (X_save[i][1] - mean_dir) / std_dir
+    vel_norm = norm([X_save[i][2],X_save[i][3]])
+    if vel_norm != 0:
+        X_save_dir[i][2] = X_save[i][2] / vel_norm
+        X_save_dir[i][3] = X_save[i][3] / vel_norm
+    X_save_dir[i][4] = vel_norm / std_out_dir
 
-#     # Zero the gradients
-#     for param in model_dir.parameters():
-#         param.grad = None
+ind = random.sample(range(len(X_save_dir)), int(len(X_save_dir)*0.7))
+X_train_dir = np.array([X_save_dir[i] for i in ind])
+X_test_dir = np.array([X_save_dir[i] for i in range(len(X_save_dir)) if i not in ind])
 
-#     # Forward pass
-#     outputs = model_dir(X_iter_tensor)
-#     loss = criterion_dir(outputs, y_iter_tensor)
+# model_dir.load_state_dict(torch.load('model_2pendulum_dir_20'))
 
-#     # Backward and optimize
-#     loss.backward()
-#     optimizer_dir.step()
+it = 1
+val = 1.
 
-#     val = beta * val + (1 - beta) * (torch.sqrt(loss) * out_max).item()
+beta = 0.95
+n_minibatch = 512
+B = int(X_save.shape[0]*100/n_minibatch) # number of iterations for 100 epoch
+it_max = B * 100
 
-#     it += 1
+training_evol = []
 
-#     if it % B == 0: 
-#         training_evol.append(val)
-#         print(val)
+# Train the model
+while val > 1e-6 and it < it_max:
+    ind = random.sample(range(len(X_train_dir)), n_minibatch)
 
-#         scheduler.step()
+    X_iter_tensor = torch.Tensor([X_train_dir[i][:4] for i in ind]).to(device)
+    y_iter_tensor = torch.Tensor([[X_train_dir[i][4]] for i in ind]).to(device)
 
-#         if it > it_max:
-#             current_mean = sum(training_evol[-20:]) / 10
-#             previous_mean = sum(training_evol[-40:-20]) / 10
-#             if current_mean > previous_mean - 1e-4:
-#                 break
+    # Forward pass
+    outputs = model_dir(X_iter_tensor)
+    loss = criterion_dir(outputs, y_iter_tensor)
 
-# plt.figure()
-# plt.plot(training_evol)
-# plt.show()
+    # Backward and optimize
+    loss.backward()
+    optimizer_dir.step()
+    optimizer_dir.zero_grad()
 
-# torch.save(model_dir.state_dict(), 'model_2pendulum_dir_20')
-# # model_dir.load_state_dict(torch.load('model_2pendulum_dir_20'))
+    val = beta * val + (1 - beta) * loss.item()
+    it += 1
 
-# with torch.no_grad():
-#     X_iter_tensor = torch.Tensor(X_train_dir[:,:4]).to(device)
-#     y_iter_tensor = torch.Tensor([[X_train_dir[i][4]] for i in range(len(X_train_dir))]).to(device)
-#     X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
-#     outputs = model_dir(X_iter_tensor) * out_max
-#     print('RMSE train data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor)))
+    if it % B == 0: 
+        print(val)
+        training_evol.append(val)
 
-# data_al = np.load('data_vel_20/data_al_20.npy')
-# X_dir_al = np.empty((data_al.shape[0],6))
+        # if it > it_max:
+        #     current_mean = sum(training_evol[-50:]) / 50
+        #     previous_mean = sum(training_evol[-100:-50]) / 50
+        #     if current_mean > previous_mean - 1e-6:
 
-# model_al = NeuralNet(4, 400, 2).to(device)
-# model_al.load_state_dict(torch.load('data_vel_20/model_2pendulum_20'))
+        current_mean = sum(training_evol[-10:]) / 10
+        previous_mean = sum(training_evol[-20:-10]) / 10
+        if current_mean > previous_mean - 1e-6:
+            scheduler.step()
 
-# # mean, std = torch.tensor(1.9635), torch.tensor(3.0036) # max vel = 5
-# #mean_al, std_al = torch.tensor(1.9635), torch.tensor(7.0253) # max vel = 15
-# # mean_al, std_al = torch.tensor(1.9635), torch.tensor(13.6191) # max vel = 30
-# mean_al, std_al = torch.tensor(1.9635).to(device), torch.tensor(9.2003).to(device) # max vel = 20
+plt.figure()
+plt.plot(training_evol)
+plt.show()
 
-# for i in range(data_al.shape[0]):
-#     X_dir_al[i][0] = data_al[i][0]
-#     X_dir_al[i][1] = data_al[i][1]
-#     vel_norm = norm([data_al[i][2],data_al[i][3]])
-#     if vel_norm == 0:
-#         X_dir_al[i][2] = 0.
-#         X_dir_al[i][3] = 0.
-#     else:
-#         X_dir_al[i][2] = data_al[i][2]/vel_norm
-#         X_dir_al[i][3] = data_al[i][3]/vel_norm
-#     X_dir_al[i][4] = vel_norm
-#     X_dir_al[i][5] = data_al[i][5]
+torch.save(model_dir.state_dict(), 'model_2pendulum_dir_20_newlimits')
 
-# correct = 0
+with torch.no_grad():
+    X_iter_tensor = torch.Tensor(X_train_dir[:,:4]).to(device)
+    y_iter_tensor = torch.Tensor(X_train_dir[:,4:]).to(device)
+    outputs = model_dir(X_iter_tensor)
+    print('RMSE train data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor))*std_out_dir)
 
-# with torch.no_grad():
-#     X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
-#     X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
-#     outputs = model_dir(X_iter_tensor) * out_max
-#     for i in range(X_dir_al.shape[0]):
-#         if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
-#             correct += 1
-#         if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
-#             correct += 1
+with torch.no_grad():
+    X_iter_tensor = torch.Tensor(X_test_dir[:,:4]).to(device)
+    y_iter_tensor = torch.Tensor(X_test_dir[:,4:]).to(device)
+    outputs = model_dir(X_iter_tensor)
+    print('RMSE test data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor))*std_out_dir)
 
-#     print('Accuracy AL data: ', correct/X_dir_al.shape[0])
+# Active Learning model and data (used as the "ground truth" to check correctness of the approach):
+model_al = NeuralNet(4, 400, 2).to(device)
+model_al.load_state_dict(torch.load('data_vel_20/model_2pendulum_20_newlimits'))
+mean_al, std_al = torch.tensor(1.5708), torch.tensor(9.1246) # max vel = 20 e different pos limits
 
-# data_boundary = np.array([data_al[i] for i in range(len(data_al)) if abs(model_al((torch.Tensor(data_al[i,:4]).to(device) - mean_al) / std_al)[0]) < 5])
+data_al = np.load('data_vel_20/data_al_20_newlimits.npy')
+
+X_dir_al = np.empty((data_al.shape[0],6))
+
+for i in range(X_dir_al.shape[0]):
+    X_dir_al[i][0] = (data_al[i][0] - mean_dir) / std_dir
+    X_dir_al[i][1] = (data_al[i][1] - mean_dir) / std_dir
+    vel_norm = norm([data_al[i][2],data_al[i][3]])
+    if vel_norm != 0:
+        X_dir_al[i][2] = data_al[i][2] / vel_norm
+        X_dir_al[i][3] = data_al[i][3] / vel_norm
+    X_dir_al[i][4] = vel_norm / std_out_dir
+    X_dir_al[i][5] = data_al[i][5]
+
+correct = 0
+
+with torch.no_grad():
+    X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
+    outputs = model_dir(X_iter_tensor).cpu().numpy()
+    for i in range(X_dir_al.shape[0]):
+        if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
+            correct += 1
+        if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
+            correct += 1
+
+    print('Accuracy AL data: ', correct/X_dir_al.shape[0])
+
+# data_boundary = np.array([data_al[i] for i in range(data_al.shape[0]) if abs(model_al((torch.Tensor(data_al[i,:4]).to(device) - mean_al) / std_al)[0]) < 5])
+
 # X_dir_al = np.empty((data_boundary.shape[0],6))
 
-# for i in range(data_boundary.shape[0]):
-#     X_dir_al[i][0] = data_boundary[i][0]
-#     X_dir_al[i][1] = data_boundary[i][1]
+# for i in range(X_dir_al.shape[0]):
+#     X_dir_al[i][0] = (data_boundary[i][0] - mean_dir) / std_dir
+#     X_dir_al[i][1] = (data_boundary[i][1] - mean_dir) / std_dir
 #     vel_norm = norm([data_boundary[i][2],data_boundary[i][3]])
-#     if vel_norm == 0:
-#         X_dir_al[i][2] = 0.
-#         X_dir_al[i][3] = 0.
-#     else:
-#         X_dir_al[i][2] = data_boundary[i][2]/vel_norm
-#         X_dir_al[i][3] = data_boundary[i][3]/vel_norm
-#     X_dir_al[i][4] = vel_norm
+#     if vel_norm != 0:
+#         X_dir_al[i][2] = data_boundary[i][2] / vel_norm
+#         X_dir_al[i][3] = data_boundary[i][3] / vel_norm
+#     X_dir_al[i][4] = vel_norm / std_out_dir
 #     X_dir_al[i][5] = data_boundary[i][5]
 
 # correct = 0
 
 # with torch.no_grad():
 #     X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
-#     X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
-#     outputs = model_dir(X_iter_tensor) * out_max
+#     outputs = model_dir(X_iter_tensor).cpu().numpy()
 #     for i in range(X_dir_al.shape[0]):
 #         if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
 #             correct += 1
 #         if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
 #             correct += 1
 
-#     print('Accuracy AL boundary: ', correct/X_dir_al.shape[0])
+#     print('Accuracy AL data on boundary: ', correct/X_dir_al.shape[0])
 
-# data_boundary = np.array([data_al[i] for i in range(len(data_al)) if abs(model_al((torch.Tensor(data_al[i,:4]).to(device) - mean_al) / std_al)[0]) > 5])
+# data_boundary = np.array([data_al[i] for i in range(data_al.shape[0]) if abs(model_al((torch.Tensor(data_al[i,:4]).to(device) - mean_al) / std_al)[0]) > 5])
+
 # X_dir_al = np.empty((data_boundary.shape[0],6))
 
-# for i in range(data_boundary.shape[0]):
-#     X_dir_al[i][0] = data_boundary[i][0]
-#     X_dir_al[i][1] = data_boundary[i][1]
+# for i in range(X_dir_al.shape[0]):
+#     X_dir_al[i][0] = (data_boundary[i][0] - mean_dir) / std_dir
+#     X_dir_al[i][1] = (data_boundary[i][1] - mean_dir) / std_dir
 #     vel_norm = norm([data_boundary[i][2],data_boundary[i][3]])
-#     if vel_norm == 0:
-#         X_dir_al[i][2] = 0.
-#         X_dir_al[i][3] = 0.
-#     else:
-#         X_dir_al[i][2] = data_boundary[i][2]/vel_norm
-#         X_dir_al[i][3] = data_boundary[i][3]/vel_norm
-#     X_dir_al[i][4] = vel_norm
+#     if vel_norm != 0:
+#         X_dir_al[i][2] = data_boundary[i][2] / vel_norm
+#         X_dir_al[i][3] = data_boundary[i][3] / vel_norm
+#     X_dir_al[i][4] = vel_norm / std_out_dir
 #     X_dir_al[i][5] = data_boundary[i][5]
 
 # correct = 0
 
 # with torch.no_grad():
 #     X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
-#     X_iter_tensor = (X_iter_tensor - mean_dir) / std_dir
-#     outputs = model_dir(X_iter_tensor) * out_max
+#     outputs = model_dir(X_iter_tensor).cpu().numpy()
 #     for i in range(X_dir_al.shape[0]):
 #         if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
 #             correct += 1
 #         if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
 #             correct += 1
 
-#     print('Accuracy AL not boundary: ', correct/X_dir_al.shape[0])
+#     print('Accuracy AL data not on boundary: ', correct/X_dir_al.shape[0])
 
-# with torch.no_grad():
-#     # Plots:
-#     h = 0.02
-#     x_min, x_max = q_min-(q_max-q_min)/100, q_max+(q_max-q_min)/100
-#     y_min, y_max = v_min-(v_max-v_min)/100, v_max+(v_max-v_min)/100
-#     xx, yy = np.meshgrid(np.arange(x_min, x_max+h, h), np.arange(y_min, y_max, h))
-#     xrav = xx.ravel()
-#     yrav = yy.ravel()
+with torch.no_grad():
+    # Plots:
+    h = 0.02
+    xx, yy = np.meshgrid(np.arange(q_min, q_max+h, h), np.arange(v_min, v_max+h, h))
+    xrav = xx.ravel()
+    yrav = yy.ravel()
 
-#     # Plot the results:
-#     plt.figure()
-#     inp = torch.from_numpy(
-#         np.float32(
-#             np.c_[
-#                 (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-#                 xrav,
-#                 np.zeros(yrav.shape[0]),
-#                 np.sign(yrav),
-#             ]
-#         )
-#     ).to(device)
-#     inp = (inp - mean_dir) / std_dir
-#     out = (model_dir(inp) * out_max).cpu().numpy()
-#     y_pred = np.empty(out.shape)
-#     for i in range(len(out)):
-#         if out[i] > abs(yrav[i]):
-#             y_pred[i] = 1
-#         else:
-#             y_pred[i] = 0
-#     Z = y_pred.reshape(xx.shape)
-#     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-#     xit = []
-#     yit = []
-#     cit = []
-#     for i in range(len(X_save)):
-#         if (
-#             norm(X_save[i][0] - (q_min + q_max) / 2) < 0.1
-#             and norm(X_save[i][2]) < 1.
-#         ):
-#             xit.append(X_save[i][1])
-#             yit.append(X_save[i][3])
-#             if X_save[i][5] < 0.5:
-#                 cit.append(0)
-#             else:
-#                 cit.append(1)
-#     plt.scatter(
-#         xit,
-#         yit,
-#         c=cit,
-#         marker=".",
-#         alpha=0.5,
-#         cmap=plt.cm.Paired,
-#     )
-#     plt.xlim([q_min, q_max])
-#     plt.ylim([v_min, v_max])
-#     plt.grid()
-#     plt.title("Second actuator")
+    # Plot the results:
+    plt.figure()
+    inp = np.c_[
+                (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+                xrav,
+                np.zeros(yrav.shape[0]),
+                yrav,
+                np.empty(yrav.shape[0]),
+            ]
+    for i in range(inp.shape[0]):
+        vel_norm = norm([inp[i][2],inp[i][3]])
+        inp[i][0] = (inp[i][0] - mean_dir) / std_dir
+        inp[i][1] = (inp[i][1] - mean_dir) / std_dir
+        if vel_norm != 0:
+            inp[i][2] = inp[i][2] / vel_norm
+            inp[i][3] = inp[i][3] / vel_norm
+        inp[i][4] = vel_norm / std_out_dir
+    out = (model_dir(torch.from_numpy(inp[:,:4].astype(np.float32)).to(device))).cpu().numpy() 
+    y_pred = np.empty(out.shape)
+    for i in range(len(out)):
+        if inp[i][4] > out[i]:
+            y_pred[i] = 0
+        else:
+            y_pred[i] = 1
+    Z = y_pred.reshape(xx.shape)
+    plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+    xit = []
+    yit = []
+    for i in range(X_save.shape[0]):
+        if (
+            norm(X_save[i][0] - (q_min + q_max) / 2) < 0.01
+            and norm(X_save[i][2]) < 0.1
+        ):
+            xit.append(X_save[i][1])
+            yit.append(X_save[i][3])
+    plt.plot(
+        xit,
+        yit,
+        "ko",
+        markersize=2
+    )
+    plt.xlim([q_min, q_max])
+    plt.ylim([v_min, v_max])
+    plt.grid()
+    plt.title("Second actuator")
 
-#     plt.figure()
-#     inp = torch.from_numpy(
-#         np.float32(
-#             np.c_[
-#                 xrav,
-#                 (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-#                 np.sign(yrav),
-#                 np.zeros(yrav.shape[0]),
-#             ]
-#         )
-#     ).to(device)
-#     inp = (inp - mean_dir) / std_dir
-#     out = (model_dir(inp) * out_max).cpu().numpy() 
-#     y_pred = np.empty(out.shape)
-#     for i in range(len(out)):
-#         if out[i] > abs(yrav[i]):
-#             y_pred[i] = 1
-#         else:
-#             y_pred[i] = 0
-#     Z = y_pred.reshape(xx.shape)
-#     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-#     xit = []
-#     yit = []
-#     cit = []
-#     for i in range(len(X_save)):
-#         if (
-#             norm(X_save[i][1] - (q_min + q_max) / 2) < 0.1
-#             and norm(X_save[i][3]) < 1.
-#         ):
-#             xit.append(X_save[i][0])
-#             yit.append(X_save[i][2])
-#             if X_save[i][5] < 0.5:
-#                 cit.append(0)
-#             else:
-#                 cit.append(1)
-#     plt.scatter(
-#         xit,
-#         yit,
-#         c=cit,
-#         marker=".",
-#         alpha=0.5,
-#         cmap=plt.cm.Paired,
-#     )
-#     plt.xlim([q_min, q_max])
-#     plt.ylim([v_min, v_max])
-#     plt.grid()
-#     plt.title("First actuator")
+    plt.figure()
+    inp = np.c_[
+                xrav,
+                (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+                yrav,
+                np.zeros(yrav.shape[0]),
+                np.empty(yrav.shape[0]),
+            ]
+    for i in range(inp.shape[0]):
+        vel_norm = norm([inp[i][2],inp[i][3]])
+        inp[i][0] = (inp[i][0] - mean_dir) / std_dir
+        inp[i][1] = (inp[i][1] - mean_dir) / std_dir
+        if vel_norm != 0:
+            inp[i][2] = inp[i][2] / vel_norm
+            inp[i][3] = inp[i][3] / vel_norm
+        inp[i][4] = vel_norm / std_out_dir
+    out = (model_dir(torch.from_numpy(inp[:,:4].astype(np.float32)).to(device))).cpu().numpy() 
+    y_pred = np.empty(out.shape)
+    for i in range(len(out)):
+        if inp[i][4] > out[i]:
+            y_pred[i] = 0
+        else:
+            y_pred[i] = 1
+    Z = y_pred.reshape(xx.shape)
+    plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+    xit = []
+    yit = []
+    for i in range(X_save.shape[0]):
+        if (
+            norm(X_save[i][1] - (q_min + q_max) / 2) < 0.01
+            and norm(X_save[i][3]) < 0.1
+        ):
+            xit.append(X_save[i][0])
+            yit.append(X_save[i][2])
+    plt.plot(
+        xit,
+        yit,
+        "ko",
+        markersize=2
+    )
+    plt.xlim([q_min, q_max])
+    plt.ylim([v_min, v_max])
+    plt.grid()
+    plt.title("First actuator")
 
-#     h = 0.02
-#     xx, yy = np.meshgrid(np.arange(v_min, v_max, h), np.arange(v_min, v_max, h))
-#     xrav = xx.ravel()
-#     yrav = yy.ravel()
+    # Plots:
+    h = 0.05
+    xx, yy = np.meshgrid(np.arange(v_min, v_max+h, h), np.arange(v_min, v_max+h, h))
+    xrav = xx.ravel()
+    yrav = yy.ravel()
 
-#     for l in range(10):
-#         q1ran = q_min + random.random() * (q_max-q_min)
-#         q2ran = q_min + random.random() * (q_max-q_min)
+    for l in range(10):
+        q1ran = q_min + random.random() * (q_max-q_min)
+        q2ran = q_min + random.random() * (q_max-q_min)
 
-#         plt.figure()
-#         inp = torch.from_numpy(
-#             np.float32(
-#                 np.c_[
-#                     q1ran * np.ones(xrav.shape[0]),
-#                     q2ran * np.ones(xrav.shape[0]),
-#                     xrav,
-#                     yrav,
-#                 ]
-#             )
-#         ).to(device)
-#         inp = (inp - mean_dir) / std_dir
-#         out = (model_dir(inp) * out_max).cpu().numpy() 
-#         y_pred = np.empty(out.shape)
-#         for i in range(len(out)):
-#             if out[i] > abs(yrav[i]):
-#                 y_pred[i] = 1
-#             else:
-#                 y_pred[i] = 0
-#         Z = y_pred.reshape(xx.shape)
-#         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-#         xit = []
-#         yit = []
-#         cit = []
-#         for i in range(len(X_save)):
-#             if (
-#                 norm(X_save[i][0] - q1ran) < 0.01
-#                 and norm(X_save[i][1] - q2ran) < 0.01
-#             ):
-#                 xit.append(X_save[i][2])
-#                 yit.append(X_save[i][3])
-#                 if X_save[i][5] < 0.5:
-#                     cit.append(0)
-#                 else:
-#                     cit.append(1)
-#         plt.scatter(
-#             xit,
-#             yit,
-#             c=cit,
-#             marker=".",
-#             alpha=0.5,
-#             cmap=plt.cm.Paired,
-#         )
-#         plt.xlim([v_min, v_max])
-#         plt.ylim([v_min, v_max])
-#         plt.grid()
-#         plt.title(str(l)+"q1="+str(q1ran)+"q2="+str(q2ran))
+        # Plot the results:
+        plt.figure()
+        inp = np.float32(
+                np.c_[
+                    q1ran * np.ones(xrav.shape[0]),
+                    q2ran * np.ones(xrav.shape[0]),
+                    xrav,
+                    yrav,
+                    np.empty(yrav.shape[0]),
+                ]
+            )
+        for i in range(inp.shape[0]):
+            vel_norm = norm([inp[i][2],inp[i][3]])
+            inp[i][0] = (inp[i][0] - mean_dir) / std_dir
+            inp[i][1] = (inp[i][1] - mean_dir) / std_dir
+            if vel_norm != 0:
+                inp[i][2] = inp[i][2] / vel_norm
+                inp[i][3] = inp[i][3] / vel_norm
+            inp[i][4] = vel_norm / std_out_dir
+        out = (model_dir(torch.Tensor(inp[:,:4]).to(device))).cpu().numpy() 
+        y_pred = np.empty(out.shape)
+        for i in range(len(out)):
+            if inp[i][4] > out[i]:
+                y_pred[i] = 0
+            else:
+                y_pred[i] = 1
+        Z = y_pred.reshape(yy.shape)
+        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        xit = []
+        yit = []
+        for i in range(X_save.shape[0]):
+            if (
+                norm(X_save[i][0] - q1ran) < 0.01
+                and norm(X_save[i][1] - q2ran) < 0.01
+            ):
+                xit.append(X_save[i][2])
+                yit.append(X_save[i][3])
+        plt.plot(
+            xit,
+            yit,
+            "ko",
+            markersize=2
+        )
+        plt.xlim([v_min, v_max])
+        plt.ylim([v_min, v_max])
+        plt.grid()
+        plt.title("q1="+str(q1ran)+" q2="+str(q2ran))
 
 print("Execution time: %s seconds" % (time.time() - start_time))
 

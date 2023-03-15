@@ -820,10 +820,10 @@ if __name__ == "__main__":
         xrav = xx.ravel()
         yrav = yy.ravel()
 
-        for _ in range(10):
+        for _ in range(1):
             # q1ran = q_min + random.random() * (q_max-q_min)
-            q1ran = q_min
-            q2ran = q_min + random.random() * (q_max-q_min)
+            q1ran = q_min + 0.01
+            q2ran = q_min + 0.5 * (q_max-q_min)
 
             plt.figure()
             inp = torch.from_numpy(

@@ -129,7 +129,6 @@ class OCPdoublependulum:
         ny_e = self.nx
 
         # cost
-        # Q = 2 * np.diag([0.0, 0.0, 0.0, 0.0])
         Q = 2 * np.diag([0., 0., 1., 1.])
         R = 2 * np.diag([0.0, 0.0])
 
@@ -151,8 +150,8 @@ class OCPdoublependulum:
 
         # set constraints
         self.Cmax = 10
-        self.thetamax = np.pi / 2 + np.pi
-        self.thetamin = np.pi
+        self.thetamax = np.pi / 4 + np.pi
+        self.thetamin = - np.pi / 4 + np.pi
         self.dthetamax = 20.
 
         self.normal = np.array(

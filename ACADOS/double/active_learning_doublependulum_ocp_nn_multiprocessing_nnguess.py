@@ -340,9 +340,9 @@ with cProfile.Profile() as pr:
 
         print("etpmax:", etpmax)
         
-    torch.save(model.state_dict(), 'model_2pendulum_20')
+    torch.save(model.state_dict(), 'model_2pendulum_20_newlimits')
 
-    np.save('data_al_20.npy', np.asarray(X_iter))
+    np.save('data_al_20_newlimits.npy', np.asarray(X_iter))
 
     # model = NeuralNet(input_size, hidden_size, output_size).to(device)
     # model.load_state_dict(torch.load('model_2pendulum'))

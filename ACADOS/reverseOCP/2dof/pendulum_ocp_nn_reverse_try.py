@@ -8,9 +8,10 @@ import warnings
 import random
 import torch
 import torch.nn as nn
-from my_nn import NeuralNet
+from my_nn_try import NeuralNet
 import math
 from sklearn import svm
+from numpy.linalg import norm as norm
 
 warnings.filterwarnings("ignore")
 
@@ -28,30 +29,13 @@ with cProfile.Profile() as pr:
     q_min = ocpr.thetamin
     
     ocp_dim = ocpr.nx  # state space dimension
-    
-    # Initialization of the SVM classifier:
-    clf = svm.SVC(C=1e6, kernel='rbf')
-    
-    # Hyper-parameters for nn:
-    input_size = 2
-    hidden_size = 100
-    output_size = 2
-    learning_rate = 0.001
-    loss_stop = 0.001  # nn training stopping condition
-    it_max = 1e2
 
-    # Device configuration
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    model = NeuralNet(input_size, hidden_size, output_size).to(device)
-
-    # Loss and optimizer
-    criterion = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    device = torch.device("cpu") 
     
-    eps = 1e-1
-    
-    X_save = np.empty((4*(ocpr.N+1),3))
+    model_dir = NeuralNet(2, 16, 1).to(device)
+    criterion_dir = nn.MSELoss()
+    optimizer_dir = torch.optim.Adam(model_dir.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer_dir, gamma=0.98)
 
     ls = np.linspace(q_max, q_min, ocpr.N, endpoint=False)
     vel = np.full(ocpr.N, v_min)
@@ -59,16 +43,16 @@ with cProfile.Profile() as pr:
     
     res = ocpr.compute_problem(np.array([q_min, 0.]), x_guess)
 
+    X_save = np.empty((0,2))
+
     if res == 1:
         for f in range(0, ocpr.N+1):
             current_val = ocpr.ocp_solver.get(f, "x")
-            print(current_val)
 
-            # if abs(current_val[0] - q_min) <= 1e-3:
-            #     break
+            if abs(current_val[0] - q_min) <= 1e-3:
+                break
 
-            X_save[f] = np.append(current_val, [1])
-            X_save[2*(ocpr.N+1) + f] = [X_save[f][0], X_save[f][1] - eps, 0]
+            X_save = np.append(X_save,[current_val], axis = 0)
 
     ls = np.linspace(q_min, q_max, ocpr.N, endpoint=False)
     vel = np.full(ocpr.N, v_max)
@@ -79,56 +63,95 @@ with cProfile.Profile() as pr:
     if res == 1:
         for f in range(0, ocpr.N+1):
             current_val = ocpr.ocp_solver.get(f, "x")
-            print(current_val)
 
-            # if abs(current_val[0] - q_max) <= 1e-3:
-            #     break
+            if abs(current_val[0] - q_max) <= 1e-3:
+                break
 
-            X_save[ocpr.N+1 + f] = np.append(current_val, [1])
-            X_save[3*(ocpr.N+1) + f] = [X_save[ocpr.N+1 + f][0], X_save[ocpr.N+1 + f][1] + eps, 0]
+            X_save = np.append(X_save, [current_val], axis = 0)
+    X_train_dir = np.empty((X_save.shape[0],3))
 
-    np.save("goodres", X_save[:2*(ocpr.N+1)])
+    mean_dir, std_dir = torch.mean(torch.tensor(X_save[:,:1].tolist())).to(device).item(), torch.std(torch.tensor(X_save[:,:1].tolist())).to(device).item()
+    std_out_dir = v_max
+
+    for i in range(X_train_dir.shape[0]):
+        X_train_dir[i][0] = (X_save[i][0] - mean_dir) / std_dir
+        vel_norm = abs(X_save[i][1])
+        if vel_norm != 0:
+            X_train_dir[i][1] = X_save[i][1] / vel_norm
+        X_train_dir[i][2] = vel_norm / std_out_dir
+
+        print(X_save[i], X_train_dir[i])
             
-    it = 0
-    val = 1
+    it = 1
+    val = 1.
 
-    # # Train the model
-    # while val > loss_stop and it <= it_max:
+    beta = 0.95
+    n_minibatch = 32
+    B = int(X_save.shape[0]*100/n_minibatch) # number of iterations for 100 epoch
+    it_max = B * 100
 
-    #     X_iter_tensor = torch.Tensor(X_save[:,:2])
-    #     y_iter_tensor = torch.Tensor(X_save[:,2:])
+    training_evol = []
 
-    #     # Forward pass
-    #     outputs = model(X_iter_tensor)
-    #     loss = criterion(outputs, y_iter_tensor)
+    # Train the model
+    while val > 1e-8:
+        ind = random.sample(range(len(X_train_dir)), n_minibatch)
 
-    #     # Backward and optimize
-    #     loss.backward()
-    #     optimizer.step()
-    #     optimizer.zero_grad()
+        X_iter_tensor = torch.Tensor([X_train_dir[i][:2] for i in ind]).to(device)
+        y_iter_tensor = torch.Tensor([[X_train_dir[i][2]] for i in ind]).to(device)
 
-    #     val = loss.item()
-    #     it += 1
-        
-    clf.fit(X_save[:,:2], X_save[:,2])
+        # Forward pass
+        outputs = model_dir(X_iter_tensor)
+        loss = criterion_dir(outputs, y_iter_tensor)
+
+        # Backward and optimize
+        loss.backward()
+        optimizer_dir.step()
+        optimizer_dir.zero_grad()
+
+        val = beta * val + (1 - beta) * loss.item()
+        it += 1
+
+        if it % B == 0: 
+            print(val)
+            training_evol.append(val)
+
+            scheduler.step()
+
+            if it > it_max:
+                current_mean = sum(training_evol[-20:]) / 20
+                previous_mean = sum(training_evol[-40:-20]) / 20
+                if current_mean > previous_mean - 1e-6:
+                    break
+
+    with torch.no_grad():
+        X_iter_tensor = torch.Tensor(X_train_dir[:,:2])
+        y_iter_tensor = torch.Tensor(X_train_dir[:,2:])
+        outputs = model_dir(X_iter_tensor)
+        print('RMSE train data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor))*std_out_dir)
             
     plt.figure()
-    plt.scatter(
-        X_save[:,0], X_save[:,1], c =X_save[:,2], marker=".", cmap=plt.cm.Paired
+    plt.plot(
+        X_save[:,0], X_save[:,1], "ko", markersize=2
     )
     h = 0.01
-    x_min, x_max = q_min-(q_max-q_min)/100, q_max+(q_max-q_min)/100
-    y_min, y_max = v_min-(v_max-v_min)/100, v_max+(v_max-v_min)/100
+    x_min, x_max = q_min-(q_max-q_min)/10, q_max+(q_max-q_min)/10
+    y_min, y_max = v_min-(v_max-v_min)/10, v_max+(v_max-v_min)/10
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
-    #inp = torch.from_numpy(np.c_[xx.ravel(), yy.ravel()].astype(np.float32))
-    #out = model(inp)
-    #y_pred = np.argmax(out.detach().numpy(), axis=1)
-    #Z = y_pred.reshape(xx.shape)
-    #plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    out = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
-    out = out.reshape(xx.shape)
-    Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
-    Z = Z.reshape(xx.shape)
+    inp = np.c_[xx.ravel(), yy.ravel(), yy.ravel()]
+    for i in range(inp.shape[0]):
+        inp[i][0] = (inp[i][0] - mean_dir) / std_dir
+        vel_norm = abs(inp[i][1])
+        if vel_norm != 0:
+            inp[i][1] = inp[i][1] / vel_norm
+        inp[i][2] = vel_norm / std_out_dir
+    out = model_dir(torch.from_numpy(inp[:,:2].astype(np.float32)))
+    y_pred = np.empty(out.shape)
+    for i in range(len(out)):
+        if inp[i][2] > out[i]:
+            y_pred[i] = 0
+        else:
+            y_pred[i] = 1
+    Z = y_pred.reshape(xx.shape)
     plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
     plt.xlim([q_min, q_max])
     plt.ylim([v_min, v_max])
