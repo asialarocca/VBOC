@@ -166,7 +166,7 @@ class OCPdoublependulumR:
         self.ocp.solver_options.nlp_solver_type = "SQP"
         self.ocp.solver_options.hessian_approx = 'EXACT'
         self.ocp.solver_options.exact_hess_constr = 0
-        self.ocp.solver_options.exact_hess_cost = 0
+        # self.ocp.solver_options.exact_hess_cost = 0
         self.ocp.solver_options.exact_hess_dyn = 0
         self.ocp.solver_options.nlp_solver_tol_stat = 1e-4
         # self.ocp.solver_options.qp_solver_iter_max = 100

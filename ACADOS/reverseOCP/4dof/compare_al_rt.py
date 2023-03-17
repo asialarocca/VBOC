@@ -437,330 +437,219 @@ min_time = 1 # set to 1 to also solve a minimum time problem to improve the solu
 
 cpu_num = 30
 
-num_prob = 10000
-
-start_time = time.time()
+num_prob = 1000
 
 # # Data generation:
 # with Pool(cpu_num) as p:
 #     temp = p.map(testing, range(num_prob))
 
-# print("Execution time: %s seconds" % (time.time() - start_time))
-
 # traj, statpos, statneg = zip(*temp)
 # X_save = [i for i in traj if i is not None]
-# X_solved = [i for i in statpos if i is not None]
-# X_failed = [i for i in statneg if i is not None]
 
 # print('Solved/tot', len(X_save)/num_prob)
 
 # X_save = np.array([i for f in X_save for i in f])
+# np.save('data_reverse_test.npy', np.asarray(X_save))
 
-# np.save('data_reverse_10000_20_newlimits_highertol_new.npy', np.asarray(X_save))
-# np.save('data_reverse_10000_20_newlimits_solvedstat_highertol_new.npy', np.asarray(X_solved))
-# np.save('data_reverse_10000_20_newlimits_failedstat_highertol_new.npy', np.asarray(X_failed))
+X_test = np.load('data_reverse_test.npy')
 
-X_save = np.load('data_reverse_10000_20_newlimits_highertol_new.npy')
-X_solved = np.load('data_reverse_10000_20_newlimits_solvedstat_highertol_new.npy')
-X_failed = np.load('data_reverse_10000_20_newlimits_failedstat_highertol_new.npy')
-
-for k in range(4):
-    solved_tot = [i[1:] for i in X_solved if round(i[0]) == k]
-    failed_tot  = [i[1:] for i in X_failed if round(i[0]) == k]
-    if len(solved_tot)+len(failed_tot) != 0:
-        ratio = round(len(solved_tot)/(len(solved_tot)+len(failed_tot)),3)
-    else:
-        ratio = None
-    if k == 0:
-        print('first joint max velocity')
-    if k == 1:
-        print('second joint max velocity')
-    if k == 2:
-        print('first joint min velocity')
-    if k == 3:
-        print('second joint min velocity')
-    print('solved/total:', ratio)
-
-    num_setpoints = 11
-
-    pos_setpoints = np.linspace(q_min,q_max,num=num_setpoints)
-    ang_setpoints = np.linspace(-np.pi/2,np.pi/2,num=num_setpoints)
-    solved = np.empty((num_setpoints-1,num_setpoints-1))
-    failed = np.empty((num_setpoints-1,num_setpoints-1))
-    ratios = np.empty((num_setpoints-1,num_setpoints-1))
-    for j in range(num_setpoints-1):
-        for l in range(num_setpoints-1):
-            solved[j,l] = sum([1 for i in solved_tot if i[2] < pos_setpoints[j+1] and i[2] >= pos_setpoints[j] and math.atan(i[1]/i[0]) < ang_setpoints[l+1] and math.atan(i[1]/i[0]) > ang_setpoints[l]])
-            failed[j,l] = sum([1 for i in failed_tot if i[2] < pos_setpoints[j+1] and i[2] >= pos_setpoints[j] and math.atan(i[1]/i[0]) < ang_setpoints[l+1] and math.atan(i[1]/i[0]) > ang_setpoints[l]])
-            if solved[j,l]+failed[j,l] != 0:
-                ratios[j,l] = round(solved[j,l]/(solved[j,l]+failed[j,l]),3)
-            else:
-                ratios[j,l] = None
-        print(solved[j], failed[j], ratios[j])
-
-    print('')
-
-plt.figure()
-plt.scatter(X_save[:,0],X_save[:,1],s=0.1)
-plt.legend(loc="best", shadow=False, scatterpoints=1)
-plt.title("OCP dataset positions")
-
-plt.figure()
-plt.scatter(X_save[:,2],X_save[:,3],s=0.1)
-plt.legend(loc="best", shadow=False, scatterpoints=1)
-plt.title("OCP dataset velocities")
-
+# Reverse OCP model and data:
 model_dir = NeuralNetRegression(4, 512, 1).to(device)
 criterion_dir = nn.MSELoss()
-optimizer_dir = torch.optim.Adam(model_dir.parameters(), lr=1e-3)
-scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer_dir, gamma=0.98)
+model_dir.load_state_dict(torch.load('model_2pendulum_dir_20_newlimits_new'))
+X_reverse = np.load('data_reverse_10000_20_newlimits_highertol_new.npy')
+mean_dir, std_dir = torch.mean(torch.tensor(X_reverse[:,:2].tolist())).to(device).item(), torch.std(torch.tensor(X_reverse[:,:2].tolist())).to(device).item()
+std_out_dir = torch.std(torch.tensor(X_reverse[:,2:].tolist())).to(device).item()
 
-# X_save = np.array([X_save[i] for i in range(len(X_save)) if abs(X_save[i][2]) > 1e-3 and abs(X_save[i][3]) > 1e-3])
+# Active Learning model and data:
+model_al = NeuralNet(4, 400, 2).to(device)
+model_al.load_state_dict(torch.load('data_vel_20/model_2pendulum_20_newlimits'))
+mean_al, std_al = torch.tensor(1.5708), torch.tensor(9.1246) # max vel = 20 e different pos limits
+data_al = np.load('data_vel_20/data_al_20_newlimits.npy')
 
-mean_dir, std_dir = torch.mean(torch.tensor(X_save[:,:2].tolist())).to(device).item(), torch.std(torch.tensor(X_save[:,:2].tolist())).to(device).item()
-std_out_dir = torch.std(torch.tensor(X_save[:,2:].tolist())).to(device).item()
-
-X_save_dir = np.empty((X_save.shape[0],5))
-
-for i in range(X_save_dir.shape[0]):
-    X_save_dir[i][0] = (X_save[i][0] - mean_dir) / std_dir
-    X_save_dir[i][1] = (X_save[i][1] - mean_dir) / std_dir
-    vel_norm = norm([X_save[i][2],X_save[i][3]])
+# Test data rewritten with velocity vector and norm:
+X_test_dir = np.empty((X_test.shape[0],5))
+for i in range(X_test_dir.shape[0]):
+    X_test_dir[i][0] = (X_test[i][0] - mean_dir) / std_dir
+    X_test_dir[i][1] = (X_test[i][1] - mean_dir) / std_dir
+    vel_norm = norm([X_test[i][2],X_test[i][3]])
     if vel_norm != 0:
-        X_save_dir[i][2] = X_save[i][2] / vel_norm
-        X_save_dir[i][3] = X_save[i][3] / vel_norm
-    X_save_dir[i][4] = vel_norm / std_out_dir
+        X_test_dir[i][2] = X_test[i][2] / vel_norm
+        X_test_dir[i][3] = X_test[i][3] / vel_norm
+    X_test_dir[i][4] = vel_norm 
 
-# summ = sum([X_save_dir[i][4] for i in range(len(X_save_dir))])
-# X_prob = [X_save_dir[i][4]/summ for i in range(len(X_save_dir))]
+with torch.no_grad():
+    outp = np.argmax(model_al((torch.Tensor(X_save).to(device) - mean_al) / std_al).cpu().numpy(), axis=1)
 
-# ind = np.random.choice(range(len(X_save_dir)), size=int(len(X_save_dir)*0.7), p=X_prob)
-# X_save_dir = np.array([X_save_dir[i] for i in ind])
+data_neg = np.array([X_save[i] for i in range(X_save.shape[0]) if outp[i] == 0])
+data_pos = np.array([X_save[i] for i in range(X_save.shape[0]) if outp[i] == 1])
 
-ind = random.sample(range(len(X_save_dir)), int(len(X_save_dir)*0.7))
-X_train_dir = np.array([X_save_dir[i] for i in ind])
-X_test_dir = np.array([X_save_dir[i] for i in range(len(X_save_dir)) if i not in ind])
+error_norm_neg = np.empty((len(data_neg),))
 
-X_train_dir = np.copy(X_save_dir)
+for i in range(len(data_neg)):
+    vel_norm = norm([data_neg[i][2],data_neg[i][3]])
 
-# model_dir.load_state_dict(torch.load('model_2pendulum_dir_20_newlimits_new'))
+    v0 = data_neg[i][2]
+    v1 = data_neg[i][3]
 
-it = 1
-val = 1.
+    out = 0
 
-beta = 0.95
-n_minibatch = 512
-B = int(X_save.shape[0]*100/n_minibatch) # number of iterations for 100 epoch
-it_max = B * 100
+    while out == 0 and norm([v0,v1]) > 1e-1:
+        v0 = v0 - 1e-1 * data_neg[i][2]/vel_norm
+        v1 = v1 - 1e-1 * data_neg[i][3]/vel_norm
+        out = np.argmax(model_al((torch.Tensor([[data_neg[i][0], data_neg[i][1], v0, v1]]).to(device) - mean_al) / std_al).cpu().detach().numpy(), axis=1)
 
-training_evol = []
+    error_norm_neg[i] = vel_norm - norm([v0,v1]) # 100*(vel_norm - norm([v0,v1]))/vel_norm
 
-# Train the model
-while val > 1e-6 and it < it_max:
-    ind = random.sample(range(len(X_train_dir)), n_minibatch)
+error_norm_pos = np.empty((len(data_pos),))
 
-    X_iter_tensor = torch.Tensor([X_train_dir[i][:4] for i in ind]).to(device)
-    y_iter_tensor = torch.Tensor([[X_train_dir[i][4]] for i in ind]).to(device)
+for i in range(len(data_pos)):
+    vel_norm = norm([data_pos[i][2],data_pos[i][3]])
 
-    # Forward pass
-    outputs = model_dir(X_iter_tensor)
-    loss = criterion_dir(outputs, y_iter_tensor)
+    v0 = data_pos[i][2]
+    v1 = data_pos[i][3]
 
-    # Backward and optimize
-    loss.backward()
-    optimizer_dir.step()
-    optimizer_dir.zero_grad()
+    out = 1
 
-    val = beta * val + (1 - beta) * loss.item()
-    it += 1
+    while out == 1 and norm([v0,v1]) > 1e-1:
+        v0 = v0 + 1e-1 * data_pos[i][2]/vel_norm
+        v1 = v1 + 1e-1 * data_pos[i][3]/vel_norm
+        out = np.argmax(model_al((torch.Tensor([[data_pos[i][0], data_pos[i][1], v0, v1]]).to(device) - mean_al) / std_al).cpu().detach().numpy(), axis=1)
 
-    if it % B == 0: 
-        print(val)
-        training_evol.append(val)
+    error_norm_pos[i] = vel_norm - norm([v0,v1]) # 100*(vel_norm - norm([v0,v1]))/vel_norm
 
-        # if it > it_max:
-        #     current_mean = sum(training_evol[-50:]) / 50
-        #     previous_mean = sum(training_evol[-100:-50]) / 50
-        #     if current_mean > previous_mean - 1e-6:
+error_norm = np.concatenate((error_norm_neg,error_norm_pos))
 
-        current_mean = sum(training_evol[-10:]) / 10
-        previous_mean = sum(training_evol[-20:-10]) / 10
-        if current_mean > previous_mean - 1e-6:
-            scheduler.step()
+with torch.no_grad():
+    X_iter_tensor = torch.Tensor(X_dir[:,:4]).to(device)
+    y_iter_tensor = torch.Tensor(X_dir[:,4:]).to(device)
+    outputs = model_dir(X_iter_tensor).cpu().numpy() * std_out_dir
+    relative_sq_errs = [((outputs[i] - X_save_dir[i,4])/X_save_dir[i,4])**2 for i in range(len(X_save_dir))]
+    rrmse = math.sqrt(np.sum(relative_sq_errs)/len(X_save_dir))
+    print('RMSE relative test data in %: ', rrmse*100)
+    print('RMSE test data: ', torch.sqrt(criterion_dir(model_dir(X_iter_tensor) * std_out_dir, y_iter_tensor)))
+
+with torch.no_grad():
+    X_iter_tensor = torch.Tensor(X_dir[:,:4]).to(device)
+    y_iter_tensor = torch.Tensor(X_dir[:,4:]).to(device)
+    outputs = model_dir(X_iter_tensor).cpu().numpy() * std_out_dir
+    relative_sq_errs = [(error_norm[i])**2 for i in range(len(X_save))]
+    rrmse = math.sqrt(np.sum(relative_sq_errs)/len(X_save))
+    print('RMSE relative AL data in %: ', rrmse)
+    # print('RMSE AL data: ', torch.sqrt(criterion_dir(model_dir(X_iter_tensor) * std_out_dir, y_iter_tensor)))
 
 plt.figure()
-plt.plot(training_evol)
-
-# torch.save(model_dir.state_dict(), 'model_2pendulum_dir_20_newlimits_new')
-
-with torch.no_grad():
-    X_iter_tensor = torch.Tensor(X_train_dir[:,:4]).to(device)
-    y_iter_tensor = torch.Tensor(X_train_dir[:,4:]).to(device)
-    outputs = model_dir(X_iter_tensor)
-    print('RMSE train data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor))*std_out_dir)
-
-with torch.no_grad():
-    X_iter_tensor = torch.Tensor(X_test_dir[:,:4]).to(device)
-    y_iter_tensor = torch.Tensor(X_test_dir[:,4:]).to(device)
-    outputs = model_dir(X_iter_tensor)
-    print('RMSE test data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor))*std_out_dir)
-
-with torch.no_grad():
-    # Plots:
-    h = 0.02
-    xx, yy = np.meshgrid(np.arange(q_min, q_max+h, h), np.arange(v_min, v_max+h, h))
-    xrav = xx.ravel()
-    yrav = yy.ravel()
-
-    # Plot the results:
-    plt.figure()
-    inp = np.c_[
-                (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                xrav,
-                np.zeros(yrav.shape[0]),
-                yrav,
-                np.empty(yrav.shape[0]),
-            ]
-    for i in range(inp.shape[0]):
-        vel_norm = norm([inp[i][2],inp[i][3]])
-        inp[i][0] = (inp[i][0] - mean_dir) / std_dir
-        inp[i][1] = (inp[i][1] - mean_dir) / std_dir
-        if vel_norm != 0:
-            inp[i][2] = inp[i][2] / vel_norm
-            inp[i][3] = inp[i][3] / vel_norm
-        inp[i][4] = vel_norm / std_out_dir
-    out = (model_dir(torch.from_numpy(inp[:,:4].astype(np.float32)).to(device))).cpu().numpy() 
-    y_pred = np.empty(out.shape)
-    for i in range(len(out)):
-        if inp[i][4] > out[i]:
-            y_pred[i] = 0
-        else:
-            y_pred[i] = 1
-    Z = y_pred.reshape(xx.shape)
-    plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    xit = []
-    yit = []
-    for i in range(X_save.shape[0]):
-        if (
-            norm(X_save[i][0] - (q_min + q_max) / 2) < 0.01
-            and norm(X_save[i][2]) < 0.1
-        ):
-            xit.append(X_save[i][1])
-            yit.append(X_save[i][3])
-    plt.plot(
-        xit,
-        yit,
-        "ko",
-        markersize=2
-    )
-    plt.xlim([q_min, q_max])
-    plt.ylim([v_min, v_max])
-    plt.grid()
-    plt.title("Second actuator")
-
-    plt.figure()
-    inp = np.c_[
-                xrav,
-                (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                yrav,
-                np.zeros(yrav.shape[0]),
-                np.empty(yrav.shape[0]),
-            ]
-    for i in range(inp.shape[0]):
-        vel_norm = norm([inp[i][2],inp[i][3]])
-        inp[i][0] = (inp[i][0] - mean_dir) / std_dir
-        inp[i][1] = (inp[i][1] - mean_dir) / std_dir
-        if vel_norm != 0:
-            inp[i][2] = inp[i][2] / vel_norm
-            inp[i][3] = inp[i][3] / vel_norm
-        inp[i][4] = vel_norm / std_out_dir
-    out = (model_dir(torch.from_numpy(inp[:,:4].astype(np.float32)).to(device))).cpu().numpy() 
-    y_pred = np.empty(out.shape)
-    for i in range(len(out)):
-        if inp[i][4] > out[i]:
-            y_pred[i] = 0
-        else:
-            y_pred[i] = 1
-    Z = y_pred.reshape(xx.shape)
-    plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-    xit = []
-    yit = []
-    for i in range(X_save.shape[0]):
-        if (
-            norm(X_save[i][1] - (q_min + q_max) / 2) < 0.01
-            and norm(X_save[i][3]) < 0.1
-        ):
-            xit.append(X_save[i][0])
-            yit.append(X_save[i][2])
-    plt.plot(
-        xit,
-        yit,
-        "ko",
-        markersize=2
-    )
-    plt.xlim([q_min, q_max])
-    plt.ylim([v_min, v_max])
-    plt.grid()
-    plt.title("First actuator")
-
-    # Plots:
-    h = 0.05
-    xx, yy = np.meshgrid(np.arange(v_min, v_max+h, h), np.arange(v_min, v_max+h, h))
-    xrav = xx.ravel()
-    yrav = yy.ravel()
-
-    for l in range(10):
-        q1ran = q_min + random.random() * (q_max-q_min)
-        q2ran = q_min + random.random() * (q_max-q_min)
-
-        # Plot the results:
-        plt.figure()
-        inp = np.float32(
-                np.c_[
-                    q1ran * np.ones(xrav.shape[0]),
-                    q2ran * np.ones(xrav.shape[0]),
-                    xrav,
-                    yrav,
-                    np.empty(yrav.shape[0]),
-                ]
-            )
-        for i in range(inp.shape[0]):
-            vel_norm = norm([inp[i][2],inp[i][3]])
-            inp[i][0] = (inp[i][0] - mean_dir) / std_dir
-            inp[i][1] = (inp[i][1] - mean_dir) / std_dir
-            if vel_norm != 0:
-                inp[i][2] = inp[i][2] / vel_norm
-                inp[i][3] = inp[i][3] / vel_norm
-            inp[i][4] = vel_norm / std_out_dir
-        out = (model_dir(torch.Tensor(inp[:,:4]).to(device))).cpu().numpy() 
-        y_pred = np.empty(out.shape)
-        for i in range(len(out)):
-            if inp[i][4] > out[i]:
-                y_pred[i] = 0
-            else:
-                y_pred[i] = 1
-        Z = y_pred.reshape(yy.shape)
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        xit = []
-        yit = []
-        for i in range(X_save.shape[0]):
-            if (
-                norm(X_save[i][0] - q1ran) < 0.01
-                and norm(X_save[i][1] - q2ran) < 0.01
-            ):
-                xit.append(X_save[i][2])
-                yit.append(X_save[i][3])
-        plt.plot(
-            xit,
-            yit,
-            "ko",
-            markersize=2
-        )
-        plt.xlim([v_min, v_max])
-        plt.ylim([v_min, v_max])
-        plt.grid()
-        plt.title("q1="+str(q1ran)+" q2="+str(q2ran))
-
-print("Execution time: %s seconds" % (time.time() - start_time))
-
+x=[100*(X_save_dir[i,4] - outputs[i].tolist()[0])/X_save_dir[i,4] for i in range(len(X_save_dir))]
+bins = np.linspace(-50, 50, 100)
+plt.hist(x, bins, alpha=0.5, label='Reverse-time')
+plt.hist(error_norm, bins, alpha=0.5, label='Active Learning')
+plt.legend(loc='upper right')
 plt.show()
+
+
+
+X_dir_al = np.empty((data_al.shape[0],6))
+
+for i in range(X_dir_al.shape[0]):
+    X_dir_al[i][0] = (data_al[i][0] - mean_dir) / std_dir
+    X_dir_al[i][1] = (data_al[i][1] - mean_dir) / std_dir
+    vel_norm = norm([data_al[i][2],data_al[i][3]])
+    if vel_norm != 0:
+        X_dir_al[i][2] = data_al[i][2] / vel_norm
+        X_dir_al[i][3] = data_al[i][3] / vel_norm
+    X_dir_al[i][4] = vel_norm 
+    X_dir_al[i][5] = data_al[i][5]
+
+correct = 0
+
+with torch.no_grad():
+    X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
+    outputs = model_dir(X_iter_tensor).cpu().numpy() * std_out_dir
+    for i in range(X_dir_al.shape[0]):
+        if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
+            correct += 1
+        if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
+            correct += 1
+
+    print('Accuracy AL data: ', correct/X_dir_al.shape[0])
+
+data_internal = np.array([data_al[i] for i in range(data_al.shape[0]) if model_al((torch.Tensor(data_al[i,:4]).to(device) - mean_al) / std_al)[1]>0])
+
+X_dir_al = np.empty((data_internal.shape[0],6))
+
+for i in range(X_dir_al.shape[0]):
+    X_dir_al[i][0] = (data_internal[i][0] - mean_dir) / std_dir
+    X_dir_al[i][1] = (data_internal[i][1] - mean_dir) / std_dir
+    vel_norm = norm([data_internal[i][2],data_internal[i][3]])
+    if vel_norm != 0:
+        X_dir_al[i][2] = data_internal[i][2] / vel_norm
+        X_dir_al[i][3] = data_internal[i][3] / vel_norm
+    X_dir_al[i][4] = vel_norm 
+    X_dir_al[i][5] = data_internal[i][5]
+
+correct = 0
+
+with torch.no_grad():
+    X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
+    outputs = model_dir(X_iter_tensor).cpu().numpy() * std_out_dir
+    for i in range(X_dir_al.shape[0]):
+        if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
+            correct += 1
+        if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
+            correct += 1
+
+    print('Accuracy AL internal data: ', correct/X_dir_al.shape[0])
+
+data_boundary = np.array([data_al[i] for i in range(data_al.shape[0]) if abs(model_al((torch.Tensor(data_al[i,:4]).to(device) - mean_al) / std_al)[0]) < 10])
+
+X_dir_al = np.empty((data_boundary.shape[0],6))
+
+for i in range(X_dir_al.shape[0]):
+    X_dir_al[i][0] = (data_boundary[i][0] - mean_dir) / std_dir
+    X_dir_al[i][1] = (data_boundary[i][1] - mean_dir) / std_dir
+    vel_norm = norm([data_boundary[i][2],data_boundary[i][3]])
+    if vel_norm != 0:
+        X_dir_al[i][2] = data_boundary[i][2] / vel_norm
+        X_dir_al[i][3] = data_boundary[i][3] / vel_norm
+    X_dir_al[i][4] = vel_norm 
+    X_dir_al[i][5] = data_boundary[i][5]
+
+correct = 0
+
+with torch.no_grad():
+    X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
+    outputs = model_dir(X_iter_tensor).cpu().numpy() * std_out_dir
+    for i in range(X_dir_al.shape[0]):
+        if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
+            correct += 1
+        if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
+            correct += 1
+
+    print('Accuracy AL data on boundary: ', correct/X_dir_al.shape[0])
+
+data_notboundary = np.array([data_al[i] for i in range(data_al.shape[0]) if abs(model_al((torch.Tensor(data_al[i,:4]).to(device) - mean_al) / std_al)[0]) > 10])
+
+X_dir_al = np.empty((data_notboundary.shape[0],6))
+
+for i in range(X_dir_al.shape[0]):
+    X_dir_al[i][0] = (data_notboundary[i][0] - mean_dir) / std_dir
+    X_dir_al[i][1] = (data_notboundary[i][1] - mean_dir) / std_dir
+    vel_norm = norm([data_notboundary[i][2],data_notboundary[i][3]])
+    if vel_norm != 0:
+        X_dir_al[i][2] = data_notboundary[i][2] / vel_norm
+        X_dir_al[i][3] = data_notboundary[i][3] / vel_norm
+    X_dir_al[i][4] = vel_norm 
+    X_dir_al[i][5] = data_notboundary[i][5]
+
+correct = 0
+
+with torch.no_grad():
+    X_iter_tensor = torch.Tensor(X_dir_al[:,:4]).to(device)
+    outputs = model_dir(X_iter_tensor).cpu().numpy() * std_out_dir
+    for i in range(X_dir_al.shape[0]):
+        if X_dir_al[i][4] < outputs[i] and X_dir_al[i][5] > 0.5:
+            correct += 1
+        if X_dir_al[i][4] > outputs[i] and X_dir_al[i][5] < 0.5:
+            correct += 1
+
+    print('Accuracy AL data not on boundary: ', correct/X_dir_al.shape[0])
