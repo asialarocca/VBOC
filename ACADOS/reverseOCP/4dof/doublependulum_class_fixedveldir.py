@@ -119,8 +119,8 @@ class OCPdoublependulumR:
 
         # set constraints
         self.Cmax = 10.
-        self.thetamax = np.pi / 4 + np.pi # np.pi / 2 + np.pi
-        self.thetamin = - np.pi / 4 + np.pi #np.pi
+        self.thetamax = np.pi / 4 + np.pi
+        self.thetamin = - np.pi / 4 + np.pi
         self.dthetamax = 20.
 
         # cost

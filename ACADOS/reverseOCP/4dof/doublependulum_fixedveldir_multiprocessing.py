@@ -437,32 +437,32 @@ min_time = 1 # set to 1 to also solve a minimum time problem to improve the solu
 
 cpu_num = 30
 
-num_prob = 10000
+num_prob = 1000
 
 start_time = time.time()
 
-# # Data generation:
-# with Pool(cpu_num) as p:
-#     temp = p.map(testing, range(num_prob))
+# Data generation:
+with Pool(cpu_num) as p:
+    temp = p.map(testing, range(num_prob))
 
-# print("Execution time: %s seconds" % (time.time() - start_time))
+print("Execution time: %s seconds" % (time.time() - start_time))
 
-# traj, statpos, statneg = zip(*temp)
-# X_save = [i for i in traj if i is not None]
-# X_solved = [i for i in statpos if i is not None]
-# X_failed = [i for i in statneg if i is not None]
+traj, statpos, statneg = zip(*temp)
+X_save = [i for i in traj if i is not None]
+X_solved = [i for i in statpos if i is not None]
+X_failed = [i for i in statneg if i is not None]
 
-# print('Solved/tot', len(X_save)/num_prob)
+print('Solved/tot', len(X_save)/num_prob)
 
-# X_save = np.array([i for f in X_save for i in f])
+X_save = np.array([i for f in X_save for i in f])
 
-# np.save('data_reverse_10000_20_newlimits_highertol_new.npy', np.asarray(X_save))
-# np.save('data_reverse_10000_20_newlimits_solvedstat_highertol_new.npy', np.asarray(X_solved))
-# np.save('data_reverse_10000_20_newlimits_failedstat_highertol_new.npy', np.asarray(X_failed))
+np.save('data_reverse_1000_20_newlimits_highertol_new.npy', np.asarray(X_save))
+np.save('data_reverse_1000_20_newlimits_solvedstat_highertol_new.npy', np.asarray(X_solved))
+np.save('data_reverse_1000_20_newlimits_failedstat_highertol_new.npy', np.asarray(X_failed))
 
-X_save = np.load('data_reverse_10000_20_newlimits_highertol_new.npy')
-X_solved = np.load('data_reverse_10000_20_newlimits_solvedstat_highertol_new.npy')
-X_failed = np.load('data_reverse_10000_20_newlimits_failedstat_highertol_new.npy')
+# X_save = np.load('data_reverse_10000_20_newlimits_highertol_new.npy')
+# X_solved = np.load('data_reverse_10000_20_newlimits_solvedstat_highertol_new.npy')
+# X_failed = np.load('data_reverse_10000_20_newlimits_failedstat_highertol_new.npy')
 
 for k in range(4):
     solved_tot = [i[1:] for i in X_solved if round(i[0]) == k]

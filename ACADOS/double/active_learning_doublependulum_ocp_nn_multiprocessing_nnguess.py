@@ -62,7 +62,7 @@ with cProfile.Profile() as pr:
 
     start_time = time.time()
 
-    cpu_num = 31
+    cpu_num = 30
 
     # Ocp initialization:
     ocp = OCPdoublependulumINIT()
@@ -82,7 +82,7 @@ with cProfile.Profile() as pr:
     learning_rate = 0.001
 
     # Device configuration
-    device = torch.device("cpu") # "cuda" if torch.cuda.is_available() else 
+    device = torch.device("cpu") 
 
     model = NeuralNet(input_size, hidden_size, output_size).to(device)
     model_guess = NeuralNetGuess(input_size, hidden_size, ocp_dim*ocp.N).to(device)
@@ -108,14 +108,19 @@ with cProfile.Profile() as pr:
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
     sample = sampler.random(n=pow(gridp, ocp_dim))
-    l_bounds = [q_min-(q_max-q_min)/20, q_min-(q_max-q_min)/20, v_min-(v_max-v_min)/20, v_min-(v_max-v_min)/20]
-    u_bounds = [q_max+(q_max-q_min)/20, q_max+(q_max-q_min)/20, v_max+(v_max-v_min)/20, v_max+(v_max-v_min)/20]
+    l_bounds = [q_min, q_min, v_min-(v_max-v_min)/20, v_min-(v_max-v_min)/20]
+    u_bounds = [q_max, q_max, v_max+(v_max-v_min)/20, v_max+(v_max-v_min)/20]
+    # l_bounds = [q_min-(q_max-q_min)/20, q_min-(q_max-q_min)/20, v_min-(v_max-v_min)/20, v_min-(v_max-v_min)/20]
+    # u_bounds = [q_max+(q_max-q_min)/20, q_max+(q_max-q_min)/20, v_max+(v_max-v_min)/20, v_max+(v_max-v_min)/20]
+    # l_bounds = [q_min, q_min, v_min, v_min]
+    # u_bounds = [q_max, q_max, v_max, v_max]
     Xu_iter = qmc.scale(sample, l_bounds, u_bounds).tolist()
 
     Xu_iter_tensor = torch.Tensor(Xu_iter).to(device)
     mean, std = torch.mean(Xu_iter_tensor).to(device), torch.std(Xu_iter_tensor).to(device)
-    
-    print(mean, std)
+
+    torch.save(mean, 'mean_2pendulum_20')
+    torch.save(std, 'std_2pendulum_20')
 
     with Pool(cpu_num) as p:
         temp = list(p.map(testing, Xu_iter[:N_init]))
@@ -168,8 +173,8 @@ with cProfile.Profile() as pr:
             qt = len(X_traj)
         ind = random.sample(range(len(X_traj)), qt)
 
-        X_iter_tensor = torch.Tensor([X_traj[i][:4] for i in ind])
-        y_iter_tensor = torch.Tensor([X_traj[i][4:] for i in ind])
+        X_iter_tensor = torch.Tensor([X_traj[i][:4] for i in ind]).to(device)
+        y_iter_tensor = torch.Tensor([X_traj[i][4:] for i in ind]).to(device)
         X_iter_tensor = (X_iter_tensor - mean) / std
         y_iter_tensor = (y_iter_tensor - mean) / std
 
@@ -318,8 +323,8 @@ with cProfile.Profile() as pr:
                 qt = len(X_traj)
             ind = random.sample(range(len(X_traj)), qt)
 
-            X_iter_tensor = torch.Tensor([X_traj[i][:4] for i in ind])
-            y_iter_tensor = torch.Tensor([X_traj[i][4:] for i in ind])
+            X_iter_tensor = torch.Tensor([X_traj[i][:4] for i in ind]).to(device)
+            y_iter_tensor = torch.Tensor([X_traj[i][4:] for i in ind]).to(device)
             X_iter_tensor = (X_iter_tensor - mean) / std
             y_iter_tensor = (y_iter_tensor - mean) / std
 
@@ -340,12 +345,8 @@ with cProfile.Profile() as pr:
 
         print("etpmax:", etpmax)
         
-    torch.save(model.state_dict(), 'model_2pendulum_20_newlimits')
-
-    np.save('data_al_20_newlimits.npy', np.asarray(X_iter))
-
-    # model = NeuralNet(input_size, hidden_size, output_size).to(device)
-    # model.load_state_dict(torch.load('model_2pendulum'))
+    torch.save(model.state_dict(), 'model_2pendulum_20')
+    np.save('data_al_20.npy', np.asarray(X_iter))
 
     with torch.no_grad():
         # Plots:
@@ -370,7 +371,7 @@ with cProfile.Profile() as pr:
         ).to(device)
         inp = (inp - mean) / std
         out = model(inp)
-        y_pred = np.argmax(out.numpy(), axis=1)
+        y_pred = np.argmax(out.cpu().numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
         xit = []
@@ -413,7 +414,7 @@ with cProfile.Profile() as pr:
         ).to(device)
         inp = (inp - mean) / std
         out = model(inp)
-        y_pred = np.argmax(out.numpy(), axis=1)
+        y_pred = np.argmax(out.cpu().numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
         xit = []
