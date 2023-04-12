@@ -112,9 +112,15 @@ def testing(v):
             ocp.ocp_solver.constraints_set(i, 'lbu', np.array([-tau_max, -tau_max, -tau_max]))
             ocp.ocp_solver.constraints_set(i, 'ubu', np.array([tau_max, tau_max, tau_max]))
 
+        C=np.zeros((3,7))
+        d=np.array([p[:3].tolist()])
+        dt=np.transpose(d)
+        # C[:,3:6] = np.identity(3)-np.matmul(np.matmul(dt,np.linalg.inv(np.matmul(d,dt))),d)
+        C[:,3:6] = np.identity(3)-np.matmul(dt,d)
+
         ocp.ocp_solver.constraints_set(0, "lbx", q_init_lb)
         ocp.ocp_solver.constraints_set(0, "ubx", q_init_ub)
-        ocp.ocp_solver.constraints_set(0, "C", np.array([[0., 0., 0., p[1], -p[0], 0., 0.], [0., 0., 0., p[2], 0., -p[0], 0.], [0., 0., 0., 0., p[2], -p[1], 0.]]), api='new') 
+        ocp.ocp_solver.constraints_set(0, "C",  C, api='new') 
 
         ocp.ocp_solver.constraints_set(N, "lbx", np.array([q_min, q_min, q_min, 0., 0., 0., dt_sym]))
         ocp.ocp_solver.constraints_set(N, "ubx", np.array([q_max, q_max, q_max, 0., 0., 0., dt_sym]))
@@ -127,7 +133,7 @@ def testing(v):
         if status == 0: # the solver has found a solution
             # Compare the current cost with the previous one:
             cost_new = ocp.ocp_solver.get_cost()
-            if cost_new > float(f'{cost:.4f}') - 1e-4: 
+            if cost_new > float(f'{cost:.3f}') - 1e-3: 
                 all_ok = True # the time is sufficient to have achieved an optimal solution
                 break
             cost = cost_new
@@ -288,9 +294,15 @@ def testing(v):
                             ocp.ocp_solver.constraints_set(i, 'lbu', np.array([-tau_max, -tau_max, -tau_max]))
                             ocp.ocp_solver.constraints_set(i, 'ubu', np.array([tau_max, tau_max, tau_max]))
 
+                        C=np.zeros((3,7))
+                        d=np.array([p[:3].tolist()])
+                        dt=np.transpose(d)
+                        # C[:,3:6] = np.identity(3)-np.matmul(np.matmul(dt,np.linalg.inv(np.matmul(d,dt))),d)
+                        C[:,3:6] = np.identity(3)-np.matmul(dt,d)
+
+                        ocp.ocp_solver.constraints_set(0, "C",  C, api='new') 
                         ocp.ocp_solver.constraints_set(0, 'lbx', lbx_init) 
                         ocp.ocp_solver.constraints_set(0, 'ubx', ubx_init) 
-                        ocp.ocp_solver.constraints_set(0, "C", np.array([[0., 0., 0., p[1], -p[0], 0., 0.], [0., 0., 0., p[2], 0., -p[0], 0.], [0., 0., 0., 0., p[2], -p[1], 0.]]), api='new') 
 
                         ocp.ocp_solver.set(N, 'x', x_sol_guess[-1])
                         ocp.ocp_solver.set(N, 'p', p)
@@ -304,7 +316,7 @@ def testing(v):
                             # Compare the current cost with the previous one:
                             x0_new = ocp.ocp_solver.get(0, "x")
                             norm_new = norm(np.array([x0_new[3:6]]))
-                            if norm_new < norm_bef + 1e-4:
+                            if norm_new < norm_bef + 1e-3:
                                 all_ok = True 
 
                                 break
@@ -328,7 +340,7 @@ def testing(v):
 
                     if all_ok:
                         # Compare the old and new velocity norms:  
-                        if norm_new > norm_old + 1e-4: # the state is inside V
+                        if norm_new > norm_old + 1e-3: # the state is inside V
                             N = N_old
 
                             for i in range(N-f):
@@ -416,33 +428,55 @@ tau_max = ocp.Cmax
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Unviable data generation parameter:
-eps = 1e-3
+eps = 1e-1
 
 cpu_num = 30
 
-num_prob = 1000
+num_prob = 100000
 
-# Data generation:
-with Pool(cpu_num) as p:
-    traj = p.map(testing, range(num_prob))
+# # Data generation:
+# with Pool(cpu_num) as p:
+#     traj = p.map(testing, range(num_prob))
 
-print("Execution time: %s seconds" % (time.time() - start_time))
+# print("Execution time: %s seconds" % (time.time() - start_time))
 
-# traj, statpos, statneg = zip(*temp)
-X_save = [i for i in traj if i is not None]
+# # traj, statpos, statneg = zip(*temp)
+# X_save = [i for i in traj if i is not None]
 
-solved=len(X_save)
+# solved=len(X_save)
 
-print('Solved/tot', len(X_save)/num_prob)
+# print('Solved/tot', len(X_save)/num_prob)
 
-X_save = np.array([i for f in X_save for i in f])
+# X_save = np.array([i for f in X_save for i in f])
 
-print('Saved/tot', len(X_save)/(solved*100))
+# print('Saved/tot', len(X_save)/(solved*100))
 
-np.save('data_reverse_5.npy', np.asarray(X_save))
-# X_save = np.load('data_reverse_5.npy')
+# np.save('data_reverse_20.npy', np.asarray(X_save))
+X_save = np.load('data_reverse_20.npy')
 
-model_dir = NeuralNetRegression(6, 400, 1).to(device)
+# plt.figure()
+# ax = plt.axes(projection ="3d")
+# ax.scatter3D(X_save[:,0],X_save[:,1],X_save[:,2])
+# plt.title("OCP dataset positions")
+
+# plt.figure()
+# ax = plt.axes(projection ="3d")
+# ax.scatter3D(X_save[:,3],X_save[:,4],X_save[:,5])
+# plt.title("OCP dataset velocities")
+
+# q1ran = q_min + random.random() * (q_max-q_min)
+# q2ran = q_min + random.random() * (q_max-q_min)
+# q3ran = q_min + random.random() * (q_max-q_min)
+# temp = np.array([i for i in X_save if norm(i[0] - q1ran) < 0.1 and norm(i[1] - q2ran) < 0.1 and norm(i[2] - q3ran) < 0.1])
+# plt.figure()
+# ax = plt.axes(projection ="3d")
+# ax.scatter3D(temp[:,3],temp[:,4],temp[:,5])
+# # plt.title(q1ran,q2ran,q3ran)
+# plt.show()
+
+# print(q1ran,q2ran,q3ran)
+
+model_dir = NeuralNetRegression(6, 600, 1).to(device)
 criterion_dir = nn.MSELoss()
 optimizer_dir = torch.optim.Adam(model_dir.parameters(), lr=1e-3)
 scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer_dir, gamma=0.98)
@@ -463,23 +497,14 @@ for i in range(X_save_dir.shape[0]):
         X_save_dir[i][4] = X_save[i][4] / vel_norm
         X_save_dir[i][5] = X_save[i][5] / vel_norm
     X_save_dir[i][6] = vel_norm 
-
-# std_out_dir = torch.std(torch.tensor(X_save_dir[:,4:].tolist())).to(device).item()
-# for i in range(X_save_dir.shape[0]):
-#     X_save_dir[i][4] = X_save_dir[i][4] / std_out_dir
-
-#summ = sum([X_save_dir[i][4] for i in range(len(X_save_dir))])
-#X_prob = [X_save_dir[i][4]/summ for i in range(len(X_save_dir))]
-
-#ind = np.random.choice(range(len(X_save_dir)), size=int(len(X_save_dir)*0.7), p=X_prob)
-#X_save_dir = np.array([X_save_dir[i] for i in ind])
-# X_train_dir = np.copy(X_save_dir)
-
-ind = random.sample(range(len(X_save_dir)), int(len(X_save_dir)*0.7))
-X_train_dir = np.array([X_save_dir[i] for i in ind])
-X_test_dir = np.array([X_save_dir[i] for i in range(len(X_save_dir)) if i not in ind])
+    
+# ind = random.sample(range(len(X_save_dir)), int(len(X_save_dir)*0.7))
+# X_train_dir = np.array([X_save_dir[i] for i in ind])
+# X_test_dir = np.array([X_save_dir[i] for i in range(len(X_save_dir)) if i not in ind])
 
 # model_dir.load_state_dict(torch.load('model_2pendulum_dir_20'))
+
+X_train_dir = X_save_dir
 
 it = 1
 val = max(X_save_dir[:,6])
@@ -522,7 +547,7 @@ while val > 1e-4 and it < it_max:
 plt.figure()
 plt.plot(training_evol)
 
-torch.save(model_dir.state_dict(), 'model_3pendulum_dir_5')
+torch.save(model_dir.state_dict(), 'model_3pendulum_dir_20')
 
 with torch.no_grad():
     X_iter_tensor = torch.Tensor(X_train_dir[:,:6]).to(device)
@@ -530,11 +555,11 @@ with torch.no_grad():
     outputs = model_dir(X_iter_tensor)
     print('RMSE train data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor))) 
 
-with torch.no_grad():
-    X_iter_tensor = torch.Tensor(X_test_dir[:,:6]).to(device)
-    y_iter_tensor = torch.Tensor(X_test_dir[:,6:]).to(device)
-    outputs = model_dir(X_iter_tensor)
-    print('RMSE test data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor))) 
+# with torch.no_grad():
+#     X_iter_tensor = torch.Tensor(X_test_dir[:,:6]).to(device)
+#     y_iter_tensor = torch.Tensor(X_test_dir[:,6:]).to(device)
+#     outputs = model_dir(X_iter_tensor)
+#     print('RMSE test data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor))) 
 
 
 # Plots:

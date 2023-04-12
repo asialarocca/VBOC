@@ -151,13 +151,13 @@ num_prob = 1000
 # X_test = np.array(data)
 # np.save('data_test_20.npy', X_test)
 
-X_test = np.load('data_test_20.npy')
+X_test = np.load('data_test_5.npy')
 
 # Reverse OCP model and data:
 model_dir = NeuralNetRegression(4, 400, 1).to(device)
 criterion_dir = nn.MSELoss()
-model_dir.load_state_dict(torch.load('data_rt/model_2pendulum_dir_20'))
-data_reverse = np.load('data_rt/data_reverse_20.npy')
+model_dir.load_state_dict(torch.load('data_rt/model_2pendulum_dir_5_new'))
+data_reverse = np.load('data_rt/data_reverse_5_new.npy')
 mean_dir, std_dir = torch.mean(torch.tensor(data_reverse[:,:2].tolist())).to(device).item(), torch.std(torch.tensor(data_reverse[:,:2].tolist())).to(device).item()
 
 # # Reverse OCP model with only x0 and data:
@@ -169,10 +169,10 @@ mean_dir, std_dir = torch.mean(torch.tensor(data_reverse[:,:2].tolist())).to(dev
 
 # Active Learning model and data:
 model_al = NeuralNet(4, 400, 2).to(device)
-model_al.load_state_dict(torch.load('data_al/model_2pendulum_20'))
-mean_al = torch.load('data_al/mean_2pendulum_20')
-std_al = torch.load('data_al/std_2pendulum_20')
-data_al = np.load('data_al/data_al_20.npy')
+model_al.load_state_dict(torch.load('data_al/model_2pendulum_5'))
+mean_al = torch.load('data_al/mean_2pendulum_5')
+std_al = torch.load('data_al/std_2pendulum_5')
+data_al = np.load('data_al/data_al_5.npy')
 
 # Test data rewritten with velocity vector and norm:
 X_test_dir = np.empty((X_test.shape[0],5))
@@ -205,8 +205,8 @@ for i in range(len(data_neg)):
         v1 = v1 - 1e-2 * data_neg[i][3]/vel_norm
         out = np.argmax(model_al((torch.Tensor([[data_neg[i][0], data_neg[i][1], v0, v1]]).to(device) - mean_al) / std_al).cpu().detach().numpy(), axis=1)
 
-    norm_error_neg[i] = vel_norm - norm([v0,v1])
-    norm_relerror_neg[i] = norm_error_neg[i]/vel_norm
+    norm_error_neg[i] = abs(vel_norm - norm([v0,v1]))
+    norm_relerror_neg[i] = abs(norm_error_neg[i]/vel_norm)
 
 norm_error_pos = np.empty((len(data_pos),))
 norm_relerror_pos = np.empty((len(data_pos),))
@@ -222,8 +222,8 @@ for i in range(len(data_pos)):
         v1 = v1 + 1e-2 * data_pos[i][3]/vel_norm
         out = np.argmax(model_al((torch.Tensor([[data_pos[i][0], data_pos[i][1], v0, v1]]).to(device) - mean_al) / std_al).cpu().detach().numpy(), axis=1)
 
-    norm_error_pos[i] = vel_norm - norm([v0,v1]) 
-    norm_relerror_pos[i] = norm_error_pos[i]/vel_norm
+    norm_error_pos[i] = abs(vel_norm - norm([v0,v1]))
+    norm_relerror_pos[i] = abs(norm_error_pos[i]/vel_norm)
 
 norm_error_al = np.concatenate((norm_error_neg, norm_error_pos))
 norm_relerror_al = np.concatenate((norm_relerror_neg, norm_relerror_pos))
@@ -243,18 +243,18 @@ with torch.no_grad():
     print('RMSE test data wrt AL NN: ', math.sqrt(np.sum(np.power(norm_error_al,2))/len(norm_error_al)))
 
 plt.figure()
-norm_error_rt=[X_test_dir[i,4] - outputs[i].tolist()[0] for i in range(len(X_test_dir))]
-bins = np.linspace(-2, 2, 100)
-plt.hist(norm_error_rt, bins, alpha=0.5, label='Reverse-time NN. Error distribution')
-plt.hist(norm_error_al, bins, alpha=0.5, label='Active Learning NN. Error distribution')
-plt.legend(loc='upper right')
+norm_error_rt=[abs(X_test_dir[i,4] - outputs[i].tolist()[0]) for i in range(len(X_test_dir))]
+bins = np.linspace(0, 2, 100)
+plt.hist(norm_error_rt, bins, alpha=0.5, label='Reverse-time NN. Error distribution', cumulative=True)
+plt.hist(norm_error_al, bins, alpha=0.5, label='Active Learning NN. Error distribution', cumulative=True)
+plt.legend(loc='lower right')
 
 plt.figure()
-norm_relerror_rt=[(X_test_dir[i,4] - outputs[i].tolist()[0])/X_test_dir[i,4] for i in range(len(X_test_dir))]
-bins = np.linspace(-1., 1., 100)
-plt.hist(norm_relerror_rt, bins, alpha=0.5, label='Reverse-time NN. Relative error distribution')
-plt.hist(norm_relerror_al, bins, alpha=0.5, label='Active Learning NN. Relative error distribution')
-plt.legend(loc='upper right')
+norm_relerror_rt=[abs((X_test_dir[i,4] - outputs[i].tolist()[0])/X_test_dir[i,4]) for i in range(len(X_test_dir))]
+bins = np.linspace(0, 1, 100)
+plt.hist(norm_relerror_rt, bins, alpha=0.5, label='Reverse-time NN. Relative error distribution', cumulative=True)
+plt.hist(norm_relerror_al, bins, alpha=0.5, label='Active Learning NN. Relative error distribution', cumulative=True)
+plt.legend(loc='lower right')
 
 # X_dir_al = np.empty((data_al.shape[0],6))
 
@@ -582,28 +582,28 @@ with torch.no_grad():
         "ko",
         markersize=2
     )
-    xit = []
-    yit = []
-    cit = []
-    for i in range(len(data_al)):
-        if (
-            norm(data_al[i][0] - (q_min + q_max) / 2) < 0.1
-            and norm(data_al[i][2]) < 0.1
-        ):
-            xit.append(data_al[i][1])
-            yit.append(data_al[i][3])
-            if data_al[i][4] == 1:
-                cit.append(0)
-            else:
-                cit.append(1)
-    plt.scatter(
-        xit,
-        yit,
-        c=cit,
-        marker=".",
-        alpha=0.5,
-        cmap=plt.cm.Paired,
-    )
+    # xit = []
+    # yit = []
+    # cit = []
+    # for i in range(len(data_al)):
+    #     if (
+    #         norm(data_al[i][0] - (q_min + q_max) / 2) < 0.1
+    #         and norm(data_al[i][2]) < 0.1
+    #     ):
+    #         xit.append(data_al[i][1])
+    #         yit.append(data_al[i][3])
+    #         if data_al[i][4] == 1:
+    #             cit.append(0)
+    #         else:
+    #             cit.append(1)
+    # plt.scatter(
+    #     xit,
+    #     yit,
+    #     c=cit,
+    #     marker=".",
+    #     alpha=0.5,
+    #     cmap=plt.cm.Paired,
+    # )
     plt.xlim([q_min, q_max])
     plt.ylim([v_min, v_max])
     plt.grid()

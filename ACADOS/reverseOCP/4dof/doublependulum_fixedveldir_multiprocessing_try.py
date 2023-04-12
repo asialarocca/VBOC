@@ -101,10 +101,10 @@ def testing(v):
             ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
             ocp.ocp_solver.constraints_set(i, 'lbu', np.array([-tau_max, -tau_max]))
             ocp.ocp_solver.constraints_set(i, 'ubu', np.array([tau_max, tau_max]))
-            ocp.ocp_solver.constraints_set(i, 'C', np.array([[0., 0., 0., 0., 0.]]))
-            ocp.ocp_solver.constraints_set(i, 'D', np.array([[0., 0.]]))
-            ocp.ocp_solver.constraints_set(i, 'lg', np.array([0.]))
-            ocp.ocp_solver.constraints_set(i, 'ug', np.array([0.]))
+            # ocp.ocp_solver.constraints_set(i, 'C', np.array([[0., 0., 0., 0., 0.]]))
+            # ocp.ocp_solver.constraints_set(i, 'D', np.array([[0., 0.]]))
+            # ocp.ocp_solver.constraints_set(i, 'lg', np.array([0.]))
+            # ocp.ocp_solver.constraints_set(i, 'ug', np.array([0.]))
 
         ocp.ocp_solver.constraints_set(0, "lbx", q_init_lb)
         ocp.ocp_solver.constraints_set(0, "ubx", q_init_ub)
@@ -273,6 +273,8 @@ def testing(v):
                     # direction of the current joint velocities.
 
                     N_old = N
+                    N = N - f
+                    print(N)
 
                     # Cost:
                     norm_weights = norm(np.array([x_sol[f][2], x_sol[f][3]]))    
@@ -290,17 +292,26 @@ def testing(v):
                     else:
                         lbx_init[3] = x_sol[f][3]
 
+                    # # Guess:
+                    # x_sol_guess = np.empty((N+1, 5))
+                    # u_sol_guess = np.empty((N+1, 2))
+                    # for i in range(N-f):
+                    #     x_sol_guess[i] = x_sol[i+f]
+                    #     u_sol_guess[i] = u_sol[i+f]
+
+                    # u_g = np.array([ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol[N][0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol[N][1])])
+                    # for i in range(N-f, N+1):
+                    #     x_sol_guess[i] = x_sol[N]
+                    #     u_sol_guess[i] = u_g
+
                     # Guess:
                     x_sol_guess = np.empty((N+1, 5))
                     u_sol_guess = np.empty((N+1, 2))
-                    for i in range(N-f):
+                    for i in range(N):
                         x_sol_guess[i] = x_sol[i+f]
                         u_sol_guess[i] = u_sol[i+f]
-
-                    u_g = np.array([ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol[N][0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol[N][1])])
-                    for i in range(N-f, N+1):
-                        x_sol_guess[i] = x_sol[N]
-                        u_sol_guess[i] = u_g
+                    x_sol_guess[N] = x_sol[N]
+                    u_sol_guess[N] = np.array([ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol[N][0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol[N][1])])
 
                     norm_old = norm(np.array([x_sol[f][2:4]]))
                     norm_bef = norm_old
@@ -319,10 +330,10 @@ def testing(v):
                             ocp.ocp_solver.constraints_set(i, 'ubx', np.array([q_max, q_max, v_max, v_max, dt_sym])) 
                             ocp.ocp_solver.constraints_set(i, 'lbu', np.array([-tau_max, -tau_max]))
                             ocp.ocp_solver.constraints_set(i, 'ubu', np.array([tau_max, tau_max]))
-                            ocp.ocp_solver.constraints_set(i, 'C', np.array([[0., 0., 0., 0., 0.]]))
-                            ocp.ocp_solver.constraints_set(i, 'D', np.array([[0., 0.]]))
-                            ocp.ocp_solver.constraints_set(i, 'lg', np.array([0.]))
-                            ocp.ocp_solver.constraints_set(i, 'ug', np.array([0.]))
+                            # ocp.ocp_solver.constraints_set(i, 'C', np.array([[0., 0., 0., 0., 0.]]))
+                            # ocp.ocp_solver.constraints_set(i, 'D', np.array([[0., 0.]]))
+                            # ocp.ocp_solver.constraints_set(i, 'lg', np.array([0.]))
+                            # ocp.ocp_solver.constraints_set(i, 'ug', np.array([0.]))
 
                         ocp.ocp_solver.constraints_set(0, 'lbx', lbx_init) 
                         ocp.ocp_solver.constraints_set(0, 'ubx', ubx_init) 
@@ -371,9 +382,9 @@ def testing(v):
                                 x_sol[i+f] = ocp.ocp_solver.get(i, "x")
                                 u_sol[i+f] = ocp.ocp_solver.get(i, "u")
 
-                            # Reset the number of steps used in the OCP:
-                            ocp.ocp_solver.set_new_time_steps(np.full((N,), 1.))
-                            ocp.ocp_solver.update_qp_solver_cond_N(N)
+                            # # Reset the number of steps used in the OCP:
+                            # ocp.ocp_solver.set_new_time_steps(np.full((N,), 1.))
+                            # ocp.ocp_solver.update_qp_solver_cond_N(N)
 
                             x_out = np.copy(x_sol[f][:4])
                             norm_vel = norm_new  
@@ -456,29 +467,29 @@ min_time = 1 # set to 1 to also solve a minimum time problem to improve the solu
 
 cpu_num = 30
 
-num_prob = 1500
+num_prob = 1600
 
-# # Data generation:
-# with Pool(cpu_num) as p:
-#     temp = p.map(testing, range(num_prob))
+# Data generation:
+with Pool(cpu_num) as p:
+    temp = p.map(testing, range(num_prob))
 
-# print("Execution time: %s seconds" % (time.time() - start_time))
+print("Execution time: %s seconds" % (time.time() - start_time))
 
-# traj, statpos, statneg = zip(*temp)
-# X_save = [i for i in traj if i is not None]
-# X_solved = [i for i in statpos if i is not None]
-# X_failed = [i for i in statneg if i is not None]
+traj, statpos, statneg = zip(*temp)
+X_save = [i for i in traj if i is not None]
+X_solved = [i for i in statpos if i is not None]
+X_failed = [i for i in statneg if i is not None]
 
-# solved=len(X_save)
+solved=len(X_save)
 
-# print('Solved/tot', len(X_save)/num_prob)
+print('Solved/tot', len(X_save)/num_prob)
 
-# X_save = np.array([i for f in X_save for i in f])
+X_save = np.array([i for f in X_save for i in f])
 
-# print('Saved/tot', len(X_save)/(solved*100))
+print('Saved/tot', len(X_save)/(solved*100))
 
-# np.save('data_reverse_20.npy', np.asarray(X_save))
-X_save = np.load('data_rt/data_reverse_20.npy')
+np.save('data_reverse_5_new.npy', np.asarray(X_save))
+# X_save = np.load('data_reverse_20_new.npy')
 
 # for k in range(4):
 #     solved_tot = [i[1:] for i in X_solved if round(i[0]) == k]
@@ -609,7 +620,7 @@ while val > 1e-4 and it < it_max:
 plt.figure()
 plt.plot(training_evol)
 
-torch.save(model_dir.state_dict(), 'model_2pendulum_dir_20')
+torch.save(model_dir.state_dict(), 'model_2pendulum_dir_5_new')
 
 with torch.no_grad():
     X_iter_tensor = torch.Tensor(X_train_dir[:,:4]).to(device)

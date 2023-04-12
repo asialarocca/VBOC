@@ -4,13 +4,12 @@ from scipy.stats import entropy, qmc
 import matplotlib.pyplot as plt
 from numpy.linalg import norm as norm
 import time
-from double_pendulum_ocp_class_highervellimits import OCPdoublependulumINIT 
+from triplependulum_ocp_class_newlimits import OCPtriplependulumINIT 
 import random
 import warnings
 import torch
 import torch.nn as nn
 from my_nn import NeuralNet, NeuralNetGuess
-from statistics import mean
 from multiprocessing import Pool
 from pstats import Stats
 from torch.utils.data import TensorDataset, DataLoader
@@ -19,10 +18,10 @@ import math
 warnings.filterwarnings("ignore")
 
 def testing(s0):
-    q0,v0 = s0[:2], s0[2:]
+    q0,v0 = s0[:3], s0[3:]
 
-    if q0[0] < q_min or q0[0] > q_max or v0[0] < v_min or v0[0] > v_max or q0[1] < q_min or q0[1] > q_max or v0[1] < v_min or v0[1] > v_max:
-        return [q0[0], q0[1], v0[0], v0[1], 1, 0], None
+    if q0[0] < q_min or q0[0] > q_max or v0[0] < v_min or v0[0] > v_max or q0[1] < q_min or q0[1] > q_max or v0[1] < v_min or v0[1] > v_max or q0[2] < q_min or q0[2] > q_max or v0[2] < v_min or v0[2] > v_max:
+        return [q0[0], q0[1], q0[2], v0[0], v0[1], v0[2], 1, 0], None
     else:
         # Data testing:
         res = ocp.compute_problem(q0, v0)
@@ -33,16 +32,16 @@ def testing(s0):
             for i in range(ocp.N+1):
                 simX[i, :] = ocp.ocp_solver.get(i, "x")
             sim = np.reshape(simX,(ocp.N+1)*ocp_dim,).tolist()
-            return [q0[0], q0[1], v0[0], v0[1], 0, 1], sim
+            return [q0[0], q0[1], q0[2], v0[0], v0[1], v0[2], 0, 1], sim
 
         elif res == 0:
-            return [q0[0], q0[1], v0[0], v0[1], 1, 0], None
+            return [q0[0], q0[1], q0[2], v0[0], v0[1], v0[2], 1, 0], None
 
 def testing_guess(s0):
-    q0,v0 = s0[:2], s0[2:]
+    q0,v0 = s0[:3], s0[3:]
 
-    if q0[0] < q_min or q0[0] > q_max or v0[0] < v_min or v0[0] > v_max or q0[1] < q_min or q0[1] > q_max or v0[1] < v_min or v0[1] > v_max:
-        return [q0[0], q0[1], v0[0], v0[1], 1, 0], None
+    if q0[0] < q_min or q0[0] > q_max or v0[0] < v_min or v0[0] > v_max or q0[1] < q_min or q0[1] > q_max or v0[1] < v_min or v0[1] > v_max or q0[2] < q_min or q0[2] > q_max or v0[2] < v_min or v0[2] > v_max:
+        return [q0[0], q0[1], q0[2], v0[0], v0[1], v0[2], 1, 0], None
     else:
         # Data testing:
         res = ocp.compute_problem_nnguess(q0, v0, model_guess, mean, std)
@@ -53,10 +52,10 @@ def testing_guess(s0):
             for i in range(ocp.N+1):
                 simX[i, :] = ocp.ocp_solver.get(i, "x")
             sim = np.reshape(simX,(ocp.N+1)*ocp_dim,).tolist()
-            return [q0[0], q0[1], v0[0], v0[1], 0, 1], sim
+            return [q0[0], q0[1], q0[2], v0[0], v0[1], v0[2], 0, 1], sim
 
         elif res == 0:
-            return [q0[0], q0[1], v0[0], v0[1], 1, 0], None
+            return [q0[0], q0[1], q0[2], v0[0], v0[1], v0[2], 1, 0], None
 
 with cProfile.Profile() as pr:
 
@@ -65,7 +64,7 @@ with cProfile.Profile() as pr:
     cpu_num = 30
 
     # Ocp initialization:
-    ocp = OCPdoublependulumINIT()
+    ocp = OCPtriplependulumINIT()
 
     ocp_dim = ocp.nx
 
@@ -89,14 +88,14 @@ with cProfile.Profile() as pr:
 
     # Active learning parameters:
     N_init = pow(5, ocp_dim)  # size of initial labeled set
-    B = pow(10, ocp_dim)  # batch size
+    B = pow(5, ocp_dim)  # batch size
     etp_stop = 0.2  # active learning stopping condition
     loss_stop = 0.1  # nn training stopping condition
     beta = 0.8
     n_minibatch = 512
     n_minibatch_model = pow(50,2)
     it_max = int(100 * B / n_minibatch)
-    gridp = 50
+    gridp = 10
 
     # Loss and optimizer
     criterion = nn.BCEWithLogitsLoss()
@@ -108,19 +107,19 @@ with cProfile.Profile() as pr:
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp_dim, scramble=False)
     sample = sampler.random(n=pow(gridp, ocp_dim))
-    l_bounds = [q_min, q_min, v_min-(v_max-v_min)/20, v_min-(v_max-v_min)/20]
-    u_bounds = [q_max, q_max, v_max+(v_max-v_min)/20, v_max+(v_max-v_min)/20]
+    # l_bounds = [q_min, q_min, v_min-(v_max-v_min)/20, v_min-(v_max-v_min)/20]
+    # u_bounds = [q_max, q_max, v_max+(v_max-v_min)/20, v_max+(v_max-v_min)/20]
     # l_bounds = [q_min-(q_max-q_min)/20, q_min-(q_max-q_min)/20, v_min-(v_max-v_min)/20, v_min-(v_max-v_min)/20]
     # u_bounds = [q_max+(q_max-q_min)/20, q_max+(q_max-q_min)/20, v_max+(v_max-v_min)/20, v_max+(v_max-v_min)/20]
-    # l_bounds = [q_min, q_min, v_min, v_min]
-    # u_bounds = [q_max, q_max, v_max, v_max]
+    l_bounds = [q_min, q_min, q_min, v_min, v_min, v_min]
+    u_bounds = [q_max, q_max, q_max, v_max, v_max, v_max]
     Xu_iter = qmc.scale(sample, l_bounds, u_bounds).tolist()
 
     Xu_iter_tensor = torch.Tensor(Xu_iter).to(device)
     mean, std = torch.mean(Xu_iter_tensor).to(device), torch.std(Xu_iter_tensor).to(device)
 
-    torch.save(mean, 'mean_2pendulum_20')
-    torch.save(std, 'std_2pendulum_20')
+    torch.save(mean, 'mean_3pendulum_20')
+    torch.save(std, 'std_3pendulum_20')
 
     with Pool(cpu_num) as p:
         temp = list(p.map(testing, Xu_iter[:N_init]))
@@ -141,8 +140,8 @@ with cProfile.Profile() as pr:
 
         ind = random.sample(range(len(X_iter)), n_minibatch)
 
-        X_iter_tensor = torch.Tensor([X_iter[i][:4] for i in ind]).to(device)
-        y_iter_tensor = torch.Tensor([X_iter[i][4:] for i in ind]).to(device)
+        X_iter_tensor = torch.Tensor([X_iter[i][:6] for i in ind]).to(device)
+        y_iter_tensor = torch.Tensor([X_iter[i][6:] for i in ind]).to(device)
         X_iter_tensor = (X_iter_tensor - mean) / std
 
         # Zero the gradients
@@ -173,8 +172,8 @@ with cProfile.Profile() as pr:
             qt = len(X_traj)
         ind = random.sample(range(len(X_traj)), qt)
 
-        X_iter_tensor = torch.Tensor([X_traj[i][:4] for i in ind]).to(device)
-        y_iter_tensor = torch.Tensor([X_traj[i][4:] for i in ind]).to(device)
+        X_iter_tensor = torch.Tensor([X_traj[i][:6] for i in ind]).to(device)
+        y_iter_tensor = torch.Tensor([X_traj[i][6:] for i in ind]).to(device)
         X_iter_tensor = (X_iter_tensor - mean) / std
         y_iter_tensor = (y_iter_tensor - mean) / std
 
@@ -270,8 +269,8 @@ with cProfile.Profile() as pr:
                 )
             )
 
-            X_iter_tensor = torch.Tensor([X_iter[i][:4] for i in ind]).to(device)
-            y_iter_tensor = torch.Tensor([X_iter[i][4:] for i in ind]).to(device)
+            X_iter_tensor = torch.Tensor([X_iter[i][:6] for i in ind]).to(device)
+            y_iter_tensor = torch.Tensor([X_iter[i][6:] for i in ind]).to(device)
             X_iter_tensor = (X_iter_tensor - mean) / std
 
             # Zero the gradients
@@ -323,8 +322,8 @@ with cProfile.Profile() as pr:
                 qt = len(X_traj)
             ind = random.sample(range(len(X_traj)), qt)
 
-            X_iter_tensor = torch.Tensor([X_traj[i][:4] for i in ind]).to(device)
-            y_iter_tensor = torch.Tensor([X_traj[i][4:] for i in ind]).to(device)
+            X_iter_tensor = torch.Tensor([X_traj[i][:6] for i in ind]).to(device)
+            y_iter_tensor = torch.Tensor([X_traj[i][6:] for i in ind]).to(device)
             X_iter_tensor = (X_iter_tensor - mean) / std
             y_iter_tensor = (y_iter_tensor - mean) / std
 
@@ -345,33 +344,32 @@ with cProfile.Profile() as pr:
 
         print("etpmax:", etpmax)
         
-    torch.save(model.state_dict(), 'model_2pendulum_20')
+    torch.save(model.state_dict(), 'model_3pendulum_20')
     np.save('data_al_20.npy', np.asarray(X_iter))
 
-    with torch.no_grad():
-        # Plots:
-        h = 0.02
-        x_min, x_max = q_min-(q_max-q_min)/100, q_max+(q_max-q_min)/100
-        y_min, y_max = v_min-(v_max-v_min)/100, v_max+(v_max-v_min)/100
-        xx, yy = np.meshgrid(np.arange(x_min, x_max+h, h), np.arange(y_min, y_max, h))
-        xrav = xx.ravel()
-        yrav = yy.ravel()
+    # Plots:
+    h = 0.02
+    xx, yy = np.meshgrid(np.arange(q_min, q_max+h, h), np.arange(v_min, v_max, h))
+    xrav = xx.ravel()
+    yrav = yy.ravel()
 
+    with torch.no_grad():
         # Plot the results:
         plt.figure()
         inp = torch.from_numpy(
             np.float32(
-                np.c_[
-                    (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                    xrav,
-                    np.zeros(yrav.shape[0]),
-                    yrav,
-                ]
+                np.c_[(q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+                      (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+                      xrav,
+                      np.zeros(yrav.shape[0]),
+                      np.zeros(yrav.shape[0]),
+                      yrav,
+                      ]
             )
-        ).to(device)
+        )
         inp = (inp - mean) / std
         out = model(inp)
-        y_pred = np.argmax(out.cpu().numpy(), axis=1)
+        y_pred = np.argmax(out.numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
         xit = []
@@ -380,11 +378,57 @@ with cProfile.Profile() as pr:
         for i in range(len(X_iter)):
             if (
                 norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
-                and norm(X_iter[i][2]) < 0.1
+                and norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
+                and norm(X_iter[i][3]) < 0.1 and norm(X_iter[i][4]) < 0.1
+            ):
+                xit.append(X_iter[i][2])
+                yit.append(X_iter[i][5])
+                if X_iter[i][6] == 1:
+                    cit.append(0)
+                else:
+                    cit.append(1)
+        plt.scatter(
+            xit,
+            yit,
+            c=cit,
+            marker=".",
+            alpha=0.5,
+            cmap=plt.cm.Paired,
+        )
+        plt.xlim([q_min, q_max])
+        plt.ylim([v_min, v_max])
+        plt.grid()
+        plt.title("Third actuator")
+
+        plt.figure()
+        inp = torch.from_numpy(
+            np.float32(
+                np.c_[(q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+                      xrav,
+                      (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+                      np.zeros(yrav.shape[0]),
+                      yrav,
+                      np.zeros(yrav.shape[0]),
+                      ]
+            )
+        )
+        inp = (inp - mean) / std
+        out = model(inp)
+        y_pred = np.argmax(out.numpy(), axis=1)
+        Z = y_pred.reshape(xx.shape)
+        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        xit = []
+        yit = []
+        cit = []
+        for i in range(len(X_iter)):
+            if (
+                norm(X_iter[i][0] - (q_min + q_max) / 2) < 0.1
+                and norm(X_iter[i][2] - (q_min + q_max) / 2) < 0.1
+                and norm(X_iter[i][3]) < 0.1 and norm(X_iter[i][5]) < 0.1
             ):
                 xit.append(X_iter[i][1])
-                yit.append(X_iter[i][3])
-                if X_iter[i][4] == 1:
+                yit.append(X_iter[i][4])
+                if X_iter[i][6] == 1:
                     cit.append(0)
                 else:
                     cit.append(1)
@@ -404,17 +448,18 @@ with cProfile.Profile() as pr:
         plt.figure()
         inp = torch.from_numpy(
             np.float32(
-                np.c_[
-                    xrav,
-                    (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                    yrav,
-                    np.zeros(yrav.shape[0]),
-                ]
+                np.c_[xrav,
+                      (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+                      (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
+                      yrav,
+                      np.zeros(yrav.shape[0]),
+                      np.zeros(yrav.shape[0]),
+                      ]
             )
-        ).to(device)
+        )
         inp = (inp - mean) / std
         out = model(inp)
-        y_pred = np.argmax(out.cpu().numpy(), axis=1)
+        y_pred = np.argmax(out.numpy(), axis=1)
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
         xit = []
@@ -423,11 +468,12 @@ with cProfile.Profile() as pr:
         for i in range(len(X_iter)):
             if (
                 norm(X_iter[i][1] - (q_min + q_max) / 2) < 0.1
-                and norm(X_iter[i][3]) < 0.1
+                and norm(X_iter[i][2] - (q_min + q_max) / 2) < 0.1
+                and norm(X_iter[i][4]) < 0.1 and norm(X_iter[i][5]) < 0.1
             ):
                 xit.append(X_iter[i][0])
-                yit.append(X_iter[i][2])
-                if X_iter[i][4] == 1:
+                yit.append(X_iter[i][3])
+                if X_iter[i][6] == 1:
                     cit.append(0)
                 else:
                     cit.append(1)

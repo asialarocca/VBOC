@@ -96,7 +96,7 @@ class OCPtriplependulum:
         self.Cmax = 10.
         self.thetamax = np.pi / 4 + np.pi
         self.thetamin = - np.pi / 4 + np.pi
-        self.dthetamax = 5.
+        self.dthetamax = 20.
 
         self.ocp.constraints.lbu = np.array([-self.Cmax, -self.Cmax, -self.Cmax])
         self.ocp.constraints.ubu = np.array([self.Cmax, self.Cmax, self.Cmax])
@@ -128,8 +128,8 @@ class OCPtriplependulum:
 
         self.ocp.constraints.C = np.array([[0., 0., 0., 0., 0., 0., 0.],[0., 0., 0., 0., 0., 0., 0.],[0., 0., 0., 0., 0., 0., 0.]])
         self.ocp.constraints.D = np.array([[0., 0., 0.],[0., 0., 0.],[0., 0., 0.]])
-        self.ocp.constraints.lg = np.array([0.,0.,0.])
-        self.ocp.constraints.ug = np.array([0., 0., 0.])
+        self.ocp.constraints.lg = np.array([[0.], [0.], [0.]])
+        self.ocp.constraints.ug = np.array([[0.], [0.], [0.]])
         
         # options
         self.ocp.solver_options.nlp_solver_type = "SQP"
@@ -137,7 +137,7 @@ class OCPtriplependulum:
         self.ocp.solver_options.exact_hess_constr = 0
         # self.ocp.solver_options.exact_hess_cost = 0
         self.ocp.solver_options.exact_hess_dyn = 0
-        self.ocp.solver_options.nlp_solver_tol_stat = 1e-4
+        self.ocp.solver_options.nlp_solver_tol_stat = 1e-3
         # self.ocp.solver_options.qp_solver_iter_max = 100
         self.ocp.solver_options.nlp_solver_max_iter = 1000
         self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"

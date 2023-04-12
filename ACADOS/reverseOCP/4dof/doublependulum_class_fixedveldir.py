@@ -121,7 +121,7 @@ class OCPdoublependulumR:
         self.Cmax = 10.
         self.thetamax = np.pi / 4 + np.pi
         self.thetamin = - np.pi / 4 + np.pi
-        self.dthetamax = 20.
+        self.dthetamax = 5.
 
         # cost
         self.ocp.cost.cost_type_0 = 'EXTERNAL'
