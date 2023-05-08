@@ -12,13 +12,16 @@ import torch.nn as nn
 from my_nn import NeuralNetRegression
 from multiprocessing import Pool
 from torch.utils.data import DataLoader
+from plots_2dof import plots_2dof
+from plots_3dof import plots_3dof
 
 def testing(v):
 
     valid_data = np.ndarray((0, ocp_dims))
 
     # Reset the time parameters:
-    N = ocp.N # number of time steps
+    N = N_start 
+    ocp.N = N
     ocp.ocp_solver.set_new_time_steps(np.full((N,), 1.))
     ocp.ocp_solver.update_qp_solver_cond_N(N)
 
@@ -124,39 +127,8 @@ def testing(v):
     # If the solver fails, try with a slightly different initial condition:
     for _ in range(10):
 
-        # Reset current iterate:
-        ocp.ocp_solver.reset()
-
-        # Set parameters, guesses and constraints:
-        for i in range(N):
-            ocp.ocp_solver.set(i, 'x', x_sol_guess[i])
-            ocp.ocp_solver.set(i, 'u', u_sol_guess[i])
-            ocp.ocp_solver.set(i, 'p', p)
-            ocp.ocp_solver.constraints_set(i, 'lbx', q_lb) 
-            ocp.ocp_solver.constraints_set(i, 'ubx', q_ub) 
-            ocp.ocp_solver.constraints_set(i, 'lbu', u_lb)
-            ocp.ocp_solver.constraints_set(i, 'ubu', u_ub)
-            ocp.ocp_solver.constraints_set(i, 'C', np.zeros((system_sel,ocp.ocp.dims.nx)))
-            ocp.ocp_solver.constraints_set(i, 'D', np.zeros((system_sel,system_sel)))
-            ocp.ocp_solver.constraints_set(i, 'lg', np.zeros((system_sel)))
-            ocp.ocp_solver.constraints_set(i, 'ug', np.zeros((system_sel)))
-
-        C = np.zeros((system_sel,ocp.ocp.dims.nx))
-        d = np.array([p[:system_sel].tolist()])
-        dt = np.transpose(d)
-        C[:,system_sel:ocp_dims] = np.identity(system_sel)-np.matmul(dt,d) # np.identity(3)-np.matmul(np.matmul(dt,np.linalg.inv(np.matmul(d,dt))),d)
-        ocp.ocp_solver.constraints_set(0, "C", C, api='new') 
-
-        ocp.ocp_solver.constraints_set(0, "lbx", q_init_lb)
-        ocp.ocp_solver.constraints_set(0, "ubx", q_init_ub)
-
-        ocp.ocp_solver.constraints_set(N, "lbx", q_fin_lb)
-        ocp.ocp_solver.constraints_set(N, "ubx", q_fin_ub)
-        ocp.ocp_solver.set(N, 'x', x_sol_guess[-1])
-        ocp.ocp_solver.set(N, 'p', p)
-
         # Solve the OCP:
-        status = ocp.ocp_solver.solve()
+        status = ocp.OCP_solve(x_sol_guess, u_sol_guess, p, q_lb, q_ub, u_lb, u_ub, q_init_lb, q_init_ub, q_fin_lb, q_fin_ub)
 
         if status == 0: # the solver has found a solution
 
@@ -186,7 +158,8 @@ def testing(v):
         else:
 
             # Reset the number of steps used in the OCP:
-            N = ocp.N
+            N = N_start 
+            ocp.N = N
             ocp.ocp_solver.set_new_time_steps(np.full((N,), 1.))
             ocp.ocp_solver.update_qp_solver_cond_N(N)
 
@@ -288,6 +261,7 @@ def testing(v):
                         # direction of the current joint velocities.
 
                         N_test = N - f
+                        ocp.N = N_test
                         ocp.ocp_solver.set_new_time_steps(np.full((N_test,), 1.))
                         ocp.ocp_solver.update_qp_solver_cond_N(N_test)
 
@@ -316,40 +290,9 @@ def testing(v):
                         all_ok = False
 
                         for _ in range(5):
-                            # Reset current iterate:
-                            ocp.ocp_solver.reset()
-
-                            # Set parameters, guesses and constraints:
-                            for i in range(N_test):
-                                ocp.ocp_solver.set(i, 'x', x_sol_guess[i])
-                                ocp.ocp_solver.set(i, 'u', u_sol_guess[i])
-                                ocp.ocp_solver.set(i, 'p', p)
-                                ocp.ocp_solver.constraints_set(i, 'lbx', q_lb) 
-                                ocp.ocp_solver.constraints_set(i, 'ubx', q_ub) 
-                                ocp.ocp_solver.constraints_set(i, 'lbu', u_lb)
-                                ocp.ocp_solver.constraints_set(i, 'ubu', u_ub)
-                                ocp.ocp_solver.constraints_set(i, 'C', np.zeros((system_sel,ocp.ocp.dims.nx)))
-                                ocp.ocp_solver.constraints_set(i, 'D', np.zeros((system_sel,system_sel)))
-                                ocp.ocp_solver.constraints_set(i, 'lg', np.zeros((system_sel)))
-                                ocp.ocp_solver.constraints_set(i, 'ug', np.zeros((system_sel)))
-
-                            C = np.zeros((system_sel,ocp.ocp.dims.nx))
-                            d = np.array([p[:system_sel].tolist()])
-                            dt = np.transpose(d)
-                            C[:,system_sel:ocp_dims] = np.identity(system_sel)-np.matmul(dt,d) # np.identity(3)-np.matmul(np.matmul(dt,np.linalg.inv(np.matmul(d,dt))),d)
-                            ocp.ocp_solver.constraints_set(0, "C", C, api='new') 
                             
-                            ocp.ocp_solver.constraints_set(0, "C", C, api='new')  
-                            ocp.ocp_solver.constraints_set(0, "lbx", q_init_lb)
-                            ocp.ocp_solver.constraints_set(0, "ubx", q_init_ub)
-
-                            ocp.ocp_solver.constraints_set(N_test, "lbx", q_fin_lb)
-                            ocp.ocp_solver.constraints_set(N_test, "ubx", q_fin_ub)
-                            ocp.ocp_solver.set(N_test, 'x', x_sol_guess[-1])
-                            ocp.ocp_solver.set(N_test, 'p', p)
-
                             # Solve the OCP:
-                            status = ocp.ocp_solver.solve()
+                            status = ocp.OCP_solve(x_sol_guess, u_sol_guess, p, q_lb, q_ub, u_lb, u_ub, q_init_lb, q_init_ub, q_fin_lb, q_fin_ub)
 
                             if status == 0: # the solver has found a solution
 
@@ -492,6 +435,7 @@ ocp_dims = ocp.ocp.dims.nx - 1
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # pytorch device
 
 dt_sym = 1e-2 # time step duration
+N_start = 100 # initial number of timesteps
 tol = ocp.ocp.solver_options.nlp_solver_tol_stat # OCP cost tolerance
 eps = tol*10 # unviable data generation parameter
 
@@ -505,7 +449,6 @@ with Pool(cpu_num) as p:
 
 # traj, statpos, statneg = zip(*temp)
 X_temp = [i for i in traj if i is not None]
-
 print('Data generation completed')
 
 # Print data generations statistics:
@@ -515,7 +458,7 @@ X_save = np.array([i for f in X_temp for i in f])
 print('Saved/tot', len(X_save)/(solved*100))
 
 # Save training data:
-np.save('data_' + str(system_sel) + 'dof_vboc_' + str(v_max) + '.npy', np.asarray(X_save))
+np.save('data_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)) + '.npy', np.asarray(X_save))
 
 # # Load training data:
 # X_save = np.load('data_' + system_sel + 'dof_vboc_' + v_max + '.npy')
@@ -592,7 +535,7 @@ plt.figure()
 plt.plot(training_evol)
 
 # Save the model:
-torch.save(model_dir.state_dict(), 'model_' + str(system_sel) + 'dof_vboc_' + str(v_max))
+torch.save(model_dir.state_dict(), 'model_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)))
 
 # Show the resulting RMSE on the training data:
 outputs = np.empty((len(X_train_dir),1))
@@ -609,310 +552,29 @@ with torch.no_grad():
     outputs_tensor = torch.Tensor(outputs).to(device)
     print('RMSE train data: ', torch.sqrt(criterion_dir(outputs_tensor, y_iter_tensor))) 
 
-# Show training data:
+# Show training data and resulting set approximation:
 if system_sel == 3:
-    plt.figure()
-    ax = plt.axes(projection ="3d")
-    ax.scatter3D(X_save[:,0],X_save[:,1],X_save[:,2])
-    plt.title("OCP dataset positions")
-    plt.figure()
-    ax = plt.axes(projection ="3d")
-    ax.scatter3D(X_save[:,3],X_save[:,4],X_save[:,5])
-    plt.title("OCP dataset velocities")
+    plots_3dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir, device)
 elif system_sel == 2:
-    plt.figure()
-    plt.scatter(X_save[:,0],X_save[:,1],s=0.1)
-    plt.legend(loc="best", shadow=False, scatterpoints=1)
-    plt.title("OCP dataset positions")
-    plt.figure()
-    plt.scatter(X_save[:,2],X_save[:,3],s=0.1)
-    plt.legend(loc="best", shadow=False, scatterpoints=1)
-    plt.title("OCP dataset velocities")
+    plots_2dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir, device)
 
-# Show the resulting set approximation:
-with torch.no_grad():
-    h = 0.01
-    xx, yy = np.meshgrid(np.arange(q_min, q_max, h), np.arange(v_min, v_max, h))
-    xrav = xx.ravel()
-    yrav = yy.ravel()
+# # Compute resulting RMSE wrt testing data:
+# X_test = np.load('../data' + str(system_sel) + '_test_10.npy')
 
-    if system_sel == 3:
-        plt.figure()
-        inp = np.float32(
-                np.c_[(q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                        (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                        xrav,
-                        np.zeros(yrav.shape[0]),
-                        np.zeros(yrav.shape[0]),
-                        yrav,
-                        np.empty(yrav.shape[0]),
-                        ]
-            )
-        for i in range(inp.shape[0]):
-            vel_norm = norm([inp[i,3],inp[i,4],inp[i,5]])
-            inp[i][0] = (inp[i][0] - mean_dir) / std_dir
-            inp[i][1] = (inp[i][1] - mean_dir) / std_dir
-            inp[i][2] = (inp[i][2] - mean_dir) / std_dir
-            if vel_norm != 0:
-                inp[i][4] = inp[i][4] / vel_norm
-                inp[i][3] = inp[i][3] / vel_norm
-                inp[i][5] = inp[i][5] / vel_norm
-            inp[i][6] = vel_norm
-        out = (model_dir(torch.from_numpy(inp[:,:6].astype(np.float32)).to(device))).cpu().numpy() 
-        y_pred = np.empty(out.shape)
-        for i in range(len(out)):
-            if inp[i][6] > out[i]:
-                y_pred[i] = 0
-            else:
-                y_pred[i] = 1
-        Z = y_pred.reshape(xx.shape)
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # xit = []
-        # yit = []
-        # for i in range(len(X_save)):
-        #     if (
-        #         norm(X_save[i][0] - (q_min + q_max) / 2) < 0.1 and
-        #         norm(X_save[i][1] - (q_min + q_max) / 2) < 0.1
-        #         and norm(X_save[i][3]) < 0.1
-        #         and norm(X_save[i][4]) < 0.1
-        #     ):
-        #         xit.append(X_save[i][2])
-        #         yit.append(X_save[i][5])
-        # plt.plot(
-        #     xit,
-        #     yit,
-        #     "ko",
-        #     markersize=2
-        # )
-        plt.xlim([q_min, q_max])
-        plt.ylim([v_min, v_max])
-        plt.ylabel('$\dot{q}_3$')
-        plt.xlabel('$q_3$')
-        plt.grid()
-        plt.title("Classifier section")
+# X_test_dir = np.empty((X_test.shape[0],7))
+# for i in range(X_test_dir.shape[0]):
 
-        # Plot the results:
-        plt.figure()
-        inp = np.float32(
-                np.c_[(q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                        xrav,
-                        (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                        np.zeros(yrav.shape[0]),
-                        yrav,
-                        np.zeros(yrav.shape[0]),
-                        np.empty(yrav.shape[0]),
-                        ]
-            )
-        for i in range(inp.shape[0]):
-            vel_norm = norm([inp[i,3],inp[i,4],inp[i,5]])
-            inp[i][0] = (inp[i][0] - mean_dir) / std_dir
-            inp[i][1] = (inp[i][1] - mean_dir) / std_dir
-            inp[i][2] = (inp[i][2] - mean_dir) / std_dir
-            if vel_norm != 0:
-                inp[i][4] = inp[i][4] / vel_norm
-                inp[i][3] = inp[i][3] / vel_norm
-                inp[i][5] = inp[i][5] / vel_norm
-            inp[i][6] = vel_norm
-        out = (model_dir(torch.from_numpy(inp[:,:6].astype(np.float32)).to(device))).cpu().numpy() 
-        y_pred = np.empty(out.shape)
-        for i in range(len(out)):
-            if inp[i][6] > out[i]:
-                y_pred[i] = 0
-            else:
-                y_pred[i] = 1
-        Z = y_pred.reshape(xx.shape)
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # xit = []
-        # yit = []
-        # for i in range(len(X_save)):
-        #     if (
-        #         norm(X_save[i][0] - (q_min + q_max) / 2) < 0.1 and
-        #         norm(X_save[i][2] - (q_min + q_max) / 2) < 0.1
-        #         and norm(X_save[i][3]) < 0.1
-        #         and norm(X_save[i][5]) < 0.1
-        #     ):
-        #         xit.append(X_save[i][1])
-        #         yit.append(X_save[i][4])
-        # plt.plot(
-        #     xit,
-        #     yit,
-        #     "ko",
-        #     markersize=2
-        # )
-        plt.xlim([q_min, q_max])
-        plt.ylim([v_min, v_max])
-        plt.ylabel('$\dot{q}_2$')
-        plt.xlabel('$q_2$')
-        plt.grid()
-        plt.title("Classifier section")
+#     vel_norm = norm(X_test[i][system_sel:ocp_dims])
+#     X_test_dir[i][ocp_dims] = vel_norm
 
-        # Plot the results:
-        plt.figure()
-        inp = np.float32(
-                np.c_[xrav,
-                        (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                        (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                        yrav,
-                        np.zeros(yrav.shape[0]),
-                        np.zeros(yrav.shape[0]),
-                        np.empty(yrav.shape[0]),
-                        ]
-            )
-        for i in range(inp.shape[0]):
-            vel_norm = norm([inp[i,3],inp[i,4],inp[i,5]])
-            inp[i][0] = (inp[i][0] - mean_dir) / std_dir
-            inp[i][1] = (inp[i][1] - mean_dir) / std_dir
-            inp[i][2] = (inp[i][2] - mean_dir) / std_dir
-            if vel_norm != 0:
-                inp[i][4] = inp[i][4] / vel_norm
-                inp[i][3] = inp[i][3] / vel_norm
-                inp[i][5] = inp[i][5] / vel_norm
-            inp[i][6] = vel_norm
-        out = (model_dir(torch.from_numpy(inp[:,:6].astype(np.float32)).to(device))).cpu().numpy() 
-        y_pred = np.empty(out.shape)
-        for i in range(len(out)):
-            if inp[i][6] > out[i]:
-                y_pred[i] = 0
-            else:
-                y_pred[i] = 1
-        Z = y_pred.reshape(xx.shape)
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # xit = []
-        # yit = []
-        # for i in range(len(X_save)):
-        #     if (
-        #         norm(X_save[i][1] - (q_min + q_max) / 2) < 0.1 and
-        #         norm(X_save[i][2] - (q_min + q_max) / 2) < 0.1
-        #         and norm(X_save[i][4]) < 0.1
-        #         and norm(X_save[i][5]) < 0.1
-        #     ):
-        #         xit.append(X_save[i][0])
-        #         yit.append(X_save[i][3])
-        # plt.plot(
-        #     xit,
-        #     yit,
-        #     "ko",
-        #     markersize=2
-        # )
-        plt.xlim([q_min, q_max])
-        plt.ylim([v_min, v_max])
-        plt.ylabel('$\dot{q}_1$')
-        plt.xlabel('$q_1$')
-        plt.grid()
-        plt.title("Classifier section")
-    
-    elif system_sel == 2:
-        plt.figure()
-        inp = np.c_[
-                    (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                    xrav,
-                    np.zeros(yrav.shape[0]),
-                    yrav,
-                    np.empty(yrav.shape[0]),
-                ]
-        for i in range(inp.shape[0]):
-            vel_norm = norm([inp[i][2],inp[i][3]])
-            inp[i][0] = (inp[i][0] - mean_dir) / std_dir
-            inp[i][1] = (inp[i][1] - mean_dir) / std_dir
-            if vel_norm != 0:
-                inp[i][2] = inp[i][2] / vel_norm
-                inp[i][3] = inp[i][3] / vel_norm
-            inp[i][4] = vel_norm
-        out = (model_dir(torch.from_numpy(inp[:,:4].astype(np.float32)).to(device))).cpu().numpy() 
-        y_pred = np.empty(out.shape)
-        for i in range(len(out)):
-            if inp[i][4] > out[i]:
-                y_pred[i] = 0
-            else:
-                y_pred[i] = 1
-        Z = y_pred.reshape(xx.shape)
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # xit = []
-        # yit = []
-        # for i in range(X_save.shape[0]):
-        #     if (
-        #         norm(X_save[i][0] - (q_min + q_max) / 2) < 0.01
-        #         and norm(X_save[i][2]) < 0.1
-        #     ):
-        #         xit.append(X_save[i][1])
-        #         yit.append(X_save[i][3])
-        # plt.plot(
-        #     xit,
-        #     yit,
-        #     "ko",
-        #     markersize=2
-        # )
-        plt.xlim([q_min, q_max])
-        plt.ylim([v_min, v_max])
-        plt.ylabel('$\dot{q}_2$')
-        plt.xlabel('$q_2$')
-        plt.grid()
-        plt.title("Classifier section")
+#     for l in range(system_sel):
+#         X_test_dir[i][l] = (X_test[i][l] - mean_dir) / std_dir
+#         X_test_dir[i][l+system_sel] = X_test[i][l+system_sel] / vel_norm
 
-        plt.figure()
-        inp = np.c_[
-                    xrav,
-                    (q_min + q_max) / 2 * np.ones(xrav.shape[0]),
-                    yrav,
-                    np.zeros(yrav.shape[0]),
-                    np.empty(yrav.shape[0]),
-                ]
-        for i in range(inp.shape[0]):
-            vel_norm = norm([inp[i][2],inp[i][3]])
-            inp[i][0] = (inp[i][0] - mean_dir) / std_dir
-            inp[i][1] = (inp[i][1] - mean_dir) / std_dir
-            if vel_norm != 0:
-                inp[i][2] = inp[i][2] / vel_norm
-                inp[i][3] = inp[i][3] / vel_norm
-            inp[i][4] = vel_norm
-        out = (model_dir(torch.from_numpy(inp[:,:4].astype(np.float32)).to(device))).cpu().numpy() 
-        y_pred = np.empty(out.shape)
-        for i in range(len(out)):
-            if inp[i][4] > out[i]:
-                y_pred[i] = 0
-            else:
-                y_pred[i] = 1
-        Z = y_pred.reshape(xx.shape)
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # xit = []
-        # yit = []
-        # for i in range(X_save.shape[0]):
-        #     if (
-        #         norm(X_save[i][1] - (q_min + q_max) / 2) < 0.01
-        #         and norm(X_save[i][3]) < 0.1
-        #     ):
-        #         xit.append(X_save[i][0])
-        #         yit.append(X_save[i][2])
-        # plt.plot(
-        #     xit,
-        #     yit,
-        #     "ko",
-        #     markersize=2
-        # )
-        plt.xlim([q_min, q_max])
-        plt.ylim([v_min, v_max])
-        plt.ylabel('$\dot{q}_1$')
-        plt.xlabel('$q_1$')
-        plt.grid()
-        plt.title("Classifier section")
-
-# Compute resulting RMSE wrt testing data:
-X_test = np.load('../data' + str(system_sel) + '_test_10.npy')
-
-X_test_dir = np.empty((X_test.shape[0],7))
-for i in range(X_test_dir.shape[0]):
-
-    vel_norm = norm(X_test[i][system_sel:ocp_dims])
-    X_test_dir[i][ocp_dims] = vel_norm
-
-    for l in range(system_sel):
-        X_test_dir[i][l] = (X_test[i][l] - mean_dir) / std_dir
-        X_test_dir[i][l+system_sel] = X_test[i][l+system_sel] / vel_norm
-
-with torch.no_grad():
-    X_iter_tensor = torch.Tensor(X_test_dir[:,:ocp_dims]).to(device)
-    y_iter_tensor = torch.Tensor(X_test_dir[:,ocp_dims:]).to(device)
-    outputs = model_dir(X_iter_tensor).cpu().numpy()
-    print('RMSE test data wrt VBOC NN: ', torch.sqrt(criterion_dir(model_dir(X_iter_tensor), y_iter_tensor)))
+# with torch.no_grad():
+#     X_iter_tensor = torch.Tensor(X_test_dir[:,:ocp_dims]).to(device)
+#     y_iter_tensor = torch.Tensor(X_test_dir[:,ocp_dims:]).to(device)
+#     outputs = model_dir(X_iter_tensor).cpu().numpy()
+#     print('RMSE test data wrt VBOC NN: ', torch.sqrt(criterion_dir(model_dir(X_iter_tensor), y_iter_tensor)))
 
 plt.show()

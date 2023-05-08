@@ -2,7 +2,7 @@ import scipy.linalg as lin
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSim, AcadosSimSolver
 import numpy as np
 from acados_template import AcadosModel
-from casadi import SX, vertcat, cos, sin, exp, norm_2, fmax, tanh
+from casadi import SX, vertcat, cos, sin
 import matplotlib.pyplot as plt
 import time
 
@@ -182,6 +182,45 @@ class OCPdoublependulumINIT(OCPdoublependulum):
 
         # solver
         self.ocp_solver = AcadosOcpSolver(self.ocp, json_file="acados_ocp.json")
+
+    def OCP_solve(self, x_sol_guess, u_sol_guess, p, q_lb, q_ub, u_lb, u_ub, q_init_lb, q_init_ub, q_fin_lb, q_fin_ub):
+
+        # Reset current iterate:
+        self.ocp_solver.reset()
+
+        # Set parameters, guesses and constraints:
+        for i in range(self.N):
+            self.ocp_solver.set(i, 'x', x_sol_guess[i])
+            self.ocp_solver.set(i, 'u', u_sol_guess[i])
+            self.ocp_solver.set(i, 'p', p)
+            self.ocp_solver.constraints_set(i, 'lbx', q_lb) 
+            self.ocp_solver.constraints_set(i, 'ubx', q_ub) 
+            self.ocp_solver.constraints_set(i, 'lbu', u_lb)
+            self.ocp_solver.constraints_set(i, 'ubu', u_ub)
+            self.ocp_solver.constraints_set(i, 'C', np.zeros((2,5)))
+            self.ocp_solver.constraints_set(i, 'D', np.zeros((2,2)))
+            self.ocp_solver.constraints_set(i, 'lg', np.zeros((2)))
+            self.ocp_solver.constraints_set(i, 'ug', np.zeros((2)))
+
+        C = np.zeros((2,5))
+        d = np.array([p[:2].tolist()])
+        dt = np.transpose(d)
+        C[:,2:4] = np.identity(2)-np.matmul(dt,d)
+        self.ocp_solver.constraints_set(0, "C", C, api='new') 
+
+        self.ocp_solver.constraints_set(0, "lbx", q_init_lb)
+        self.ocp_solver.constraints_set(0, "ubx", q_init_ub)
+
+        self.ocp_solver.constraints_set(self.N, "lbx", q_fin_lb)
+        self.ocp_solver.constraints_set(self.N, "ubx", q_fin_ub)
+        self.ocp_solver.set(self.N, 'x', x_sol_guess[-1])
+        self.ocp_solver.set(self.N, 'p', p)
+
+        # Solve the OCP:
+        status = self.ocp_solver.solve()
+
+        return status
+
 
 class SYMdoublependulumINIT(OCPdoublependulum):
     def __init__(self):
