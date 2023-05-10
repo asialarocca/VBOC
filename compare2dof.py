@@ -2,7 +2,7 @@ import numpy as np
 import random 
 import matplotlib.pyplot as plt
 from numpy.linalg import norm as norm
-from doublependulum_class_fixedveldir import OCPdoublependulumRINIT
+from doublependulum_class_fixedveldir import OCPdoublependulumINIT
 import warnings
 warnings.filterwarnings("ignore")
 import torch
@@ -121,7 +121,7 @@ def testing(v):
     return ocp.ocp_solver.get(0, "x")[:4]
 
 # Ocp initialization:
-ocp = OCPdoublependulumRINIT()
+ocp = OCPdoublependulumINIT()
 
 # Position, velocity and torque bounds:
 v_max = ocp.dthetamax

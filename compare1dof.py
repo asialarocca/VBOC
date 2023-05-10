@@ -1,7 +1,10 @@
-import numpy as np
+import os
+import sys
+sys.path.insert(1, os.getcwd() + '/VBOC')
+
 import numpy as np
 import matplotlib.pyplot as plt
-from pendulum_class_fixedveldir import OCPpendulumINIT
+from pendulum_class_fixedveldir import OCPpendulum
 import random
 import torch
 import torch.nn as nn
@@ -59,7 +62,7 @@ def testing(v):
         return None
 
 # Ocp initialization:
-ocp = OCPpendulumINIT()
+ocp = OCPpendulum()
 
 # Position, velocity and torque bounds:
 v_max = ocp.dthetamax

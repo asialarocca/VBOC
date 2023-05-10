@@ -1,10 +1,7 @@
-import scipy.linalg as lin
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSim, AcadosSimSolver
 import numpy as np
 from acados_template import AcadosModel
 from casadi import SX, vertcat, cos, sin
-import matplotlib.pyplot as plt
-import time
 
 class OCPdoublependulum:
     def __init__(self):
@@ -107,9 +104,8 @@ class OCPdoublependulum:
         self.ocp = AcadosOcp()
 
         # times
-        Tf = 100
-        self.N = Tf
-        self.ocp.solver_options.tf = Tf
+        self.N = 100
+        self.ocp.solver_options.tf = self.N
         self.ocp.dims.N = self.N
 
         # ocp model

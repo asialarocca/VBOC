@@ -49,21 +49,21 @@ def plots_2dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir,
                 y_pred[i] = 1
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # xit = []
-        # yit = []
-        # for i in range(X_save.shape[0]):
-        #     if (
-        #         norm(X_save[i][0] - (q_min + q_max) / 2) < 0.01
-        #         and norm(X_save[i][2]) < 0.1
-        #     ):
-        #         xit.append(X_save[i][1])
-        #         yit.append(X_save[i][3])
-        # plt.plot(
-        #     xit,
-        #     yit,
-        #     "ko",
-        #     markersize=2
-        # )
+        xit = []
+        yit = []
+        for i in range(X_save.shape[0]):
+            if (
+                norm(X_save[i][0] - (q_min + q_max) / 2) < 0.01
+                and norm(X_save[i][2]) < 0.1
+            ):
+                xit.append(X_save[i][1])
+                yit.append(X_save[i][3])
+        plt.plot(
+            xit,
+            yit,
+            "ko",
+            markersize=2
+        )
         plt.xlim([q_min, q_max])
         plt.ylim([v_min, v_max])
         plt.ylabel('$\dot{q}_2$')
@@ -96,21 +96,21 @@ def plots_2dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir,
                 y_pred[i] = 1
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # xit = []
-        # yit = []
-        # for i in range(X_save.shape[0]):
-        #     if (
-        #         norm(X_save[i][1] - (q_min + q_max) / 2) < 0.01
-        #         and norm(X_save[i][3]) < 0.1
-        #     ):
-        #         xit.append(X_save[i][0])
-        #         yit.append(X_save[i][2])
-        # plt.plot(
-        #     xit,
-        #     yit,
-        #     "ko",
-        #     markersize=2
-        # )
+        xit = []
+        yit = []
+        for i in range(X_save.shape[0]):
+            if (
+                norm(X_save[i][1] - (q_min + q_max) / 2) < 0.01
+                and norm(X_save[i][3]) < 0.1
+            ):
+                xit.append(X_save[i][0])
+                yit.append(X_save[i][2])
+        plt.plot(
+            xit,
+            yit,
+            "ko",
+            markersize=2
+        )
         plt.xlim([q_min, q_max])
         plt.ylim([v_min, v_max])
         plt.ylabel('$\dot{q}_1$')

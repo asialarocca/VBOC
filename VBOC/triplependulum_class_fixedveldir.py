@@ -1,12 +1,7 @@
-import scipy.linalg as lin
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSim, AcadosSimSolver
 import numpy as np
 from acados_template import AcadosModel
-from casadi import SX, vertcat, cos, sin, exp, norm_2, fmax, tanh
-import matplotlib.pyplot as plt
-import time
-from scipy.integrate import odeint
-from scipy.optimize import fsolve
+from casadi import SX, vertcat, cos, sin
 
 
 class OCPtriplependulum:
@@ -76,9 +71,8 @@ class OCPtriplependulum:
         self.ocp = AcadosOcp()
 
         # times
-        Tf = 100
-        self.N = Tf
-        self.ocp.solver_options.tf = Tf
+        self.N = 100
+        self.ocp.solver_options.tf = self.N
         self.ocp.dims.N = self.N
 
         # ocp model
@@ -138,7 +132,7 @@ class OCPtriplependulum:
         # self.ocp.solver_options.exact_hess_cost = 0
         self.ocp.solver_options.exact_hess_dyn = 0
         self.ocp.solver_options.nlp_solver_tol_stat = 1e-3
-        # self.ocp.solver_options.qp_solver_iter_max = 100
+        self.ocp.solver_options.qp_solver_iter_max = 100
         self.ocp.solver_options.nlp_solver_max_iter = 1000
         self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"
         self.ocp.solver_options.alpha_reduction = 0.3

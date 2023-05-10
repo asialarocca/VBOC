@@ -102,3 +102,28 @@ class OCPpendulum:
         self.ocp.solver_options.levenberg_marquardt = 1e-5
 
         self.ocp_solver = AcadosOcpSolver(self.ocp, json_file="acados_ocp.json")
+
+    def OCP_solve(self, x_sol_guess, u_sol_guess, cost_dir, q_lb, q_ub, q_init, q_fin):
+
+        # Reset solver:
+        self.ocp_solver.reset()
+
+        # Constraints and guess:
+        for i in range(self.N):
+            self.ocp_solver.set(i, "x", np.array(x_sol_guess[i]))
+            self.ocp_solver.set(i, "u", np.array(u_sol_guess[i]))
+            self.ocp_solver.set(i, 'p', np.array([cost_dir, 1.]))
+            self.ocp_solver.constraints_set(i, "lbx", q_lb)
+            self.ocp_solver.constraints_set(i, "ubx", q_ub)
+
+        self.ocp_solver.constraints_set(0, "lbx", np.array([q_init, -self.dthetamax, 0.]))
+        self.ocp_solver.constraints_set(0, "ubx", np.array([q_init, self.dthetamax, 1e-2]))
+        self.ocp_solver.constraints_set(self.N, "lbx", np.array([q_fin, 0., 0.]))
+        self.ocp_solver.constraints_set(self.N, "ubx", np.array([q_fin, 0., 1e-2]))  
+        self.ocp_solver.set(self.N, "x", np.array(x_sol_guess[self.N]))      
+        self.ocp_solver.set(self.N, 'p', np.array([cost_dir, 1.]))
+
+        # Solve the OCP:
+        status = self.ocp_solver.solve()
+
+        return status

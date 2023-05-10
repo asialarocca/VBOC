@@ -14,6 +14,8 @@ if __name__ == "__main__":
 
     start_time = time.time()
 
+    N_start = 50
+
     # Ocp initialization:
     ocp = OCPpendulum()
     
@@ -48,7 +50,8 @@ if __name__ == "__main__":
     for v_sel in [v_min, v_max]:
 
         # Reset the time parameters:
-        N = ocp.N # number of time steps
+        N = N_start 
+        ocp.N = N
         ocp.ocp_solver.set_new_time_steps(np.full((N,), 1.))
         ocp.ocp_solver.update_qp_solver_cond_N(N)
         
@@ -83,26 +86,8 @@ if __name__ == "__main__":
 
         while True:
 
-            # Reset solver:
-            ocp.ocp_solver.reset()
-
-            # Constraints and guess:
-            for i in range(N):
-                ocp.ocp_solver.set(i, "x", np.array(x_guess[i]))
-                ocp.ocp_solver.set(i, "u", np.array(u_guess[i]))
-                ocp.ocp_solver.set(i, 'p', np.array([cost_dir, 1.]))
-                ocp.ocp_solver.constraints_set(i, "lbx", lb)
-                ocp.ocp_solver.constraints_set(i, "ubx", ub)
-
-            ocp.ocp_solver.constraints_set(0, "lbx", np.array([q_init, v_min, 0.]))
-            ocp.ocp_solver.constraints_set(0, "ubx", np.array([q_init, v_max, 1e-2]))
-            ocp.ocp_solver.constraints_set(N, "lbx", np.array([q_fin, 0., 0.]))
-            ocp.ocp_solver.constraints_set(N, "ubx", np.array([q_fin, 0., 1e-2]))  
-            ocp.ocp_solver.set(N, "x", np.array(x_guess[N]))      
-            ocp.ocp_solver.set(N, 'p', np.array([cost_dir, 1.]))
-
             # Solve the OCP:
-            status = ocp.ocp_solver.solve()
+            status = ocp.OCP_solve(x_guess, u_guess, cost_dir, lb, ub, q_init, q_fin)
 
             # Print statistics:
             # ocp.ocp_solver.print_statistics()
@@ -184,29 +169,12 @@ if __name__ == "__main__":
 
                     # Reset the time settings:
                     N_test = N - f
+                    ocp.N = N_test
                     ocp.ocp_solver.set_new_time_steps(np.full((N_test,), 1.))
                     ocp.ocp_solver.update_qp_solver_cond_N(N_test)
 
-                    # Reset solver:
-                    ocp.ocp_solver.reset()
-
-                    # Constraints and guess:
-                    for i in range(N_test):
-                        ocp.ocp_solver.set(i, "x", x_sol[f+i])
-                        ocp.ocp_solver.set(i, "u", u_sol[f+i])
-                        ocp.ocp_solver.set(i, 'p', np.array([cost_dir, 1.]))
-                        ocp.ocp_solver.constraints_set(i, "lbx", lb)
-                        ocp.ocp_solver.constraints_set(i, "ubx", ub)
-
-                    ocp.ocp_solver.constraints_set(0, "lbx", np.array([x_sol[f][0], v_min, 0.]))
-                    ocp.ocp_solver.constraints_set(0, "ubx", np.array([x_sol[f][0], v_max, 1e-2]))
-                    ocp.ocp_solver.constraints_set(N_test, "lbx", np.array([q_fin, 0., 0.]))
-                    ocp.ocp_solver.constraints_set(N_test, "ubx", np.array([q_fin, 0., 1e-2]))
-                    ocp.ocp_solver.set(N_test, "x", np.array([q_fin, 0., 1e-2]))      
-                    ocp.ocp_solver.set(N_test, 'p', np.array([cost_dir, 1.]))
-
                     # Solve the OCP:
-                    status = ocp.ocp_solver.solve()
+                    ocp.OCP_solve( x_sol, u_sol, cost_dir, lb, ub, x_sol[f][0], q_fin)
 
                     if status == 0:
                         # Extract the new optimal state:
