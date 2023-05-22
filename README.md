@@ -21,9 +21,9 @@ The Viability-Boundary Optimal Control algorithm, referred to as "VBOC," utilize
 
 ## Additional Information
 
-For a more detailed description and comparison of these algorithms, please refer to the paper "VBOC: Learning the Viability Boundary of a Robot Manipulator using Optimal Control" by A. La Rocca, M. Saveriano, and A. Del Prete. This paper provides an accurate analysis and comparison of the algorithms mentioned above. The paper is available on arXiv: 2305.07535 [cs.RO] (2023) (http://arxiv.org/abs/2305.07535).
+For a more detailed description and comparison of these algorithms, please refer to the paper "VBOC: Learning the Viability Boundary of a Robot Manipulator using Optimal Control" by A. La Rocca, M. Saveriano, and A. Del Prete. This paper provides an accurate analysis and comparison of the algorithms mentioned above. The paper is available on arXiv: 2305.07535 [cs.RO] (2023)(http://arxiv.org/abs/2305.07535).
 
 ## References
 
 - V. Rubies-Royo and C. Tomlin, "Recursive Regression with Neural Networks: Approximating the HJI PDE Solution," in 5th International Conference on Learning Representations, Apr 2017. [Online]. Available: [http://arxiv.org/abs/1611.02739](http://arxiv.org/abs/1611.02739).
-- A. La Rocca, M. Saveriano, A. Del Prete, "VBOC: Learning the Viability Boundary of a Robot Manipulator using Optimal Control," arXiv:2305.07535 [cs.RO] (2023).
+- A. La Rocca, M. Saveriano, A. Del Prete, "VBOC: Learning the Viability Boundary of a Robot Manipulator using Optimal Control," arXiv:2305.07535 [cs.RO] (2023)(http://arxiv.org/abs/2305.07535).
