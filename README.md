@@ -1,4 +1,4 @@
-# Learning the Viability Kernels for Robotic Manipulators
+# Learning the Viability Kernel of Robotic Manipulators
 
 This GitHub repository contains data-driven algorithms for the computation of viability kernels of robotic manipulators. 
 The algorithms utilize Optimal Control Problems (OCPs) to generate training data and employ Neural Networks (NNs) to approximate the viability kernel based on this data.
