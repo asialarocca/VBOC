@@ -14,6 +14,7 @@ from multiprocessing import Pool
 from torch.utils.data import DataLoader
 from plots_2dof import plots_2dof
 from plots_3dof import plots_3dof
+import torch.nn.utils.prune as prune
 
 def testing(v):
 
@@ -412,6 +413,10 @@ start_time = time.time()
 # Select system:
 system_sel = 2 # 2 for 2dof, 3 for 3dof
 
+# Prune the model:
+prune_model = True
+prune_amount = 0.5 # percentage of connections to delete
+
 # Ocp initialization:
 if system_sel == 3:
     ocp = OCPtriplependulumINIT()
@@ -438,31 +443,31 @@ eps = tol*10 # unviable data generation parameter
 
 print('Start data generation')
 
-# Data generation:
-cpu_num = 30
-num_prob = 10000
-with Pool(cpu_num) as p:
-    traj = p.map(testing, range(num_prob))
+# # Data generation:
+# cpu_num = 30
+# num_prob = 10000
+# with Pool(cpu_num) as p:
+#     traj = p.map(testing, range(num_prob))
 
-# traj, statpos, statneg = zip(*temp)
-X_temp = [i for i in traj if i is not None]
-print('Data generation completed')
+# # traj, statpos, statneg = zip(*temp)
+# X_temp = [i for i in traj if i is not None]
+# print('Data generation completed')
 
-# Print data generations statistics:
-solved=len(X_temp)
-print('Solved/tot', len(X_temp)/num_prob)
-X_save = np.array([i for f in X_temp for i in f])
-print('Saved/tot', len(X_save)/(solved*100))
+# # Print data generations statistics:
+# solved=len(X_temp)
+# print('Solved/tot', len(X_temp)/num_prob)
+# X_save = np.array([i for f in X_temp for i in f])
+# print('Saved/tot', len(X_save)/(solved*100))
 
-# Save training data:
-np.save('data_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)) + '.npy', np.asarray(X_save))
+# # Save training data:
+# np.save('data_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)), np.asarray(X_save))
 
-# # Load training data:
-# X_save = np.load('data_' + system_sel + 'dof_vboc_' + v_max + '.npy')
+# Load training data:
+X_save = np.load('data_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)) + '.npy')
 
 # Pytorch params:
 input_layers = ocp.ocp.dims.nx - 1
-hidden_layers = 100 #(input_layers - 1) * 100
+hidden_layers = (input_layers - 1) * 100
 output_layers = 1
 learning_rate = 1e-3
 
@@ -473,8 +478,8 @@ optimizer_dir = torch.optim.Adam(model_dir.parameters(), lr=learning_rate)
 
 # Joint positions mean and variance:
 mean_dir, std_dir = torch.mean(torch.tensor(X_save[:,:system_sel].tolist())).to(device).item(), torch.std(torch.tensor(X_save[:,:system_sel].tolist())).to(device).item()
-torch.save(mean_dir, 'mean_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)))
-torch.save(std_dir, 'std_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)))
+torch.save(mean_dir, 'mean_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)) + '_' + str(hidden_layers))
+torch.save(std_dir, 'std_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)) + '_' + str(hidden_layers))
 
 # Rewrite data in the form [normalized positions, velocity direction, velocity norm]:
 X_train_dir = np.empty((X_save.shape[0],ocp.ocp.dims.nx))
@@ -482,7 +487,7 @@ X_train_dir = np.empty((X_save.shape[0],ocp.ocp.dims.nx))
 for i in range(X_train_dir.shape[0]):
 
     vel_norm = norm(X_save[i][system_sel:ocp.ocp.dims.nx - 1])
-    X_train_dir[i][ocp.ocp.dims.nx - 1] = vel_norm
+    X_train_dir[i][ocp.ocp.dims.nx - 1] = vel_norm #* 0.9
 
     for l in range(system_sel):
         X_train_dir[i][l] = (X_save[i][l] - mean_dir) / std_dir
@@ -527,15 +532,6 @@ while val > 1e-3 and it < it_max:
 
 print('Model training completed')
 
-print("Execution time: %s seconds" % (time.time() - start_time))
-
-# Show the training evolution:
-plt.figure()
-plt.plot(training_evol)
-
-# Save the model:
-torch.save(model_dir.state_dict(), 'model_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)))
-
 # Show the resulting RMSE on the training data:
 outputs = np.empty((len(X_train_dir),1))
 n_minibatch_model = pow(2,15)
@@ -551,29 +547,117 @@ with torch.no_grad():
     outputs_tensor = torch.Tensor(outputs).to(device)
     print('RMSE train data: ', torch.sqrt(criterion_dir(outputs_tensor, y_iter_tensor))) 
 
+# Compute resulting RMSE wrt testing data:
+X_test = np.load('../data' + str(system_sel) + '_test_10.npy')
+
+X_test_dir = np.empty((X_test.shape[0],ocp.ocp.dims.nx))
+for i in range(X_test_dir.shape[0]):
+    vel_norm = norm(X_test[i][system_sel:ocp.ocp.dims.nx - 1])
+    X_test_dir[i][ocp.ocp.dims.nx - 1] = vel_norm
+    for l in range(system_sel):
+        X_test_dir[i][l] = (X_test[i][l] - mean_dir) / std_dir
+        X_test_dir[i][l+system_sel] = X_test[i][l+system_sel] / vel_norm
+
+with torch.no_grad():
+    X_iter_tensor = torch.Tensor(X_test_dir[:,:ocp.ocp.dims.nx - 1]).to(device)
+    y_iter_tensor = torch.Tensor(X_test_dir[:,ocp.ocp.dims.nx - 1:]).to(device)
+    outputs = model_dir(X_iter_tensor)
+    print('RMSE test data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor)))
+
+# # Save the model:
+# torch.save(model_dir.state_dict(), 'model_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)) + '_' + str(hidden_layers))
+
+if prune_model:
+
+    parameters_to_prune = (
+        (model_dir.linear_relu_stack[0], 'weight'),
+        (model_dir.linear_relu_stack[2], 'weight'),
+        (model_dir.linear_relu_stack[4], 'weight'),
+        (model_dir.linear_relu_stack[0], 'bias'),
+        (model_dir.linear_relu_stack[2], 'bias'),
+        (model_dir.linear_relu_stack[4], 'bias'),
+    )
+
+    prune.global_unstructured(
+        parameters_to_prune,
+        pruning_method=prune.L1Unstructured,
+        amount=prune_amount,
+    )
+
+    # prune.l1_unstructured(model_dir.linear_relu_stack[0], name='weight', amount=prune_amount)
+    # prune.l1_unstructured(model_dir.linear_relu_stack[2], name='weight', amount=prune_amount)
+    # prune.l1_unstructured(model_dir.linear_relu_stack[4], name='weight', amount=prune_amount)
+    # prune.l1_unstructured(model_dir.linear_relu_stack[0], name='bias', amount=prune_amount)
+    # prune.l1_unstructured(model_dir.linear_relu_stack[2], name='bias', amount=prune_amount)
+    # prune.l1_unstructured(model_dir.linear_relu_stack[4], name='bias', amount=prune_amount)
+
+    # model_dir.load_state_dict({k: v for k, v in initial_model_params.items() if 'weight' in k or 'bias' in k}, strict=False)
+
+    print('Restart model training after pruning')
+
+    it = 1
+    val = max(X_train_dir[:,ocp.ocp.dims.nx - 1])
+
+    # Train the model
+    while val > 1e-3 and it < it_max:
+        ind = random.sample(range(len(X_train_dir)), n_minibatch)
+
+        X_iter_tensor = torch.Tensor([X_train_dir[i][:ocp.ocp.dims.nx - 1] for i in ind]).to(device)
+        y_iter_tensor = torch.Tensor([[X_train_dir[i][ocp.ocp.dims.nx - 1]] for i in ind]).to(device)
+
+        # Forward pass
+        outputs = model_dir(X_iter_tensor)
+        loss = criterion_dir(outputs, y_iter_tensor)
+
+        # Backward and optimize
+        loss.backward()
+        optimizer_dir.step()
+        optimizer_dir.zero_grad()
+
+        val = beta * val + (1 - beta) * loss.item()
+        it += 1
+
+        if it % B == 0: 
+            print(val)
+            training_evol.append(val)
+
+    print('Model training completed')
+
+    prune.remove(model_dir.linear_relu_stack[0], 'weight')
+    prune.remove(model_dir.linear_relu_stack[2], 'weight')
+    prune.remove(model_dir.linear_relu_stack[4], 'weight')
+    prune.remove(model_dir.linear_relu_stack[0], 'bias')
+    prune.remove(model_dir.linear_relu_stack[2], 'bias')
+    prune.remove(model_dir.linear_relu_stack[4], 'bias')
+
+    # print('----------------------')
+    # print(list(model_dir.named_parameters()))
+    # print(list(model_dir.named_buffers()))
+
+    with torch.no_grad():
+        X_iter_tensor = torch.Tensor(X_test_dir[:,:ocp.ocp.dims.nx - 1]).to(device)
+        y_iter_tensor = torch.Tensor(X_test_dir[:,ocp.ocp.dims.nx - 1:]).to(device)
+        outputs = model_dir(X_iter_tensor)
+        print('RMSE test data after pruning: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor)))
+
+# Compute safety margin:
+outputs = model_dir(X_iter_tensor).cpu().numpy()
+safety_margin = np.amax(np.array([(outputs[i] - X_test_dir[i][-1])/X_test_dir[i][-1] for i in range(X_test_dir.shape[0]) if outputs[i] - X_test_dir[i][-1] > 0]))
+print(safety_margin)
+
+# Save the pruned model:
+torch.save(model_dir.state_dict(), 'model_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)) + '_' + str(hidden_layers) + '_' + str(prune_amount)  + '_' + str(safety_margin))
+
+print("Execution time: %s seconds" % (time.time() - start_time))
+
+# Show the training evolution:
+plt.figure()
+plt.plot(training_evol)
+
 # Show training data and resulting set approximation:
 if system_sel == 3:
     plots_3dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir, device)
 elif system_sel == 2:
     plots_2dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir, device)
-
-# # Compute resulting RMSE wrt testing data:
-# X_test = np.load('../data' + str(system_sel) + '_test_10.npy')
-
-# X_test_dir = np.empty((X_test.shape[0],7))
-# for i in range(X_test_dir.shape[0]):
-
-#     vel_norm = norm(X_test[i][system_sel:ocp.ocp.dims.nx - 1])
-#     X_test_dir[i][ocp.ocp.dims.nx - 1] = vel_norm
-
-#     for l in range(system_sel):
-#         X_test_dir[i][l] = (X_test[i][l] - mean_dir) / std_dir
-#         X_test_dir[i][l+system_sel] = X_test[i][l+system_sel] / vel_norm
-
-# with torch.no_grad():
-#     X_iter_tensor = torch.Tensor(X_test_dir[:,:ocp.ocp.dims.nx - 1]).to(device)
-#     y_iter_tensor = torch.Tensor(X_test_dir[:,ocp.ocp.dims.nx - 1:]).to(device)
-#     outputs = model_dir(X_iter_tensor).cpu().numpy()
-#     print('RMSE test data wrt VBOC NN: ', torch.sqrt(criterion_dir(model_dir(X_iter_tensor), y_iter_tensor)))
 
 plt.show()
