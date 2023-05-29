@@ -200,7 +200,6 @@ class OCPdoublependulumINIT(OCPdoublependulum):
         # -------------------------------------------------
 
         self.ocp.solver_options.nlp_solver_type = "SQP"
-        # self.ocp.solver_options.integrator_type = "IRK"
         self.ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"
         self.ocp.solver_options.tol = 1e-2
         self.ocp.solver_options.qp_solver_iter_max = 100
@@ -208,11 +207,7 @@ class OCPdoublependulumINIT(OCPdoublependulum):
         self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"
         self.ocp.solver_options.alpha_reduction = 0.3
         self.ocp.solver_options.alpha_min = 1e-2
-        # self.ocp.solver_options.line_search_use_sufficient_descent = 1
         self.ocp.solver_options.levenberg_marquardt = 1.
-        # self.ocp.solver_options.regularize_method = "PROJECT"
-        # self.ocp.solver_options.nlp_solver_tol_ineq = 1e-2
-        # self.ocp.solver_options.nlp_solver_tol_stat = 1e-2
 
         # ocp model
         self.ocp.model = self.model
@@ -244,8 +239,7 @@ class OCPdoublependulumINIT(OCPdoublependulum):
     
     def nn_decisionfunction(self, params, mean, std, safety_margin, x):
 
-        # vel_norm = fmax(norm_2(x[2:]), 1e-6)
-        vel_norm = norm_2(x[2:])
+        vel_norm = fmax(norm_2(x[2:]), 1e-2)
 
         mean = vertcat(mean,mean,0.,0.)
         std = vertcat(std,std,vel_norm,vel_norm)
