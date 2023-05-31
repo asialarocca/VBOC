@@ -30,10 +30,11 @@ def simulate(p):
         status = ocp.OCP_solve(simX[f], q_ref, x_sol_guess, u_sol_guess)
 
         if status != 0:
-            failed_iter += 1
+            # print(status)
+            # print(ocp.ocp_solver.get_stats('residuals'))
+            # print([ocp.nn_decisionfunction(params, mean_dir, std_dir, x_sol_guess[i]) for i in range(ocp.N+1)])
 
-            print(status)
-            print(ocp.ocp_solver.get_stats('residuals'))
+            failed_iter += 1
 
             if failed_iter >= ocp.N:
                 break
@@ -45,7 +46,7 @@ def simulate(p):
                 u_sol_guess[i] = u_sol_guess[i+1]
 
             x_sol_guess[ocp.N-1] = x_sol_guess[ocp.N]
-            x_sol_guess[ocp.N] = [q_ref[0], q_ref[1], 1e-10, 1e-10]
+            x_sol_guess[ocp.N] = x_sol_guess[ocp.N]
             u_sol_guess[ocp.N-1] = [ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol_guess[ocp.N-1,0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol_guess[ocp.N-1,1])]
 
         else:
@@ -56,7 +57,7 @@ def simulate(p):
                 u_sol_guess[i] = ocp.ocp_solver.get(i+1, "u")
 
             x_sol_guess[ocp.N-1] = ocp.ocp_solver.get(ocp.N, "x")
-            x_sol_guess[ocp.N] = [q_ref[0], q_ref[1], 1e-10, 1e-10]
+            x_sol_guess[ocp.N] = x_sol_guess[ocp.N-1]
             u_sol_guess[ocp.N-1] = [ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol_guess[ocp.N-1,0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol_guess[ocp.N-1,1])]
 
             simU[f] = ocp.ocp_solver.get(0, "u")
@@ -72,14 +73,15 @@ def simulate(p):
 start_time = time.time()
 
 # Pytorch params:
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # pytorch device
+device = torch.device("cpu") # "cuda" if torch.cuda.is_available() else 
 
 model_dir = NeuralNetRegression(4, 300, 1).to(device)
 model_dir.load_state_dict(torch.load('../../model_2dof_vboc_10_300_0.5_2.4007833'))
 mean_dir = torch.load('../../mean_2dof_vboc_10_300')
 std_dir = torch.load('../../std_2dof_vboc_10_300')
+params = list(model_dir.parameters())
 
-ocp = OCPdoublependulumINIT(True, list(model_dir.parameters()), mean_dir, std_dir)
+ocp = OCPdoublependulumINIT(True, params, mean_dir, std_dir)
 sim = SYMdoublependulumINIT(True)
 
 # Generate low-discrepancy unlabeled samples:

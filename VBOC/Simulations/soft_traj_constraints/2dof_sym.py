@@ -46,7 +46,7 @@ def simulate(p):
                 u_sol_guess[i] = u_sol_guess[i+1]
 
             x_sol_guess[ocp.N-1] = x_sol_guess[ocp.N]
-            x_sol_guess[ocp.N] = [q_ref[0], q_ref[1], 1e-10, 1e-10]
+            x_sol_guess[ocp.N] = x_sol_guess[ocp.N]
             u_sol_guess[ocp.N-1] = [ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol_guess[ocp.N-1,0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol_guess[ocp.N-1,1])]
 
         else:
@@ -57,7 +57,7 @@ def simulate(p):
                 u_sol_guess[i] = ocp.ocp_solver.get(i+1, "u")
 
             x_sol_guess[ocp.N-1] = ocp.ocp_solver.get(ocp.N, "x")
-            x_sol_guess[ocp.N] = [q_ref[0], q_ref[1], 1e-10, 1e-10]
+            x_sol_guess[ocp.N] = x_sol_guess[ocp.N-1]
             u_sol_guess[ocp.N-1] = [ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol_guess[ocp.N-1,0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol_guess[ocp.N-1,1])]
 
             simU[f] = ocp.ocp_solver.get(0, "u")

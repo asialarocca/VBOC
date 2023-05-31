@@ -189,6 +189,7 @@ class OCPdoublependulumINIT(OCPdoublependulum):
         self.ocp.solver_options.alpha_reduction = 0.3
         self.ocp.solver_options.alpha_min = 1e-2
         self.ocp.solver_options.levenberg_marquardt = 1.
+        self.ocp.solver_options.regularize_method = 'PROJECT'
 
         # ocp model
         self.ocp.model = self.model
