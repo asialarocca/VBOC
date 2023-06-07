@@ -467,7 +467,7 @@ X_save = np.load('data_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)) + '.n
 
 # Pytorch params:
 input_layers = ocp.ocp.dims.nx - 1
-hidden_layers = (input_layers - 1) * 100
+hidden_layers = 100 #(input_layers - 1) * 100
 output_layers = 1
 learning_rate = 1e-3
 
@@ -487,7 +487,7 @@ X_train_dir = np.empty((X_save.shape[0],ocp.ocp.dims.nx))
 for i in range(X_train_dir.shape[0]):
 
     vel_norm = norm(X_save[i][system_sel:ocp.ocp.dims.nx - 1])
-    X_train_dir[i][ocp.ocp.dims.nx - 1] = vel_norm #* 0.9
+    X_train_dir[i][ocp.ocp.dims.nx - 1] = vel_norm 
 
     for l in range(system_sel):
         X_train_dir[i][l] = (X_save[i][l] - mean_dir) / std_dir
@@ -640,10 +640,11 @@ if prune_model:
         outputs = model_dir(X_iter_tensor)
         print('RMSE test data after pruning: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor)))
 
-# Compute safety margin:
-outputs = model_dir(X_iter_tensor).cpu().numpy()
-safety_margin = np.amax(np.array([(outputs[i] - X_test_dir[i][-1])/X_test_dir[i][-1] for i in range(X_test_dir.shape[0]) if outputs[i] - X_test_dir[i][-1] > 0]))
-print(safety_margin)
+with torch.no_grad():
+    # Compute safety margin:
+    outputs = model_dir(X_iter_tensor).cpu().numpy()
+    safety_margin = np.amax(np.array([(outputs[i] - X_test_dir[i][-1])/X_test_dir[i][-1] for i in range(X_test_dir.shape[0]) if outputs[i] - X_test_dir[i][-1] > 0]))
+    print(safety_margin)
 
 # Save the pruned model:
 torch.save(model_dir.state_dict(), 'model_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)) + '_' + str(hidden_layers) + '_' + str(prune_amount)  + '_' + str(safety_margin))

@@ -73,17 +73,17 @@ q_min = ocp.thetamin
 # Pytorch device:
 device = torch.device("cpu")
 
-# # Test data generation:
-# cpu_num = 30
-# num_prob = 1000
+# Test data generation:
+cpu_num = 30
+num_prob = 1000
 
-# with Pool(cpu_num) as p:
-#     data = p.map(testing, range(num_prob))
+with Pool(cpu_num) as p:
+    data = p.map(testing, range(num_prob))
 
-# X_test = np.array([i for i in data if i is not None])
-# np.save('data1_test_10.npy', X_test)
+X_test = np.array([i for i in data if i is not None])
+np.save('data1_test_10.npy', X_test)
 
-X_test = np.load('data1_test_10.npy')
+# X_test = np.load('data1_test_10.npy')
 
 # Upload the models and training data of the different approaches:
 # VBOCP:

@@ -239,7 +239,7 @@ class OCPdoublependulumINIT(OCPdoublependulum):
     
     def nn_decisionfunction(self, params, mean, std, safety_margin, x):
 
-        vel_norm = fmax(norm_2(x[2:]), 1e-2)
+        vel_norm = fmax(norm_2(x[2:]), 1e-3)
 
         mean = vertcat(mean,mean,0.,0.)
         std = vertcat(std,std,vel_norm,vel_norm)

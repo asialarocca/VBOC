@@ -107,7 +107,7 @@ class OCPdoublependulum:
         
 
 class OCPdoublependulumINIT(OCPdoublependulum):
-    def __init__(self, regenerate, nn_params, mean, std):
+    def __init__(self, regenerate, nn_params, mean, std, safety_margin):
 
         # inherit initialization
         super().__init__()
@@ -173,7 +173,7 @@ class OCPdoublependulumINIT(OCPdoublependulum):
         self.ocp.constraints.idxbx_0 = np.array([0, 1, 2, 3])
 
         # nonlinear constraints
-        self.model.con_h_expr_e = self.nn_decisionfunction(nn_params, mean, std, self.x)
+        self.model.con_h_expr_e = self.nn_decisionfunction(nn_params, mean, std, safety_margin, self.x)
         
         self.ocp.constraints.lh_e = np.array([0.])
         self.ocp.constraints.uh_e = np.array([1e6])
@@ -189,7 +189,6 @@ class OCPdoublependulumINIT(OCPdoublependulum):
         self.ocp.solver_options.alpha_reduction = 0.3
         self.ocp.solver_options.alpha_min = 1e-2
         self.ocp.solver_options.levenberg_marquardt = 1.
-        self.ocp.solver_options.regularize_method = 'PROJECT'
 
         # ocp model
         self.ocp.model = self.model
@@ -219,9 +218,9 @@ class OCPdoublependulumINIT(OCPdoublependulum):
 
         return status
     
-    def nn_decisionfunction(self, params, mean, std, x):
+    def nn_decisionfunction(self, params, mean, std, safety_margin, x):
 
-        vel_norm = fmax(norm_2(x[2:]), 1e-2)
+        vel_norm = fmax(norm_2(x[2:]), 1e-3)
 
         mean = vertcat(mean,mean,0.,0.)
         std = vertcat(std,std,vel_norm,vel_norm)
