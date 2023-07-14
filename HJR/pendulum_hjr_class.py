@@ -79,9 +79,6 @@ class OCPpendulum:
         self.ocp.constraints.lbu = np.array([-self.Fmax])
         self.ocp.constraints.ubu = np.array([+self.Fmax])
         self.ocp.constraints.idxbu = np.array([0])
-        self.ocp.constraints.lbu_0 = np.array([-self.Fmax])
-        self.ocp.constraints.ubu_0 = np.array([+self.Fmax])
-        self.ocp.constraints.idxbu_0 = np.array([0])
 
         self.ocp.constraints.lbx_0 = np.array([self.thetamin, -self.dthetamax])
         self.ocp.constraints.ubx_0 = np.array([self.thetamax, self.dthetamax])
@@ -92,9 +89,6 @@ class OCPpendulum:
         self.ocp.solver_options.exact_hess_constr = 0
         # self.ocp.solver_options.exact_hess_cost = 0
         self.ocp.solver_options.exact_hess_dyn = 0
-        self.ocp.solver_options.nlp_solver_tol_stat = 1e-4
-        # self.ocp.solver_options.nlp_solver_tol_comp = 1e-2
-        # self.ocp.solver_options.tol = 1e-2
         self.ocp.solver_options.qp_solver_iter_max = 100
         self.ocp.solver_options.nlp_solver_max_iter = 1000
         self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"

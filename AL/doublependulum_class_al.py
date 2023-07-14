@@ -535,8 +535,8 @@ class OCPdoublependulumNN(OCPdoublependulum):
 
         # options
         self.ocp.solver_options.nlp_solver_type = "SQP"
-        self.ocp.solver_options.tol = 1e-2
-        self.ocp.solver_options.qp_tol = 1e-2
+        self.ocp.solver_options.tol = 1e-3
+        self.ocp.solver_options.qp_tol = 1e-3
         self.ocp.solver_options.nlp_solver_max_iter = 1000
         self.ocp.solver_options.qp_solver_iter_max = 1000
 

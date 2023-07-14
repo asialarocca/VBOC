@@ -4,6 +4,7 @@ from numpy.linalg import norm as norm
 import warnings
 warnings.filterwarnings("ignore")
 import torch
+import random
 
 def plots_3dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir, device):
 
@@ -54,23 +55,23 @@ def plots_3dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir,
                 y_pred[i] = 1
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # xit = []
-        # yit = []
-        # for i in range(len(X_save)):
-        #     if (
-        #         norm(X_save[i][0] - (q_min + q_max) / 2) < 0.1 and
-        #         norm(X_save[i][1] - (q_min + q_max) / 2) < 0.1
-        #         and norm(X_save[i][3]) < 0.1
-        #         and norm(X_save[i][4]) < 0.1
-        #     ):
-        #         xit.append(X_save[i][2])
-        #         yit.append(X_save[i][5])
-        # plt.plot(
-        #     xit,
-        #     yit,
-        #     "ko",
-        #     markersize=2
-        # )
+        xit = []
+        yit = []
+        for i in range(len(X_save)):
+            if (
+                norm(X_save[i][0] - (q_min + q_max) / 2) < 0.1 and
+                norm(X_save[i][1] - (q_min + q_max) / 2) < 0.1
+                and norm(X_save[i][3]) < 0.1
+                and norm(X_save[i][4]) < 0.1
+            ):
+                xit.append(X_save[i][2])
+                yit.append(X_save[i][5])
+        plt.plot(
+            xit,
+            yit,
+            "ko",
+            markersize=2
+        )
         plt.xlim([q_min, q_max])
         plt.ylim([v_min, v_max])
         plt.ylabel('$\dot{q}_3$')
@@ -109,23 +110,23 @@ def plots_3dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir,
                 y_pred[i] = 1
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # xit = []
-        # yit = []
-        # for i in range(len(X_save)):
-        #     if (
-        #         norm(X_save[i][0] - (q_min + q_max) / 2) < 0.1 and
-        #         norm(X_save[i][2] - (q_min + q_max) / 2) < 0.1
-        #         and norm(X_save[i][3]) < 0.1
-        #         and norm(X_save[i][5]) < 0.1
-        #     ):
-        #         xit.append(X_save[i][1])
-        #         yit.append(X_save[i][4])
-        # plt.plot(
-        #     xit,
-        #     yit,
-        #     "ko",
-        #     markersize=2
-        # )
+        xit = []
+        yit = []
+        for i in range(len(X_save)):
+            if (
+                norm(X_save[i][0] - (q_min + q_max) / 2) < 0.1 and
+                norm(X_save[i][2] - (q_min + q_max) / 2) < 0.1
+                and norm(X_save[i][3]) < 0.1
+                and norm(X_save[i][5]) < 0.1
+            ):
+                xit.append(X_save[i][1])
+                yit.append(X_save[i][4])
+        plt.plot(
+            xit,
+            yit,
+            "ko",
+            markersize=2
+        )
         plt.xlim([q_min, q_max])
         plt.ylim([v_min, v_max])
         plt.ylabel('$\dot{q}_2$')
@@ -164,28 +165,46 @@ def plots_3dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir,
                 y_pred[i] = 1
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # xit = []
-        # yit = []
-        # for i in range(len(X_save)):
-        #     if (
-        #         norm(X_save[i][1] - (q_min + q_max) / 2) < 0.1 and
-        #         norm(X_save[i][2] - (q_min + q_max) / 2) < 0.1
-        #         and norm(X_save[i][4]) < 0.1
-        #         and norm(X_save[i][5]) < 0.1
-        #     ):
-        #         xit.append(X_save[i][0])
-        #         yit.append(X_save[i][3])
-        # plt.plot(
-        #     xit,
-        #     yit,
-        #     "ko",
-        #     markersize=2
-        # )
+        xit = []
+        yit = []
+        for i in range(len(X_save)):
+            if (
+                norm(X_save[i][1] - (q_min + q_max) / 2) < 0.1 and
+                norm(X_save[i][2] - (q_min + q_max) / 2) < 0.1
+                and norm(X_save[i][4]) < 0.1
+                and norm(X_save[i][5]) < 0.1
+            ):
+                xit.append(X_save[i][0])
+                yit.append(X_save[i][3])
+        plt.plot(
+            xit,
+            yit,
+            "ko",
+            markersize=2
+        )
         plt.xlim([q_min, q_max])
         plt.ylim([v_min, v_max])
         plt.ylabel('$\dot{q}_1$')
         plt.xlabel('$q_1$')
         plt.grid()
         plt.title("Classifier section")
+
+        for _ in range(10):
+            q1ran = q_min + random.random() * (q_max-q_min)
+            q2ran = q_min + random.random() * (q_max-q_min)
+            q3ran = q_min + random.random() * (q_max-q_min)
+
+            plt.figure()
+            ax = plt.axes(projection ="3d")
+            xit = np.zeros((1,6))
+            for i in range(len(X_save)):
+                if (
+                    norm(X_save[i][1] - q1ran) < 0.1 and
+                    norm(X_save[i][2] - q2ran) < 0.1 and
+                    norm(X_save[i][3] - q3ran) < 0.1
+                ):
+                    xit = np.append(xit,[X_save[i]], axis=0)
+            ax.scatter3D(xit[:,3],xit[:,4],xit[:,5])
+            plt.title("q1="+str(q1ran)+" q2="+str(q2ran)+" q3="+str(q3ran))
 
     plt.show()

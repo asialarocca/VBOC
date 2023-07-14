@@ -1,9 +1,9 @@
 import torch.nn as nn
 
 # Fully connected neural network
-class NeuralNet(nn.Module):
+class NeuralNetCLS(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
-        super(NeuralNet, self).__init__()
+        super(NeuralNetCLS, self).__init__()
         self.linear_relu_stack = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
@@ -17,10 +17,9 @@ class NeuralNet(nn.Module):
         out = self.linear_relu_stack(x)
         return out
     
-    
-class NeuralNetRegression(nn.Module):
+class NeuralNetDIR(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
-        super(NeuralNetRegression, self).__init__()
+        super(NeuralNetDIR, self).__init__()
         self.linear_relu_stack = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
