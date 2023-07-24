@@ -12,6 +12,7 @@ import math
 import torch
 import torch.nn as nn
 from my_nn import NeuralNetCLS
+from torch.utils.data import DataLoader
 import random
 from multiprocessing import Pool
 
@@ -71,6 +72,7 @@ loss_stop = 5e-3  # nn training stopping condition
 beta = 0.95
 n_minibatch = 4096
 it_max = int(2e3 * B / n_minibatch)
+n_minibatch_model = pow(2,15)
 
 print("Number of grid values: ", B)
 print("Max execution time", max_time)
@@ -118,17 +120,31 @@ while val > loss_stop and it < it_max:
 print("Training finished") 
 print("\t%d iter, %.1f s, loss %.4f (loss thr %.4f)"%(it, time.time()-time_training_start, val, loss_stop))
 
-# count misclassified points on training set:
-X_iter_tensor = torch.from_numpy(X_iter.astype(np.float32)).to(device)
-y_iter_tensor = torch.from_numpy(y_iter.astype(np.float32)).to(device)
-X_iter_tensor = (X_iter_tensor - mean) / std
-outputs = model(X_iter_tensor)
-num_correct = torch.count_nonzero(((torch.sign(outputs[:,0])+1)/2)==y_iter_tensor[:,0])
-print("Percentage of correctly classified training points: %.2f"%(1e2*num_correct/outputs.shape[0]))
+# # count misclassified points on training set:
+# X_iter_tensor = torch.from_numpy(X_iter.astype(np.float32)).to(device)
+# y_iter_tensor = torch.from_numpy(y_iter.astype(np.float32)).to(device)
+# X_iter_tensor = (X_iter_tensor - mean) / std
+# outputs = model(X_iter_tensor)
+# num_correct = torch.count_nonzero(((torch.sign(outputs[:,0])+1)/2)==y_iter_tensor[:,0])
+# print("Percentage of correctly classified training points: %.2f"%(1e2*num_correct/outputs.shape[0]))
 
 # Compute number of positively classifier test samples:
 pos_old = Xu_iter.shape[0]
-y_test_pred = np.argmax(model((torch.from_numpy(Xu_test.astype(np.float32)).to(device) - mean) / std).detach().cpu().numpy(), axis=1)
+
+# y_test_pred = np.argmax(model((torch.from_numpy(Xu_test.astype(np.float32)).to(device) - mean) / std).detach().cpu().numpy(), axis=1)
+
+y_test_pred = np.empty((len(Xu_test),))
+with torch.no_grad():
+    Xu_test_tensor = torch.from_numpy(Xu_test.astype(np.float32)).to(device)
+    Xu_test_tensor = (Xu_test_tensor - mean) / std
+    my_dataloader = DataLoader(Xu_test_tensor,batch_size=n_minibatch_model,shuffle=False)
+    for (idx, batch) in enumerate(my_dataloader):
+        out = model(batch).detach().cpu().numpy()
+        if n_minibatch_model*(idx+1) > len(Xu_iter):
+            y_test_pred[n_minibatch_model*idx:len(Xu_iter)] = np.argmax(out, axis=1)
+        else:
+            y_test_pred[n_minibatch_model*idx:n_minibatch_model*(idx+1)] = np.argmax(out, axis=1)
+
 pos_new = np.sum([1 for i in range(Xu_test.shape[0]) if y_test_pred[i]==1])/Xu_test.shape[0]
 
 # Compute RMSE wrt current model:
@@ -180,9 +196,21 @@ while (pos_new <= pos_old or iterbreak > 10) and iterbreak < 120 and time.time()
     Xu_iter = np.random.uniform(low=[q_min, q_min, q_min, v_min-(v_max-v_min)/5, v_min-(v_max-v_min)/5, v_min-(v_max-v_min)/5], high=[q_max, q_max, q_max, v_max+(v_max-v_min)/5, v_max+(v_max-v_min)/5, v_max+(v_max-v_min)/5], size=(B,6))
     
     # compute NN prediction:
-    inp = (torch.from_numpy(Xu_iter.astype(np.float32)).to(device) - mean) / std
-    out = model(inp)
-    y_pred = np.argmax(out.detach().cpu().numpy(), axis=1)
+    # inp = (torch.from_numpy(Xu_iter.astype(np.float32)).to(device) - mean) / std
+    # out = model(inp)
+    # y_pred = np.argmax(out.detach().cpu().numpy(), axis=1)
+
+    y_pred = np.empty((len(Xu_iter),))
+    with torch.no_grad():
+        Xu_iter_tensor = torch.from_numpy(Xu_iter.astype(np.float32)).to(device)
+        Xu_iter_tensor = (Xu_iter_tensor - mean) / std
+        my_dataloader = DataLoader(Xu_iter_tensor,batch_size=n_minibatch_model,shuffle=False)
+        for (idx, batch) in enumerate(my_dataloader):
+            out = model(batch).detach().cpu().numpy()
+            if n_minibatch_model*(idx+1) > len(Xu_iter):
+                y_pred[n_minibatch_model*idx:len(Xu_iter)] = np.argmax(out, axis=1)
+            else:
+                y_pred[n_minibatch_model*idx:n_minibatch_model*(idx+1)] = np.argmax(out, axis=1)
 
     # Data testing:
     with Pool(30) as p:
@@ -195,13 +223,13 @@ while (pos_new <= pos_old or iterbreak > 10) and iterbreak < 120 and time.time()
     it = 0
     val = 1
 
-    # count misclassified points on training set before training:
-    X_iter_tensor = torch.from_numpy(X_iter.astype(np.float32)).to(device)
-    y_iter_tensor = torch.from_numpy(y_iter.astype(np.float32)).to(device)
-    X_iter_tensor = (X_iter_tensor - mean) / std
-    outputs = model(X_iter_tensor)
-    num_correct = torch.count_nonzero(((torch.sign(outputs[:,0])+1)/2)==y_iter_tensor[:,0])
-    print("Percentage of correctly classified training points before training: %.2f"%(1e2*num_correct/outputs.shape[0]))
+    # # count misclassified points on training set before training:
+    # X_iter_tensor = torch.from_numpy(X_iter.astype(np.float32)).to(device)
+    # y_iter_tensor = torch.from_numpy(y_iter.astype(np.float32)).to(device)
+    # X_iter_tensor = (X_iter_tensor - mean) / std
+    # outputs = model(X_iter_tensor)
+    # num_correct = torch.count_nonzero(((torch.sign(outputs[:,0])+1)/2)==y_iter_tensor[:,0])
+    # print("Percentage of correctly classified training points before training: %.2f"%(1e2*num_correct/outputs.shape[0]))
 
     # Train the model:
     print("Start training the network")
@@ -233,7 +261,21 @@ while (pos_new <= pos_old or iterbreak > 10) and iterbreak < 120 and time.time()
 
     # Compute number of positively classified test samples (for stopping condition):
     pos_old = pos_new
-    y_test_pred = np.argmax(model((torch.from_numpy(Xu_test.astype(np.float32)).to(device) - mean) / std).detach().cpu().numpy(), axis=1)
+    # y_test_pred = np.argmax(model((torch.from_numpy(Xu_test.astype(np.float32)).to(device) - mean) / std).detach().cpu().numpy(), axis=1)
+    # pos_new = np.sum([1 for i in range(Xu_test.shape[0]) if y_test_pred[i]==1])/Xu_test.shape[0]
+
+    y_test_pred = np.empty((len(Xu_test),))
+    with torch.no_grad():
+        Xu_test_tensor = torch.from_numpy(Xu_test.astype(np.float32)).to(device)
+        Xu_test_tensor = (Xu_test_tensor - mean) / std
+        my_dataloader = DataLoader(Xu_test_tensor,batch_size=n_minibatch_model,shuffle=False)
+        for (idx, batch) in enumerate(my_dataloader):
+            out = model(batch).detach().cpu().numpy()
+            if n_minibatch_model*(idx+1) > len(Xu_iter):
+                y_test_pred[n_minibatch_model*idx:len(Xu_iter)] = np.argmax(out, axis=1)
+            else:
+                y_test_pred[n_minibatch_model*idx:n_minibatch_model*(idx+1)] = np.argmax(out, axis=1)
+
     pos_new = np.sum([1 for i in range(Xu_test.shape[0]) if y_test_pred[i]==1])/Xu_test.shape[0]
 
     del ocp
@@ -242,13 +284,13 @@ while (pos_new <= pos_old or iterbreak > 10) and iterbreak < 120 and time.time()
 
     start_time_testing = time.time()
 
-    # count misclassified points on training set:
-    X_iter_tensor = torch.from_numpy(X_iter.astype(np.float32)).to(device)
-    y_iter_tensor = torch.from_numpy(y_iter.astype(np.float32)).to(device)
-    X_iter_tensor = (X_iter_tensor - mean) / std
-    outputs = model(X_iter_tensor)
-    num_correct = torch.count_nonzero(((torch.sign(outputs[:,0])+1)/2)==y_iter_tensor[:,0])
-    print("Percentage of correctly classified training points: %.2f"%(1e2*num_correct/outputs.shape[0]))
+    # # count misclassified points on training set:
+    # X_iter_tensor = torch.from_numpy(X_iter.astype(np.float32)).to(device)
+    # y_iter_tensor = torch.from_numpy(y_iter.astype(np.float32)).to(device)
+    # X_iter_tensor = (X_iter_tensor - mean) / std
+    # outputs = model(X_iter_tensor)
+    # num_correct = torch.count_nonzero(((torch.sign(outputs[:,0])+1)/2)==y_iter_tensor[:,0])
+    # print("Percentage of correctly classified training points: %.2f"%(1e2*num_correct/outputs.shape[0]))
 
     # Compute RMSE wrt current model:
     output_hjr_test = np.argmax(model((torch.Tensor(X_test).to(device) - mean) / std).cpu().detach().numpy(), axis=1)

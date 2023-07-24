@@ -567,9 +567,9 @@ print('Start data generation')
 
 # Data generation:
 cpu_num = 30
-num_prob = 100
+num_prob = 100000
 with Pool(cpu_num) as p:
-    traj = p.map(testing, range(num_prob))
+    traj = p.map(testing_test, range(num_prob))
 
 # traj, statpos, statneg = zip(*temp)
 X_temp = [i for i in traj if i is not None]
@@ -615,12 +615,12 @@ for i in range(X_train_dir.shape[0]):
         X_train_dir[i][l] = (X_save[i][l] - mean_dir) / std_dir
         X_train_dir[i][l+system_sel] = X_save[i][l+system_sel] / vel_norm
 
-# model_dir.load_state_dict(torch.load('model_' + system_sel + 'dof_vboc_' + v_max))
+# model_dir.load_state_dict(torch.load('model_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)) + '_' + str(hidden_layers)))
 
 beta = 0.95
-n_minibatch = 512 # 4096
+n_minibatch = 4096
 B = int(X_save.shape[0]*100/n_minibatch) # number of iterations for 100 epoch
-it_max = B * 10
+it_max = B * 100
 
 training_evol = []
 
@@ -768,7 +768,7 @@ if prune_model:
     # Save the pruned model:
     torch.save(model_dir.state_dict(), 'model_' + str(system_sel) + 'dof_vboc_' + str(int(v_max)) + '_' + str(hidden_layers) + '_' + str(prune_amount)  + '_' + str(safety_margin))
 
-print("Execution time: %s seconds" % (time.time() - start_time))
+print("Execution time: %s seconds" % (time.time() - start_time + 2399))
 
 # Show the training evolution:
 plt.figure()
@@ -779,6 +779,6 @@ if system_sel == 3:
     # plots_3dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir, device)
     pass
 elif system_sel == 2:
-    plots_2dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir, device)
+    plots_2dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir, device, ocp)
 
 plt.show()

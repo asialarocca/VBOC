@@ -245,16 +245,10 @@ def data_generation(v):
 
             if is_x_at_limit:
 
-                x_out = np.copy(x_sol[f][:ocp.ocp.dims.nx - 1])
-                norm_vel = norm(x_out[system_sel:])    
-
-                for l in range(system_sel):
-                    x_out[l+system_sel] = x_out[l+system_sel] + eps * x_out[l+system_sel]/norm_vel
-
                 # If the previous state was on a limit, the current state location cannot be identified using
                 # the corresponding unviable state but it has to rely on the proximity to the state limits 
                 # (more restrictive):
-                if any(i > q_max - eps or i < q_min + eps for i in x_sol[f][:system_sel]) or any(i > v_max or i < v_min for i in x_out[system_sel:ocp.ocp.dims.nx - 1]):
+                if any(i > q_max - eps or i < q_min + eps for i in x_sol[f][:system_sel]) or any(i > v_max - tol or i < v_min + tol for i in x_sol[system_sel:ocp.ocp.dims.nx - 1]):
                     is_x_at_limit = True # the state is on dX
                 
                 else:
@@ -294,7 +288,7 @@ def data_generation(v):
                     x_sol_guess[N_test] = x_sol[N]
                     u_sol_guess[N_test] = np.zeros((ocp.ocp.dims.nu))
 
-                    norm_old = norm(x_sol[f][system_sel:ocp.ocp.dims.nx - 1]) # velocity norm of the original solution 
+                    norm_old = norm_weights # velocity norm of the original solution 
                     norm_bef = 0
                     all_ok = False
 
@@ -364,11 +358,6 @@ def data_generation(v):
                             for l in range(system_sel):
                                 x_out[l+system_sel] = x_out[l+system_sel] - eps * p[l]
 
-                            if x_out[joint_sel+system_sel] > v_max:
-                                x_out[joint_sel+system_sel] = v_max
-                            if x_out[joint_sel+system_sel] < v_min:
-                                x_out[joint_sel+system_sel] = v_min
-
                             x_sym[f] = x_out
 
                     else: # we cannot say whether the state is on dV or inside V
@@ -377,7 +366,7 @@ def data_generation(v):
                             if any(abs(i) > v_max - eps for i in x_sol[r][system_sel:ocp.ocp.dims.nx - 1]):
                                                                     
                                 # Save the viable states at velocity limits:
-                                valid_data = np.append(valid_data, [x_sol[f][:ocp.ocp.dims.nx - 1]], axis = 0)
+                                valid_data = np.append(valid_data, [x_sol[r][:ocp.ocp.dims.nx - 1]], axis = 0)
 
                         break      
      
@@ -398,9 +387,9 @@ def data_generation(v):
                 # When the state of the unviable simulated trajectory violates a limit, the corresponding viable state
                 # of the optimal trajectory is on dX:
                 if any(i > q_max or i < q_min for i in x_out[:system_sel]) or any(i > v_max or i < v_min for i in x_out[system_sel:ocp.ocp.dims.nx - 1]):
-                    is_x_at_limit = False # the state is on dV
-                else:
                     is_x_at_limit = True # the state is on dX
+                else:
+                    is_x_at_limit = False # the state is on dV
 
             if all(i < q_max - eps and i > q_min + eps for i in x_sol[f][:system_sel]) and all(abs(i) > tol for i in x_sol[f][system_sel:ocp.ocp.dims.nx - 1]):
                 
@@ -451,7 +440,7 @@ print('Start data generation')
 
 # Data generation:
 cpu_num = 30
-num_prob = 10
+num_prob = 1000
 with Pool(cpu_num) as p:
     traj = p.map(data_generation, range(num_prob))
 
@@ -502,7 +491,7 @@ for i in range(X_train_dir.shape[0]):
 # model_dir.load_state_dict(torch.load('model_' + system_sel + 'dof_vboc'))
 
 beta = 0.95
-n_minibatch = 10 # 4096
+n_minibatch = 4096
 B = int(X_save.shape[0]*100/n_minibatch) # number of iterations for 100 epoch
 it_max = B * 10
 

@@ -32,4 +32,8 @@ For more details, please refer to the paper "VBOC: Learning the Viability Bounda
 
 The main folder contains scripts for the generation of test data and for the comparison of the performance of the algorithms. The subfolders "AL", "VBOC" and "HJR" contain the implementation of the different algorithms for the computation of the Viability Kernels of 1, 2 and 3 DOFs systems.
 
+The algorithms are implemented in Python and they rely on ACADOS (see https://docs.acados.org/python_interface/ for installation) for solving the OCPs and PyTorch with CUDA (see https://pytorch.org/ for installation) for the NNs training.
+
 To try the algorithms and compare their performance you have to first generate the test data (execute "selectedsystem_testdata.py"), then compute the set with the three algorithms (execute "AL/selectedsystem_al.py", "HJR/selectedsystem_hjr.py" and "VBOV/selectedsystem_vboc_iterative.py") and then compare the results (execute "selectedsystem_comparison.py").
+
+Work in progress: in the "VBOC" folder you can also find other subfolders containing first studies on the application of VBOC to problems with cartesian constraints and to an UR5 robot manipulator and some first tests on the usage of the learned sets to ensure recursive feasibility with Model Predictive Control.

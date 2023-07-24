@@ -5,21 +5,46 @@ import warnings
 warnings.filterwarnings("ignore")
 import torch
 import torch.nn as nn
-from my_nn import NeuralNetRegression
-from doublependulum_class_fixedveldir import OCPdoublependulumINIT, SYMdoublependulumINIT
 import random
+from matplotlib.patches import Circle
+from doublependulum_class_fixedveldir import OCPdoublependulumINIT
 
-def plots_2dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir, device): #, model_dir_2, mean_dir_2, std_dir_2
+def plots_2dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir, device,ocp): #, model_dir_2, mean_dir_2, std_dir_2
 
     # Plot all training data:
-    plt.figure()
+    plt.figure(figsize=(6, 4))
     plt.scatter(X_save[:,0],X_save[:,1],s=0.1)
-    plt.legend(loc="best", shadow=False, scatterpoints=1)
-    plt.title("OCP dataset positions")
-    plt.figure()
+    plt.xlim([q_min, q_max])
+    plt.ylim([q_min, q_max])
+    plt.grid(True)
+    plt.ylabel('$q_2$ (rad)')
+    plt.xlabel('$q_1$ (rad)')
+    plt.title("Training dataset positions")
+    plt.figure(figsize=(6, 4))
     plt.scatter(X_save[:,2],X_save[:,3],s=0.1)
-    plt.legend(loc="best", shadow=False, scatterpoints=1)
-    plt.title("OCP dataset velocities")
+    plt.grid(True)
+    plt.xlim([v_min, v_max])
+    plt.ylim([v_min, v_max])
+    plt.ylabel('$\dot{q}_2$ (rad/s)')
+    plt.xlabel('$\dot{q}_1$ (rad/s)')
+    plt.title("Training dataset velocities")
+
+    l1 = ocp.l1
+    l2 = ocp.l2
+    theta1 = np.pi / 4 + np.pi 
+    theta2 = np.pi + np.pi / 8
+
+    circle = plt.Circle((ocp.x_c, ocp.y_c), ocp.radius, color='b')
+    fig, ax = plt.subplots(figsize=(4, 4))
+    ax.add_patch(circle)
+    # for theta1 in np.linspace(ocp.thetamin, ocp.thetamax, 10):
+    #     for theta2 in np.linspace(ocp.thetamin, ocp.thetamax, 10):
+    plt.plot(0, 0, marker = 'o', color='k', markersize=10)
+    plt.plot([0,l1*np.sin(theta1),l1*np.sin(theta1) + l2*np.sin(theta2)], [0,l1*np.cos(theta1),l1*np.cos(theta1) + l2*np.cos(theta2)], marker = 'o', color='k')
+    plt.plot([0,l1*np.sin(theta1-np.pi/12),l1*np.sin(theta1-np.pi/12) + l2*np.sin(theta2-np.pi/12)], [0,l1*np.cos(theta1-np.pi/12),l1*np.cos(theta1-np.pi/12) + l2*np.cos(theta2-np.pi/12)], marker = 'o', color='gray',alpha=0.2)
+    plt.xlim([-l1-l2+0.7, l1+l2-0.7])
+    plt.ylim([-l1-l2-0.1, 0.1])
+    plt.axis('off')
 
     # Show the resulting set approximation:
     with torch.no_grad():
@@ -53,27 +78,27 @@ def plots_2dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir,
                 y_pred[i] = 1
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        xit = []
-        yit = []
-        for i in range(X_save.shape[0]):
-            if (
-                norm(X_save[i][0] - (q_min + q_max) / 2) < 0.01
-                and norm(X_save[i][2]) < 0.1
-            ):
-                xit.append(X_save[i][1])
-                yit.append(X_save[i][3])
-        plt.plot(
-            xit,
-            yit,
-            "ko",
-            markersize=2
-        )
+        # xit = []
+        # yit = []
+        # for i in range(X_save.shape[0]):
+        #     if (
+        #         norm(X_save[i][0] - (q_min + q_max) / 2) < 0.01
+        #         and norm(X_save[i][2]) < 0.1
+        #     ):
+        #         xit.append(X_save[i][1])
+        #         yit.append(X_save[i][3])
+        # plt.plot(
+        #     xit,
+        #     yit,
+        #     "ko",
+        #     markersize=2
+        # )
         plt.xlim([q_min, q_max])
         plt.ylim([v_min, v_max])
-        plt.ylabel('$\dot{q}_2$')
-        plt.xlabel('$q_2$')
+        plt.ylabel('$\dot{q}_2$ (rad/s)')
+        plt.xlabel('$q_2$ (rad)')
         plt.grid()
-        plt.title("Classifier section")
+        plt.title("Set section at $q_1=\pi$ rad and $\dot{q}_1=0$ rad/s")
 
         plt.figure()
         inp = np.c_[
@@ -100,27 +125,27 @@ def plots_2dof(X_save, q_min, q_max, v_min, v_max, model_dir, mean_dir, std_dir,
                 y_pred[i] = 1
         Z = y_pred.reshape(xx.shape)
         plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        xit = []
-        yit = []
-        for i in range(X_save.shape[0]):
-            if (
-                norm(X_save[i][1] - (q_min + q_max) / 2) < 0.01
-                and norm(X_save[i][3]) < 0.1
-            ):
-                xit.append(X_save[i][0])
-                yit.append(X_save[i][2])
-        plt.plot(
-            xit,
-            yit,
-            "ko",
-            markersize=2
-        )
+        # xit = []
+        # yit = []
+        # for i in range(X_save.shape[0]):
+        #     if (
+        #         norm(X_save[i][1] - (q_min + q_max) / 2) < 0.01
+        #         and norm(X_save[i][3]) < 0.1
+        #     ):
+        #         xit.append(X_save[i][0])
+        #         yit.append(X_save[i][2])
+        # plt.plot(
+        #     xit,
+        #     yit,
+        #     "ko",
+        #     markersize=2
+        # )
         plt.xlim([q_min, q_max])
         plt.ylim([v_min, v_max])
-        plt.ylabel('$\dot{q}_1$')
-        plt.xlabel('$q_1$')
+        plt.ylabel('$\dot{q}_1$S (rad/s)')
+        plt.xlabel('$q_1$ (rad)')
         plt.grid()
-        plt.title("Classifier section")
+        plt.title("Set section at $q_2=\pi$ rad and $\dot{q}_2=0$ rad/s")
 
         # Plots:
         h = 0.05

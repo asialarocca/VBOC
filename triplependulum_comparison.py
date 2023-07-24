@@ -43,7 +43,7 @@ std_al = torch.load('AL/std_3dof_al')
 data_al = np.load('AL/data_3dof_al.npy')
 
 # Hamilton-Jacoby reachability:
-model_hjr = NeuralNetCLS(6, 500, 2).to(device)
+model_hjr = NeuralNetCLS(6, 100, 2).to(device)
 model_hjr.load_state_dict(torch.load('HJR/model_3dof_hjr'))
 mean_hjr = torch.load('HJR/mean_3dof_hjr')
 std_hjr = torch.load('HJR/std_3dof_hjr')
@@ -51,24 +51,25 @@ std_hjr = torch.load('HJR/std_3dof_hjr')
 # RMSE evolutions:
 times_al = np.load('AL/times_3dof_al.npy')
 rmse_al = np.load('AL/rmse_3dof_al.npy')
-times_vbocp = np.load('VBOC/times_3dof_vboc.npy')
-rmse_vbocp = np.load('VBOC/rmse_3dof_vboc.npy')
+times_vboc = np.load('VBOC/times_3dof_vboc.npy')
+rmse_vboc = np.load('VBOC/rmse_3dof_vboc.npy')
 times_hjr = np.load('HJR/times_3dof_hjr.npy')
 rmse_hjr = np.load('HJR/rmse_3dof_hjr.npy')
 
 plt.figure(figsize=(6, 4))
-plt.plot(times_vbocp, rmse_vbocp, label='VBOC')
-plt.plot(times_al, rmse_al, label='AL') 
+plt.plot(times_vboc, rmse_vboc, label='VBOC') #[:-8:2]
+plt.plot(times_al, rmse_al, label='AL') #[:-28:4]
+plt.plot(times_hjr, rmse_hjr, label='HJR') #[:-1]
 plt.title('RMSE evolution')
-plt.legend(loc='upper right')
+plt.legend(loc='center right')
 plt.ylabel('RMSE (rad/s)')
 plt.yscale('log')
 plt.xlabel('Time (s)')
 plt.grid(True, which="both")
 
-print('RMSE test data wrt VBOCP NN: ', rmse_vbocp[-1])
+print('RMSE test data wrt VBOCP NN: ', rmse_vboc[-1])
 print('RMSE test data wrt AL NN: ', rmse_al[-1])
-print('RMSE test data wrt HJR NN: ', rmse_hjr[-1])
+print('RMSE test data wrt HJR NN: ', rmse_hjr[-2])
 
 # Compute the prediction errors over the training data data:
 

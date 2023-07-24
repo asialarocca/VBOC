@@ -113,8 +113,8 @@ class OCPdoublependulum:
 
         # set constraints
         self.Cmax = 10.
-        self.thetamax =  np.pi / 4 + np.pi # 2*np.pi
-        self.thetamin = - np.pi / 4 + np.pi # np.pi
+        self.thetamax =  np.pi / 4 + np.pi 
+        self.thetamin = - np.pi / 4 + np.pi 
         self.dthetamax = 10.
 
         # cost
@@ -151,8 +151,12 @@ class OCPdoublependulum:
         self.ocp.constraints.lg = np.zeros((2))
         self.ocp.constraints.ug = np.zeros((2))
 
-        self.model.con_h_expr = (self.l1*sin(theta1) + self.l2*sin(theta2))**2 + (self.l1*cos(theta1) + self.l2*cos(theta2) + self.l1 + self.l2/2)**2
-        self.ocp.constraints.lh = np.array([(self.l2/2)**2])
+        self.radius = self.l2/4
+        self.x_c = 0
+        self.y_c = - self.l1 - self.l2/2
+
+        self.model.con_h_expr = (self.l1*sin(theta1) + self.l2*sin(theta2) - self.x_c)**2 + (self.l1*cos(theta1) + self.l2*cos(theta2) - self.y_c)**2
+        self.ocp.constraints.lh = np.array([(self.radius)**2])
         self.ocp.constraints.uh = np.array([1e6])
 
         # -------------------------------------------------
@@ -162,7 +166,8 @@ class OCPdoublependulum:
         self.ocp.solver_options.exact_hess_constr = 0
         # self.ocp.solver_options.exact_hess_cost = 0
         self.ocp.solver_options.exact_hess_dyn = 0
-        self.ocp.solver_options.nlp_solver_tol_stat = 1e-4
+        self.ocp.solver_options.nlp_solver_tol_stat = 1e-3
+        self.ocp.solver_options.qp_solver_tol_stat = 1e-3
         self.ocp.solver_options.qp_solver_iter_max = 100
         self.ocp.solver_options.nlp_solver_max_iter = 1000
         self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"

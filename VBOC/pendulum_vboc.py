@@ -301,17 +301,17 @@ if __name__ == "__main__":
         print('RMSE training data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor))) 
             
         # Show the data and the resulting set approximation:
-        plt.figure(figsize=(6, 4))
+        f,ax=plt.subplots(figsize=(6, 4))
 
         # plt.plot([q_min, q_max], [v_min, v_min], color='white', linestyle='--', alpha=0.7, linewidth=1)
         # plt.plot([q_min, q_max], [v_max, v_max], color='white', linestyle='--', alpha=0.7, linewidth=1)
         # plt.plot([q_max, q_max], [v_min, v_max], color='white', linestyle='--', alpha=0.7, linewidth=1)
         # plt.plot([q_min, q_min], [v_min, v_max], color='white', linestyle='--', alpha=0.7, linewidth=1)
 
-        plt.plot(
+        ax.plot(
             X_save[:int(X_save.shape[0]/2),0], X_save[:int(X_save.shape[0]/2),1], "ko", markersize=3
         )
-        plt.plot(
+        ax.plot(
             X_save[int(X_save.shape[0]/2):,0], X_save[int(X_save.shape[0]/2):,1], "bo", markersize=3
         )
         h = 0.005
@@ -331,16 +331,20 @@ if __name__ == "__main__":
             else:
                 y_pred[i] = 1
         Z = y_pred.reshape(xx.shape)
-        plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
-        # plt.xlim([q_min, q_max])
-        # plt.ylim([v_min, v_max])
-        plt.xlim([q_min-(q_max-q_min)/30, q_max+(q_max-q_min)/30])
-        plt.ylim([v_min-(v_max-v_min)/30, v_max+(v_max-v_min)/30])
+        ax.contourf(xx, yy, Z, cmap=plt.cm.coolwarm, alpha=0.8)
+        plt.xlim([q_min, q_max])
+        plt.ylim([v_min, v_max])
+        # plt.xlim([q_min-(q_max-q_min)/30, q_max+(q_max-q_min)/30])
+        # plt.ylim([v_min-(v_max-v_min)/30, v_max+(v_max-v_min)/30])
         plt.ylabel('$\dot{q}$ (rad/s)')
         plt.xlabel('$q$ (rad)')
-        plt.subplots_adjust(left=0.14)
-
+        import matplotlib.ticker as tck
+        from fractions import Fraction
+        def pi_formatter(x, pos):
+            return f"${Fraction((x/np.pi)).limit_denominator(max_denominator=12)}\pi$"
+        ax.xaxis.set_major_formatter(tck.FuncFormatter(pi_formatter))
+        ax.xaxis.set_major_locator(tck.MultipleLocator(base=np.pi/8))
         plt.grid()
-        plt.title("Classifier")
+        plt.title("Viability kernel approximation")
 
     plt.show()

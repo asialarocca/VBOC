@@ -1,12 +1,12 @@
 from acados_template import AcadosOcp, AcadosOcpSolver, AcadosSim, AcadosSimSolver
 import numpy as np
 from acados_template import AcadosModel
-from casadi import SX, vertcat, cos, sin, dot
+from casadi import SX, vertcat, dot
 import urdf2casadi.urdfparser as u2c
 import os
 
 
-class OCPtriplependulum:
+class OCPUR5:
     def __init__(self):
 
         # --------------------SET MODEL--------------------
@@ -14,31 +14,28 @@ class OCPtriplependulum:
         model_name = "ur5_model"
 
         self.gravity = [0, 0, -9.81]
-        self.root = "world"
+        self.root = "base_link"
         self.tip = "tool0"
 
         self.ur5 = u2c.URDFparser()
         path_to_urdf = os.path.dirname(
             os.path.abspath(__file__)) + '/ur5.urdf'
         self.ur5.from_file(path_to_urdf)
-        n_joints = self.ur5.get_n_joints(self.root, self.tip)
+        self.n_joints = self.ur5.get_n_joints(self.root, self.tip)
 
         # states
-        q = SX.sym("qs", n_joints)
-        qdot = SX.sym("qsdot", n_joints)
-        q_dot = SX.sym("qs_dot", n_joints)
-        qdot_dot = SX.sym("qsdot_dot", n_joints)
+        q = SX.sym("qs", self.n_joints)
+        qdot = SX.sym("qsdot", self.n_joints)
+        q_dot = SX.sym("qs_dot", self.n_joints)
+        qdot_dot = SX.sym("qsdot_dot", self.n_joints)
         self.x = vertcat(q, qdot)
         xdot = vertcat(q_dot, qdot_dot)
 
         # controls
-        self.u = SX.sym("C", n_joints)
+        self.u = SX.sym("C", self.n_joints)
 
         # parameters
-        w1 = SX.sym("w1") 
-        w2 = SX.sym("w2")
-        w3 = SX.sym("w3") 
-        p = vertcat(w1, w2, w3)
+        p = SX.sym("w", self.n_joints)
 
         # dynamics
         func = self.ur5.get_forward_dynamics_aba(self.root, self.tip, gravity=self.gravity)
@@ -74,36 +71,36 @@ class OCPtriplependulum:
         self.ocp.cost.cost_type_0 = 'EXTERNAL'
 
         self.ocp.model.cost_expr_ext_cost_0 = dot(p,qdot)
-        self.ocp.parameter_values = np.array([0., 0., 0.])
+        self.ocp.parameter_values = np.zeros((self.n_joints))
 
         # set constraints
-        self.Cmax = np.array([150., 150., 150.]) # np.array([28., 28., 28.])
+        u_limits = np.array([100., 80., 60., 1., 0.8, 0.6]) # np.array([150., 150., 150., 28., 28., 28.])
+        x_limits = np.array([3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3., 3.]) # np.array([3.14, 3.14, 3.14, 3.14, 3.14, 3.14, 3.14, 3.14, 3.14, 3.14, 3.14, 3.14])
+
+        self.Cmax = u_limits[:self.n_joints]
         self.Cmin = - self.Cmax
-        self.xmax = np.array([3.14, 3.14, 3.14, 3.15, 3.15, 3.15]) # np.array([3.14, 3.14, 3.14, 3.2, 3.2, 3.2]) 
+        self.xmax = np.concatenate((x_limits[:self.n_joints],x_limits[self.n_joints*2:self.n_joints*3]))
         self.xmin = - self.xmax
 
-        self.dthetamax = self.xmax[3]
-        self.dthetamin = self.xmin[3]
-        self.thetamax = self.xmax[0]
-        self.thetamin = self.xmin[0]
+        self.xmax[1] = 0.
 
         self.ocp.constraints.lbu = np.copy(self.Cmin)
         self.ocp.constraints.ubu = np.copy(self.Cmax)
-        self.ocp.constraints.idxbu = np.array([0, 1, 2])
+        self.ocp.constraints.idxbu = np.array(range(self.n_joints))
         self.ocp.constraints.lbx = np.copy(self.xmin)
         self.ocp.constraints.ubx = np.copy(self.xmax)
-        self.ocp.constraints.idxbx = np.array([0, 1, 2, 3, 4, 5])
+        self.ocp.constraints.idxbx = np.array(range(self.n_joints*2))
         self.ocp.constraints.lbx_e = np.copy(self.xmin)
         self.ocp.constraints.ubx_e = np.copy(self.xmax)
-        self.ocp.constraints.idxbx_e = np.array([0, 1, 2, 3, 4, 5])
+        self.ocp.constraints.idxbx_e = np.array(range(self.n_joints*2))
         self.ocp.constraints.lbx_0 = np.copy(self.xmin)
         self.ocp.constraints.ubx_0 = np.copy(self.xmax)
-        self.ocp.constraints.idxbx_0 = np.array([0, 1, 2, 3, 4, 5])
+        self.ocp.constraints.idxbx_0 = np.array(range(self.n_joints*2))
 
-        self.ocp.constraints.C = np.zeros((3,6))
-        self.ocp.constraints.D = np.zeros((3,3))
-        self.ocp.constraints.lg = np.zeros((3))
-        self.ocp.constraints.ug = np.zeros((3))
+        self.ocp.constraints.C = np.zeros((self.n_joints,self.n_joints*2))
+        self.ocp.constraints.D = np.zeros((self.n_joints,self.n_joints))
+        self.ocp.constraints.lg = np.zeros((self.n_joints))
+        self.ocp.constraints.ug = np.zeros((self.n_joints))
 
         # Cartesian constraints:
         # radius = 0.1
@@ -120,6 +117,7 @@ class OCPtriplependulum:
         # self.ocp.solver_options.exact_hess_cost = 0
         self.ocp.solver_options.exact_hess_dyn = 0
         self.ocp.solver_options.nlp_solver_tol_stat = 1e-3
+        self.ocp.solver_options.qp_solver_tol_stat = 1e-3
         self.ocp.solver_options.qp_solver_iter_max = 100
         self.ocp.solver_options.nlp_solver_max_iter = 1000
         self.ocp.solver_options.globalization = "MERIT_BACKTRACKING"
@@ -131,7 +129,7 @@ class OCPtriplependulum:
 
     def get_inverse_dynamics(self, q, qdot):
 
-        return self.inv_dyn(q, qdot, np.zeros((3,))).toarray().reshape(3,)
+        return self.inv_dyn(q, qdot, np.zeros((self.n_joints,))).toarray().reshape(self.n_joints,)
     
     def get_kinematics(self, q):
 
@@ -139,7 +137,7 @@ class OCPtriplependulum:
         return 2*dual_quaternion[4:7]*dual_quaternion[:3]
 
 
-class OCPtriplependulumINIT(OCPtriplependulum):
+class OCPUR5INIT(OCPUR5):
     def __init__(self):
 
         # inherit initialization
@@ -162,15 +160,15 @@ class OCPtriplependulumINIT(OCPtriplependulum):
             self.ocp_solver.constraints_set(i, 'ubx', q_ub) 
             self.ocp_solver.constraints_set(i, 'lbu', u_lb)
             self.ocp_solver.constraints_set(i, 'ubu', u_ub)
-            self.ocp_solver.constraints_set(i, 'C', np.zeros((3,6)))
-            self.ocp_solver.constraints_set(i, 'D', np.zeros((3,3)))
-            self.ocp_solver.constraints_set(i, 'lg', np.zeros((3)))
-            self.ocp_solver.constraints_set(i, 'ug', np.zeros((3)))
+            self.ocp_solver.constraints_set(i, 'C', np.zeros((self.n_joints,self.n_joints*2)))
+            self.ocp_solver.constraints_set(i, 'D', np.zeros((self.n_joints,self.n_joints)))
+            self.ocp_solver.constraints_set(i, 'lg', np.zeros((self.n_joints)))
+            self.ocp_solver.constraints_set(i, 'ug', np.zeros((self.n_joints)))
 
-        C = np.zeros((3,6))
+        C = np.zeros((self.n_joints,self.n_joints*2))
         d = np.array([p.tolist()])
         dt = np.transpose(d)
-        C[:,3:] = np.identity(3)-np.matmul(dt,d) 
+        C[:,self.n_joints:] = np.identity(self.n_joints)-np.matmul(dt,d) 
         self.ocp_solver.constraints_set(0, "C", C, api='new') 
 
         self.ocp_solver.constraints_set(0, "lbx", q_init_lb)
@@ -190,7 +188,7 @@ class OCPtriplependulumINIT(OCPtriplependulum):
         return status
 
 
-class SYMtriplependulumINIT(OCPtriplependulum):
+class SYMUR5INIT(OCPUR5):
     def __init__(self):
 
         # inherit initialization
