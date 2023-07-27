@@ -34,7 +34,7 @@ The algorithms are implemented in Python and they rely on:
 
 - [PyTorch with CUDA](https://pytorch.org/) for the NNs training
 - [ACADOS](https://docs.acados.org/python_interface/) to solve the OCPs
-- matplotlib, numpy, scipy, casadi, [urdf2casadi](https://pypi.org/project/urdf2casadi/) (optional)
+- [matplotlib](https://pypi.org/project/matplotlib/), [numpy](https://pypi.org/project/numpy/), [scipy](https://pypi.org/project/scipy/), [casadi](hhttps://pypi.org/project/casadi/), [urdf2casadi](https://pypi.org/project/urdf2casadi/) (optional)
 
 ## Usage
 
