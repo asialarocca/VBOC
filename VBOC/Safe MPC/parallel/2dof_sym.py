@@ -104,7 +104,6 @@ def simulate(p):
             x_sol_guess[ocp.N] = np.copy(x_sol_guess[ocp.N-1])
             u_sol_guess[ocp.N-1] = [ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol_guess[ocp.N-1,0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol_guess[ocp.N-1,1])]
 
-        noise_intensity = 1e-3
         noise = np.array([(ocp.thetamax-ocp.thetamin)*noise_intensity*random.uniform(-1, 1), (ocp.thetamax-ocp.thetamin)*2*noise_intensity*random.uniform(-1, 1), ocp.dthetamax*2*noise_intensity*random.uniform(-1, 1), ocp.dthetamax*2*noise_intensity*random.uniform(-1, 1)])
 
         sim.acados_integrator.set("u", simU[f])
@@ -210,15 +209,15 @@ start_time = time.time()
 device = torch.device("cpu") # "cuda" if torch.cuda.is_available() else 
 
 model_dir = NeuralNetRegression(4, 300, 1).to(device)
-model_dir.load_state_dict(torch.load('../../model_2dof_vboc_10_300_0.5_2.4007833'))
-mean_dir = torch.load('../../mean_2dof_vboc_10_300')
-std_dir = torch.load('../../std_2dof_vboc_10_300')
-safety_margin = 2.4007833
+model_dir.load_state_dict(torch.load('../model_2dof_vboc'))
+mean_dir = torch.load('../mean_2dof_vboc')
+std_dir = torch.load('../std_2dof_vboc')
+safety_margin = 2.0
 
 params = list(model_dir.parameters())
 
-ocp = OCPdoublependulumINIT(False, params, mean_dir, std_dir, safety_margin)
-sim = SYMdoublependulumINIT(False)
+ocp = OCPdoublependulumINIT(True, params, mean_dir, std_dir, safety_margin)
+sim = SYMdoublependulumINIT(True)
 
 # Generate low-discrepancy unlabeled samples:
 sampler = qmc.Halton(d=2, scramble=False)
@@ -229,10 +228,12 @@ l_bounds = [q_min, q_min]
 u_bounds = [q_max, q_max]
 data = qmc.scale(sample, l_bounds, u_bounds)
 
+noise_intensity = 0 #1e-3
+
 tot_steps = 100
 q_ref = np.array([(ocp.thetamax+ocp.thetamin)/2, ocp.thetamax - 0.05])
 
-cpu_num = 30
+cpu_num = 1# 30
 with Pool(cpu_num) as p:
     res = p.map(simulate, range(data.shape[0]))
 

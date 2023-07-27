@@ -28,12 +28,29 @@ For more details, please refer to the paper "VBOC: Learning the Viability Bounda
 - V. Rubies-Royo and C. Tomlin, "Recursive Regression with Neural Networks: Approximating the HJI PDE Solution," in 5th International Conference on Learning Representations, Apr 2017. Available at: http://arxiv.org/abs/1611.02739.
 - A. La Rocca, M. Saveriano, A. Del Prete, "VBOC: Learning the Viability Boundary of a Robot Manipulator using Optimal Control," arXiv:2305.07535 [cs.RO], 2023. Available at: http://arxiv.org/abs/2305.07535.
 
+## Dependencies
+
+The algorithms are implemented in Python and they rely on:
+
+- PyTorch with CUDA (see https://pytorch.org/ for installation) for the NNs training.
+- ACADOS (see https://docs.acados.org/python_interface/ for installation) to solve the OCPs.
+- matplotlib, numpy, scipy, casadi, urdf2casadi (optional)
+
 ## Usage
 
 The main folder contains scripts for the generation of test data and for the comparison of the performance of the algorithms. The subfolders "AL", "VBOC" and "HJR" contain the implementation of the different algorithms for the computation of the Viability Kernels of 1, 2 and 3 DOFs systems.
 
-The algorithms are implemented in Python and they rely on ACADOS (see https://docs.acados.org/python_interface/ for installation) for solving the OCPs and PyTorch with CUDA (see https://pytorch.org/ for installation) for the NNs training.
+Work in progress: in the "VBOC" folder you can also find other subfolders containing first studies on the application of VBOC to problems with cartesian constraints, to an UR5 robot manipulator, and some first tests on the usage of the learned sets to ensure recursive feasibility with Model Predictive Control.
 
-To try the algorithms and compare their performance you have to first generate the test data (execute "selectedsystem_testdata.py"), then compute the set with the three algorithms (execute "AL/selectedsystem_al.py", "HJR/selectedsystem_hjr.py" and "VBOV/selectedsystem_vboc_iterative.py") and then compare the results (execute "selectedsystem_comparison.py").
-
-Work in progress: in the "VBOC" folder you can also find other subfolders containing first studies on the application of VBOC to problems with cartesian constraints and to an UR5 robot manipulator and some first tests on the usage of the learned sets to ensure recursive feasibility with Model Predictive Control.
+To try the algorithms and compare their performance you have to first generate the test data for the selected system (either "pendulum", "doublependulum", "triplependulum") in the main folder:
+```
+python3 <selectedsystem>_testdata.py
+```
+then compute the set with the three algorithms ("al", "vboc", "hjr") within the relative subfolder:
+```
+python3 <selectedsystem>_<selectedalgorithm>.py
+```
+and then compare the resulting set approximations:
+```
+python3 <selectedsystem>_comparison.py
+```

@@ -27,8 +27,8 @@ class OCPdoublependulum:
 
         # xdot
         theta1_dot = SX.sym("theta1_dot")
-        theta2_dot = SX.sym("theta1_dot")
-        dtheta1_dot = SX.sym("dtheta2_dot")
+        theta2_dot = SX.sym("theta2_dot")
+        dtheta1_dot = SX.sym("dtheta1_dot")
         dtheta2_dot = SX.sym("dtheta2_dot")
         xdot = vertcat(theta1_dot, theta2_dot, dtheta1_dot, dtheta2_dot)
 
@@ -107,7 +107,7 @@ class OCPdoublependulum:
         
 
 class OCPdoublependulumINIT(OCPdoublependulum):
-    def __init__(self, regenerate, nn_params, mean, std, safety_margin):
+    def __init__(self, regenerate):
 
         # inherit initialization
         super().__init__()
@@ -117,8 +117,8 @@ class OCPdoublependulumINIT(OCPdoublependulum):
         self.ocp = AcadosOcp()
 
         # times
-        self.Tf = 0.05
-        self.N = int(100 * self.Tf)
+        self.Tf = 0.01
+        self.N = int(1000 * self.Tf)
         self.ocp.solver_options.tf = self.Tf
         self.ocp.dims.N = self.N
 
@@ -128,7 +128,7 @@ class OCPdoublependulumINIT(OCPdoublependulum):
         self.ny_e = self.nx
 
         # cost
-        Q = np.diag([1e2, 1e2, 1e-4, 1e-4])
+        Q = np.diag([1e4, 1e4, 1e-4, 1e-4])
         R = np.diag([1e-4, 1e-4])
 
         self.ocp.cost.W_e = Q
@@ -174,7 +174,7 @@ class OCPdoublependulumINIT(OCPdoublependulum):
 
         # -------------------------------------------------
 
-        self.ocp.solver_options.nlp_solver_type = "SQP"
+        # self.ocp.solver_options.nlp_solver_type = "SQP"
         self.ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"
         self.ocp.solver_options.tol = 1e-2
         self.ocp.solver_options.qp_solver_iter_max = 100
@@ -211,32 +211,6 @@ class OCPdoublependulumINIT(OCPdoublependulum):
         status = self.ocp_solver.solve()
 
         return status
-    
-    def nn_decisionfunction(self, params, mean, std, safety_margin, x):
-
-        vel_norm = fmax(norm_2(x[2:]), 1e-3)
-
-        mean = vertcat(mean,mean,0.,0.)
-        std = vertcat(std,std,vel_norm,vel_norm)
-
-        out = (x - mean) / std
-        it = 0
-
-        for param in params:
-
-            param = SX(param.tolist())
-
-            if it % 2 == 0:
-                out = param @ out
-            else:
-                out = param + out
-
-                if it == 1 or it == 3:
-                    out = fmax(0., out)
-
-            it += 1
-
-        return out - vel_norm 
 
 
 class SYMdoublependulumINIT(OCPdoublependulum):
@@ -247,6 +221,6 @@ class SYMdoublependulumINIT(OCPdoublependulum):
 
         sim = AcadosSim()
         sim.model = self.model
-        sim.solver_options.T = 1e-2
+        sim.solver_options.T = 1e-3
         sim.solver_options.num_stages = 4
         self.acados_integrator = AcadosSimSolver(sim, build=regenerate)

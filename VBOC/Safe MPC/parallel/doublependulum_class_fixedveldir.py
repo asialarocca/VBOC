@@ -117,8 +117,8 @@ class OCPdoublependulumINIT(OCPdoublependulum):
         self.ocp = AcadosOcp()
 
         # times
-        self.Tf = 0.05
-        self.N = int(100 * self.Tf)
+        self.Tf = 0.01
+        self.N = int(1000 * self.Tf)
         self.ocp.solver_options.tf = self.Tf
         self.ocp.dims.N = self.N
 
@@ -128,7 +128,7 @@ class OCPdoublependulumINIT(OCPdoublependulum):
         self.ny_e = self.nx
 
         # cost
-        Q = np.diag([1e2, 1e2, 1e-4, 1e-4])
+        Q = np.diag([1e4, 1e4, 1e-4, 1e-4])
         R = np.diag([1e-4, 1e-4])
 
         self.ocp.cost.W_e = Q
@@ -199,7 +199,7 @@ class OCPdoublependulumINIT(OCPdoublependulum):
 
         # -------------------------------------------------
 
-        self.ocp.solver_options.nlp_solver_type = "SQP"
+        # self.ocp.solver_options.nlp_solver_type = "SQP"
         self.ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"
         self.ocp.solver_options.tol = 1e-2
         self.ocp.solver_options.qp_solver_iter_max = 100
@@ -272,6 +272,6 @@ class SYMdoublependulumINIT(OCPdoublependulum):
 
         sim = AcadosSim()
         sim.model = self.model
-        sim.solver_options.T = 1e-2
+        sim.solver_options.T = 1e-3
         sim.solver_options.num_stages = 4
         self.acados_integrator = AcadosSimSolver(sim, build=regenerate)

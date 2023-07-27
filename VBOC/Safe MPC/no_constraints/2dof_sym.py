@@ -20,9 +20,10 @@ def simulate(p):
     simU = np.ndarray((tot_steps, ocp.ocp.dims.nu))
     simX[0] = np.copy(x0)
 
+    times = [None] * tot_steps
+
     failed_iter = -1
 
-    tot_time = 0
     calls = 0
 
     # Guess:
@@ -33,7 +34,7 @@ def simulate(p):
        
         temp = time.time()
         status = ocp.OCP_solve(simX[f], q_ref, x_sol_guess, u_sol_guess)
-        tot_time += time.time() - temp
+        times[f] = time.time() - temp
         calls += 1
 
         if status != 0:
@@ -65,7 +66,6 @@ def simulate(p):
             x_sol_guess[ocp.N] = np.copy(x_sol_guess[ocp.N-1])
             u_sol_guess[ocp.N-1] = [ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol_guess[ocp.N-1,0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol_guess[ocp.N-1,1])]
 
-        noise_intensity = 1e-3
         noise = np.array([(ocp.thetamax-ocp.thetamin)*noise_intensity*random.uniform(-1, 1), (ocp.thetamax-ocp.thetamin)*2*noise_intensity*random.uniform(-1, 1), ocp.dthetamax*2*noise_intensity*random.uniform(-1, 1), ocp.dthetamax*2*noise_intensity*random.uniform(-1, 1)])
 
         sim.acados_integrator.set("u", simU[f])
@@ -74,22 +74,14 @@ def simulate(p):
         simX[f+1] = sim.acados_integrator.get("x") + noise
         simU[f] = u_sol_guess[0]
 
-    tm = tot_time/calls
-
-    return f, tm
+    return f, times
 
 start_time = time.time()
 
 # Pytorch params:
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # pytorch device
+device = torch.device("cpu") # pytorch device
 
-model_dir = NeuralNetRegression(4, 300, 1).to(device)
-model_dir.load_state_dict(torch.load('../../model_2dof_vboc_10_300_0.5_2.4007833'))
-mean_dir = torch.load('../../mean_2dof_vboc_10_300')
-std_dir = torch.load('../../std_2dof_vboc_10_300')
-safety_margin = 2.4007833
-
-ocp = OCPdoublependulumINIT(True, model_dir.parameters(), mean_dir, std_dir, safety_margin)
+ocp = OCPdoublependulumINIT(True)
 sim = SYMdoublependulumINIT(True)
 
 # Generate low-discrepancy unlabeled samples:
@@ -101,18 +93,24 @@ l_bounds = [q_min, q_min]
 u_bounds = [q_max, q_max]
 data = qmc.scale(sample, l_bounds, u_bounds)
 
+noise_intensity = 0
+
 tot_steps = 100
 q_ref = np.array([(ocp.thetamax+ocp.thetamin)/2, ocp.thetamax - 0.05])
 
 # MPC controller without terminal constraints:
 cpu_num = 30
 with Pool(cpu_num) as p:
-    res = np.array(p.map(simulate, range(data.shape[0])))
+    res = p.map(simulate, range(data.shape[0]))
 
 res_steps, stats = zip(*res)
 
-print('Mean solve time: ' + str(np.mean(stats)))
+times = np.array([i for f in stats for i in f if i is not None])
+
+print('90 percent quantile solve time: ' + str(np.quantile(times, 0.9)))
+print('Mean solve time: ' + str(np.mean(times)))
 
 print(np.array(res_steps).astype(int))
+print(times)
 
 np.save('res_steps_noconstr.npy', np.array(res_steps).astype(int))

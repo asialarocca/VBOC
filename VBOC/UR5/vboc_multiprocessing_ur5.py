@@ -485,20 +485,20 @@ eps = tol*10 # unviable data generation parameter
 
 # print('Start test data generation')
 
-# # Testing data generation:
-# cpu_num = 30
-# num_prob = 1000
-# with Pool(cpu_num) as p:
-#     traj = p.map(testing_test, range(num_prob))
+# Testing data generation:
+cpu_num = 30
+num_prob = 10000
+with Pool(cpu_num) as p:
+    traj = p.map(testing_test, range(num_prob))
 
-# X_temp = [i for i in traj if i is not None]
-# X_test = np.array([i for f in X_temp for i in f])
+X_temp = [i for i in traj if i is not None]
+X_test = np.array([i for f in X_temp for i in f])
 
-# # Save training data:
-# np.save('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_test', np.asarray(X_test))
+# Save training data:
+np.save('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_test', np.asarray(X_test))
 
 X_test = np.load('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_test.npy')
-# X_old = np.load('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_train.npy')
+X_old = np.load('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_train.npy')
 
 print('Start data generation')
 
@@ -522,10 +522,10 @@ print('Solved/tot', len(X_temp)/num_prob)
 X_save = np.array([i for f in X_temp for i in f])
 print('Saved/tot', len(X_save)/(solved*100))
 
-# X_tot = np.concatenate((X_old,X_save))
+X_tot = np.concatenate((X_old,X_save))
 
 # Save training data:
-np.save('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_train', np.asarray(X_save))
+np.save('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_train', np.asarray(X_tot))
 
 # X_save = np.load('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_train.npy')
 
@@ -540,7 +540,7 @@ model_dir = NeuralNetDIR(input_layers, hidden_layers, output_layers).to(device)
 criterion_dir = nn.MSELoss()
 optimizer_dir = torch.optim.Adam(model_dir.parameters(), lr=learning_rate)
 
-# model_dir.load_state_dict(torch.load('model_' + str(ocp.ocp.dims.nu) + 'dof_vboc'))
+model_dir.load_state_dict(torch.load('model_' + str(ocp.ocp.dims.nu) + 'dof_vboc'))
 
 # # Joint positions mean and variance:
 # mean_dir, std_dir = torch.mean(torch.tensor(X_save[:,:ocp.ocp.dims.nu].tolist())).to(device).item(), torch.std(torch.tensor(X_save[:,:ocp.ocp.dims.nu].tolist())).to(device).item()
@@ -561,7 +561,7 @@ for i in range(X_train_dir.shape[0]):
         X_train_dir[i][l+ocp.ocp.dims.nu] = X_save[i][l+ocp.ocp.dims.nu] / vel_norm
 
 beta = 0.95
-n_minibatch = pow(2,16)
+n_minibatch = pow(2,15)
 B = int(X_save.shape[0]*100/n_minibatch) # number of iterations for 100 epoch
 it_max = B * 20
 
@@ -627,7 +627,7 @@ with torch.no_grad():
 # Save the model:
 torch.save(model_dir.state_dict(), 'model_' + str(ocp.ocp.dims.nu) + 'dof_vboc')
 
-print("Execution time: %s seconds" % (time.time() - time_start))
+print("Execution time: %s seconds" % (time.time() - time_start + 143651))
 
 # Show training data and resulting set approximation:
 if ocp.ocp.dims.nu == 3:

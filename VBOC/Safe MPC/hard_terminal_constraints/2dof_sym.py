@@ -65,7 +65,6 @@ def simulate(p):
             x_sol_guess[ocp.N] = np.copy(x_sol_guess[ocp.N-1])
             u_sol_guess[ocp.N-1] = [ocp.g*ocp.l1*(ocp.m1+ocp.m2)*math.sin(x_sol_guess[ocp.N-1,0]),ocp.g*ocp.l2*ocp.m2*math.sin(x_sol_guess[ocp.N-1,1])]
 
-        noise_intensity = 1e-3
         noise = np.array([(ocp.thetamax-ocp.thetamin)*noise_intensity*random.uniform(-1, 1), (ocp.thetamax-ocp.thetamin)*2*noise_intensity*random.uniform(-1, 1), ocp.dthetamax*2*noise_intensity*random.uniform(-1, 1), ocp.dthetamax*2*noise_intensity*random.uniform(-1, 1)])
 
         sim.acados_integrator.set("u", simU[f])
@@ -81,13 +80,15 @@ def simulate(p):
 start_time = time.time()
 
 # Pytorch params:
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
+device = torch.device("cpu") 
 
 model_dir = NeuralNetRegression(4, 300, 1).to(device)
-model_dir.load_state_dict(torch.load('../../model_2dof_vboc_10_300_0.5_2.4007833'))
-mean_dir = torch.load('../../mean_2dof_vboc_10_300')
-std_dir = torch.load('../../std_2dof_vboc_10_300')
-safety_margin = 2.4007833
+model_dir.load_state_dict(torch.load('../model_2dof_vboc'))
+mean_dir = torch.load('../mean_2dof_vboc')
+std_dir = torch.load('../std_2dof_vboc')
+safety_margin = 2.0
+
+noise_intensity = 0
 
 params = list(model_dir.parameters())
 
