@@ -25,8 +25,9 @@ For more details, please refer to the paper "VBOC: Learning the Viability Bounda
 
 ## References
 
-- V. Rubies-Royo and C. Tomlin, "Recursive Regression with Neural Networks: Approximating the HJI PDE Solution," in 5th International Conference on Learning Representations, Apr 2017. Available at: http://arxiv.org/abs/1611.02739
 - A. La Rocca, M. Saveriano, A. Del Prete, "VBOC: Learning the Viability Boundary of a Robot Manipulator using Optimal Control," arXiv:2305.07535 [cs.RO], 2023. Available at: http://arxiv.org/abs/2305.07535
+- V. Rubies-Royo and C. Tomlin, "Recursive Regression with Neural Networks: Approximating the HJI PDE Solution," in 5th International Conference on Learning Representations, 2017. Available at: http://arxiv.org/abs/1611.02739
+- A. Chakrabarty, C. Danielson, S. D. Cairano, and A. Raghunathan, "Active Learning for Estimating Reachable Sets for Systems With Unknown Dynamics", IEEE Transactions on Cybernetics, 2020
 
 ## Dependencies
 
