@@ -106,11 +106,11 @@ mean = torch.load('../mean_3dof_vboc')
 std = torch.load('../std_3dof_vboc')
 safety_margin = 2.0
 
-cpu_num = 10
+cpu_num = 1
 test_num = 100
 
-time_step = 5*1e-3
-tot_time = 0.02 #0.1 0.011s, 0.06 0.008s, 0.04 0.006s, 0.03 0.0044s
+time_step = 4*1e-3
+tot_time = 0.16 #0.1 0.011s, 0.06 0.008s, 0.04 0.006s, 0.03 0.0044s
 tot_steps = 100
 
 regenerate = True
@@ -120,28 +120,40 @@ u_sol_guess_vec = np.load('../u_sol_guess.npy')
 
 params = list(model.parameters())
 
-ocp = OCPtriplependulumSoftTraj("SQP_RTI", time_step, tot_time, params, mean, std, safety_margin, regenerate)
-sim = SYMtriplependulum(time_step, tot_time, regenerate)
+quant = 10.
+r = 1
 
-# Generate low-discrepancy unlabeled samples:
-sampler = qmc.Halton(d=ocp.ocp.dims.nu, scramble=False)
-sample = sampler.random(n=test_num)
-l_bounds = ocp.Xmin_limits[:ocp.ocp.dims.nu]
-u_bounds = ocp.Xmax_limits[:ocp.ocp.dims.nu]
-data = qmc.scale(sample, l_bounds, u_bounds)
+while quant > 3*1e-3:
 
-N = ocp.ocp.dims.N
+    ocp = OCPtriplependulumSoftTraj("SQP_RTI", time_step, tot_time, params, mean, std, safety_margin, regenerate)
+    sim = SYMtriplependulum(time_step, tot_time, regenerate)
 
-# MPC controller without terminal constraints:
-with Pool(cpu_num) as p:
-    res = p.map(simulate, range(data.shape[0]))
+    # Generate low-discrepancy unlabeled samples:
+    sampler = qmc.Halton(d=ocp.ocp.dims.nu, scramble=False)
+    sample = sampler.random(n=test_num)
+    l_bounds = ocp.Xmin_limits[:ocp.ocp.dims.nu]
+    u_bounds = ocp.Xmax_limits[:ocp.ocp.dims.nu]
+    data = qmc.scale(sample, l_bounds, u_bounds)
 
-res_steps_traj, stats = zip(*res)
+    N = ocp.ocp.dims.N
 
-times = np.array([i for f in stats for i in f if i is not None])
+    # MPC controller without terminal constraints:
+    with Pool(cpu_num) as p:
+        res = p.map(simulate, range(data.shape[0]))
 
-print('90 percent quantile solve time: ' + str(np.quantile(times, 0.9)))
-print('Mean solve time: ' + str(np.mean(times)))
+    res_steps_traj, stats = zip(*res)
+
+    times = np.array([i for f in stats for i in f if i is not None])
+
+    quant = np.quantile(times, 0.9)
+
+    print('iter: ', str(r))
+    print('tot time: ' + str(tot_time))
+    print('90 percent quantile solve time: ' + str(quant))
+    print('Mean solve time: ' + str(np.mean(times)))
+
+    tot_time -= 2*1e-2
+    r += 1
 
 print(np.array(res_steps_traj).astype(int))
 

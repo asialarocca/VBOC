@@ -93,14 +93,14 @@ def init_guess(p):
 
 start_time = time.time()
 
-cpu_num = 30
+cpu_num = 1
 test_num = 100
 
-time_step = 5*1e-3
-tot_time = 0.11
+time_step = 4*1e-3
+tot_time = 0.16
 tot_steps = 100
 
-ocp = OCPtriplependulumSTD("SQP", time_step, 0.5, True)
+ocp = OCPtriplependulumSTD("SQP", time_step, 0.2, True)
 
 # Generate low-discrepancy unlabeled samples:
 sampler = qmc.Halton(d=ocp.ocp.dims.nu, scramble=False)
@@ -111,7 +111,7 @@ data = qmc.scale(sample, l_bounds, u_bounds)
 
 N = ocp.ocp.dims.N
 
-with Pool(cpu_num) as p:
+with Pool(30) as p:
     res = p.map(init_guess, range(data.shape[0]))
 
 x_sol_guess_vec, u_sol_guess_vec = zip(*res)
