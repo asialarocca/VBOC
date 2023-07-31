@@ -8,7 +8,7 @@ import warnings
 warnings.filterwarnings("ignore")
 import torch
 import torch.nn as nn
-from my_nn import NeuralNetDIR
+from my_nn import NeuralNetDIRDeep
 from multiprocessing import Pool
 from torch.utils.data import DataLoader
 import torch.nn.utils.prune as prune
@@ -485,17 +485,17 @@ eps = tol*10 # unviable data generation parameter
 
 # print('Start test data generation')
 
-# Testing data generation:
-cpu_num = 30
-num_prob = 10000
-with Pool(cpu_num) as p:
-    traj = p.map(testing_test, range(num_prob))
+# # Testing data generation:
+# cpu_num = 30
+# num_prob = 10000
+# with Pool(cpu_num) as p:
+#     traj = p.map(testing_test, range(num_prob))
 
-X_temp = [i for i in traj if i is not None]
-X_test = np.array([i for f in X_temp for i in f])
+# X_temp = [i for i in traj if i is not None]
+# X_test = np.array([i for f in X_temp for i in f])
 
-# Save training data:
-np.save('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_test', np.asarray(X_test))
+# # Save training data:
+# np.save('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_test', np.asarray(X_test))
 
 X_test = np.load('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_test.npy')
 X_old = np.load('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_train.npy')
@@ -519,28 +519,26 @@ print('Data generation completed')
 # Print data generations statistics:
 solved=len(X_temp)
 print('Solved/tot', len(X_temp)/num_prob)
-X_save = np.array([i for f in X_temp for i in f])
-print('Saved/tot', len(X_save)/(solved*100))
+X_new = np.array([i for f in X_temp for i in f])
+print('Saved/tot', len(X_new)/(solved*100))
 
-X_tot = np.concatenate((X_old,X_save))
+X_save = np.concatenate((X_old,X_new))
 
 # Save training data:
-np.save('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_train', np.asarray(X_tot))
+np.save('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_train', np.asarray(X_save))
 
 # X_save = np.load('data_' + str(ocp.ocp.dims.nu) + 'dof_vboc_train.npy')
 
 # Pytorch params:
 input_layers = ocp.ocp.dims.nx
-hidden_layers = 1000 #(input_layers) * 100
+hidden_layers = 300
 output_layers = 1
 learning_rate = 1e-3
 
 # Model and optimizer:
-model_dir = NeuralNetDIR(input_layers, hidden_layers, output_layers).to(device)
+model_dir = NeuralNetDIRDeep(input_layers, hidden_layers, output_layers).to(device)
 criterion_dir = nn.MSELoss()
 optimizer_dir = torch.optim.Adam(model_dir.parameters(), lr=learning_rate)
-
-model_dir.load_state_dict(torch.load('model_' + str(ocp.ocp.dims.nu) + 'dof_vboc'))
 
 # # Joint positions mean and variance:
 # mean_dir, std_dir = torch.mean(torch.tensor(X_save[:,:ocp.ocp.dims.nu].tolist())).to(device).item(), torch.std(torch.tensor(X_save[:,:ocp.ocp.dims.nu].tolist())).to(device).item()
@@ -549,6 +547,7 @@ model_dir.load_state_dict(torch.load('model_' + str(ocp.ocp.dims.nu) + 'dof_vboc
 
 mean_dir = torch.load('mean_' + str(ocp.ocp.dims.nu) + 'dof_vboc')
 std_dir = torch.load('std_' + str(ocp.ocp.dims.nu) + 'dof_vboc')
+model_dir.load_state_dict(torch.load('model_' + str(ocp.ocp.dims.nu) + 'dof_vboc'))
 
 # Rewrite data in the form [normalized positions, velocity direction, velocity norm]:
 X_train_dir = np.empty((X_save.shape[0],ocp.ocp.dims.nx+1))
@@ -563,7 +562,7 @@ for i in range(X_train_dir.shape[0]):
 beta = 0.95
 n_minibatch = pow(2,15)
 B = int(X_save.shape[0]*100/n_minibatch) # number of iterations for 100 epoch
-it_max = B * 20
+it_max = B * 10
 
 print('Start model training')
 

@@ -25,8 +25,9 @@ For more details, please refer to the paper "VBOC: Learning the Viability Bounda
 
 ## References
 
-- V. Rubies-Royo and C. Tomlin, "Recursive Regression with Neural Networks: Approximating the HJI PDE Solution," in 5th International Conference on Learning Representations, Apr 2017. Available at: http://arxiv.org/abs/1611.02739
 - A. La Rocca, M. Saveriano, A. Del Prete, "VBOC: Learning the Viability Boundary of a Robot Manipulator using Optimal Control," arXiv:2305.07535 [cs.RO], 2023. Available at: http://arxiv.org/abs/2305.07535
+- V. Rubies-Royo and C. Tomlin, "Recursive Regression with Neural Networks: Approximating the HJI PDE Solution," in 5th International Conference on Learning Representations, 2017
+- A. Chakrabarty, C. Danielson, S. D. Cairano, and A. Raghunathan, "Active Learning for Estimating Reachable Sets for Systems With Unknown Dynamics", IEEE Transactions on Cybernetics, 2020
 
 ## Dependencies
 
@@ -34,7 +35,7 @@ The algorithms are implemented in Python and they rely on:
 
 - [PyTorch with CUDA](https://pytorch.org/) for the NNs training
 - [ACADOS](https://docs.acados.org/python_interface/) to solve the OCPs
-- [matplotlib](https://pypi.org/project/matplotlib/), [numpy](https://pypi.org/project/numpy/), [scipy](https://pypi.org/project/scipy/), [casadi](hhttps://pypi.org/project/casadi/), [urdf2casadi](https://pypi.org/project/urdf2casadi/) (optional)
+- [matplotlib](https://pypi.org/project/matplotlib/), [numpy](https://pypi.org/project/numpy/), [scipy](https://pypi.org/project/scipy/), [casadi](https://pypi.org/project/casadi/), [urdf2casadi](https://pypi.org/project/urdf2casadi/) (optional)
 
 ## Usage
 
@@ -54,3 +55,4 @@ and then compare the resulting set approximations:
 ```
 python3 <selectedsystem>_comparison.py
 ```
+

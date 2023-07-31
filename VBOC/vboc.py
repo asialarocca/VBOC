@@ -3,6 +3,8 @@ import sys
 sys.path.insert(1, os.getcwd() + '/..')
 
 import numpy as np
+import cProfile
+import pstats
 import random 
 import matplotlib.pyplot as plt
 from numpy.linalg import norm as norm
@@ -248,7 +250,7 @@ def data_generation(v):
                 # If the previous state was on a limit, the current state location cannot be identified using
                 # the corresponding unviable state but it has to rely on the proximity to the state limits 
                 # (more restrictive):
-                if any(i > q_max - eps or i < q_min + eps for i in x_sol[f][:system_sel]) or any(i > v_max - tol or i < v_min + tol for i in x_sol[system_sel:ocp.ocp.dims.nx - 1]):
+                if any(i > q_max - eps or i < q_min + eps for i in x_sol[f][:system_sel]) or any(i > v_max - tol or i < v_min + tol for i in x_sol[f][system_sel:ocp.ocp.dims.nx - 1]):
                     is_x_at_limit = True # the state is on dX
                 
                 else:
@@ -404,10 +406,10 @@ def data_generation(v):
 start_time = time.time()
 
 # Select system:
-system_sel = 2 # 2 for double pendulum, 3 for triple pendulum
+system_sel = 3 # 2 for double pendulum, 3 for triple pendulum
 
 # Prune the model:
-prune_model = True
+prune_model = False
 prune_amount = 0.5 # percentage of connections to delete
 
 # Ocp initialization:
@@ -440,7 +442,7 @@ print('Start data generation')
 
 # Data generation:
 cpu_num = 30
-num_prob = 1000
+num_prob = 100
 with Pool(cpu_num) as p:
     traj = p.map(data_generation, range(num_prob))
 
@@ -471,6 +473,8 @@ model_dir = NeuralNetDIR(input_layers, hidden_layers, output_layers).to(device)
 criterion_dir = nn.MSELoss()
 optimizer_dir = torch.optim.Adam(model_dir.parameters(), lr=learning_rate)
 
+# model_dir.load_state_dict(torch.load('model_' + system_sel + 'dof_vboc'))
+
 # Joint positions mean and variance:
 mean_dir, std_dir = torch.mean(torch.tensor(X_save[:,:system_sel].tolist())).to(device).item(), torch.std(torch.tensor(X_save[:,:system_sel].tolist())).to(device).item()
 torch.save(mean_dir, 'mean_' + str(system_sel) + 'dof_vboc')
@@ -487,8 +491,6 @@ for i in range(X_train_dir.shape[0]):
     for l in range(system_sel):
         X_train_dir[i][l] = (X_save[i][l] - mean_dir) / std_dir
         X_train_dir[i][l+system_sel] = X_save[i][l+system_sel] / vel_norm
-
-# model_dir.load_state_dict(torch.load('model_' + system_sel + 'dof_vboc'))
 
 beta = 0.95
 n_minibatch = 4096
@@ -543,7 +545,6 @@ with torch.no_grad():
     print('RMSE train data: ', torch.sqrt(criterion_dir(outputs_tensor, y_iter_tensor))) 
 
 # Compute resulting RMSE wrt testing data:
-
 X_test_dir = np.empty((X_test.shape[0],ocp.ocp.dims.nx))
 for i in range(X_test_dir.shape[0]):
     vel_norm = norm(X_test[i][system_sel:ocp.ocp.dims.nx - 1])
@@ -558,82 +559,82 @@ with torch.no_grad():
     outputs = model_dir(X_iter_tensor)
     print('RMSE test data: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor)))
 
-# # Save the model:
-# torch.save(model_dir.state_dict(), 'model_' + str(system_sel) + 'dof_vboc')
+# Save the model:
+torch.save(model_dir.state_dict(), 'model_' + str(system_sel) + 'dof_vboc')
 
 if prune_model:
 
-    parameters_to_prune = (
-        (model_dir.linear_relu_stack[0], 'weight'),
-        (model_dir.linear_relu_stack[2], 'weight'),
-        (model_dir.linear_relu_stack[4], 'weight'),
-        (model_dir.linear_relu_stack[0], 'bias'),
-        (model_dir.linear_relu_stack[2], 'bias'),
-        (model_dir.linear_relu_stack[4], 'bias'),
-    )
+        parameters_to_prune = (
+            (model_dir.linear_relu_stack[0], 'weight'),
+            (model_dir.linear_relu_stack[2], 'weight'),
+            (model_dir.linear_relu_stack[4], 'weight'),
+            (model_dir.linear_relu_stack[0], 'bias'),
+            (model_dir.linear_relu_stack[2], 'bias'),
+            (model_dir.linear_relu_stack[4], 'bias'),
+        )
 
-    prune.global_unstructured(
-        parameters_to_prune,
-        pruning_method=prune.L1Unstructured,
-        amount=prune_amount,
-    )
+        prune.global_unstructured(
+            parameters_to_prune,
+            pruning_method=prune.L1Unstructured,
+            amount=prune_amount,
+        )
 
-    # prune.l1_unstructured(model_dir.linear_relu_stack[0], name='weight', amount=prune_amount)
-    # prune.l1_unstructured(model_dir.linear_relu_stack[2], name='weight', amount=prune_amount)
-    # prune.l1_unstructured(model_dir.linear_relu_stack[4], name='weight', amount=prune_amount)
-    # prune.l1_unstructured(model_dir.linear_relu_stack[0], name='bias', amount=prune_amount)
-    # prune.l1_unstructured(model_dir.linear_relu_stack[2], name='bias', amount=prune_amount)
-    # prune.l1_unstructured(model_dir.linear_relu_stack[4], name='bias', amount=prune_amount)
+        # prune.l1_unstructured(model_dir.linear_relu_stack[0], name='weight', amount=prune_amount)
+        # prune.l1_unstructured(model_dir.linear_relu_stack[2], name='weight', amount=prune_amount)
+        # prune.l1_unstructured(model_dir.linear_relu_stack[4], name='weight', amount=prune_amount)
+        # prune.l1_unstructured(model_dir.linear_relu_stack[0], name='bias', amount=prune_amount)
+        # prune.l1_unstructured(model_dir.linear_relu_stack[2], name='bias', amount=prune_amount)
+        # prune.l1_unstructured(model_dir.linear_relu_stack[4], name='bias', amount=prune_amount)
 
-    # model_dir.load_state_dict({k: v for k, v in initial_model_params.items() if 'weight' in k or 'bias' in k}, strict=False)
+        # model_dir.load_state_dict({k: v for k, v in initial_model_params.items() if 'weight' in k or 'bias' in k}, strict=False)
 
-    print('Restart model training after pruning')
+        print('Restart model training after pruning')
 
-    it = 1
-    val = max(X_train_dir[:,ocp.ocp.dims.nx - 1])
+        it = 1
+        val = max(X_train_dir[:,ocp.ocp.dims.nx - 1])
 
-    # Train the model
-    while val > 1e-3 and it < it_max:
-        ind = random.sample(range(len(X_train_dir)), n_minibatch)
+        # Train the model
+        while val > 1e-3 and it < it_max:
+            ind = random.sample(range(len(X_train_dir)), n_minibatch)
 
-        X_iter_tensor = torch.Tensor([X_train_dir[i][:ocp.ocp.dims.nx - 1] for i in ind]).to(device)
-        y_iter_tensor = torch.Tensor([[X_train_dir[i][ocp.ocp.dims.nx - 1]] for i in ind]).to(device)
+            X_iter_tensor = torch.Tensor([X_train_dir[i][:ocp.ocp.dims.nx - 1] for i in ind]).to(device)
+            y_iter_tensor = torch.Tensor([[X_train_dir[i][ocp.ocp.dims.nx - 1]] for i in ind]).to(device)
 
-        # Forward pass
-        outputs = model_dir(X_iter_tensor)
-        loss = criterion_dir(outputs, y_iter_tensor)
+            # Forward pass
+            outputs = model_dir(X_iter_tensor)
+            loss = criterion_dir(outputs, y_iter_tensor)
 
-        # Backward and optimize
-        loss.backward()
-        optimizer_dir.step()
-        optimizer_dir.zero_grad()
+            # Backward and optimize
+            loss.backward()
+            optimizer_dir.step()
+            optimizer_dir.zero_grad()
 
-        val = beta * val + (1 - beta) * loss.item()
-        it += 1
+            val = beta * val + (1 - beta) * loss.item()
+            it += 1
 
-        if it % B == 0: 
-            print(val)
-            training_evol.append(val)
+            if it % B == 0: 
+                print(val)
+                training_evol.append(val)
 
-    print('Model training completed')
+        print('Model training completed')
 
-    prune.remove(model_dir.linear_relu_stack[0], 'weight')
-    prune.remove(model_dir.linear_relu_stack[2], 'weight')
-    prune.remove(model_dir.linear_relu_stack[4], 'weight')
-    prune.remove(model_dir.linear_relu_stack[0], 'bias')
-    prune.remove(model_dir.linear_relu_stack[2], 'bias')
-    prune.remove(model_dir.linear_relu_stack[4], 'bias')
+        prune.remove(model_dir.linear_relu_stack[0], 'weight')
+        prune.remove(model_dir.linear_relu_stack[2], 'weight')
+        prune.remove(model_dir.linear_relu_stack[4], 'weight')
+        prune.remove(model_dir.linear_relu_stack[0], 'bias')
+        prune.remove(model_dir.linear_relu_stack[2], 'bias')
+        prune.remove(model_dir.linear_relu_stack[4], 'bias')
 
-    # print('----------------------')
-    # print(list(model_dir.named_parameters()))
-    # print(list(model_dir.named_buffers()))
+        # print('----------------------')
+        # print(list(model_dir.named_parameters()))
+        # print(list(model_dir.named_buffers()))
 
-    with torch.no_grad():
-        X_iter_tensor = torch.Tensor(X_test_dir[:,:ocp.ocp.dims.nx - 1]).to(device)
-        y_iter_tensor = torch.Tensor(X_test_dir[:,ocp.ocp.dims.nx - 1:]).to(device)
-        outputs = model_dir(X_iter_tensor)
-        print('RMSE test data after pruning: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor)))
-        print('Pruning percentage: ', prune_amount * 100)
+        with torch.no_grad():
+            X_iter_tensor = torch.Tensor(X_test_dir[:,:ocp.ocp.dims.nx - 1]).to(device)
+            y_iter_tensor = torch.Tensor(X_test_dir[:,ocp.ocp.dims.nx - 1:]).to(device)
+            outputs = model_dir(X_iter_tensor)
+            print('RMSE test data after pruning: ', torch.sqrt(criterion_dir(outputs, y_iter_tensor)))
+            print('Pruning percentage: ', prune_amount * 100)
 
 with torch.no_grad():
     # Compute safety margin:

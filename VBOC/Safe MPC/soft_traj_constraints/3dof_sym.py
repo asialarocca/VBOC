@@ -108,8 +108,8 @@ data = qmc.scale(sample, l_bounds, u_bounds)
 N = ocp.ocp.dims.N
 
 for i in range(1,N):
-    ocp.ocp_solver.cost_set(i, "Zl", 1e6*np.ones((1,)))
-ocp.ocp_solver.cost_set(N, "Zl", 1e6*np.ones((1,)))
+    ocp.ocp_solver.cost_set(i, "Zl", 1e4*np.ones((1,)))
+ocp.ocp_solver.cost_set(N, "Zl", 1e4*np.ones((1,)))
 
 # MPC controller without terminal constraints:
 with Pool(cpu_num) as p:
