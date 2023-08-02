@@ -5,7 +5,7 @@ sys.path.insert(1, os.getcwd() + '/..')
 import numpy as np
 import time
 import torch
-from triplependulum_class_vboc import OCPtriplependulumSoftTraj, SYMtriplependulum
+from triplependulum_class_vboc import OCPtriplependulumHardTraj, SYMtriplependulum
 from my_nn import NeuralNetDIR
 from multiprocessing import Pool
 import scipy.linalg as lin
@@ -37,11 +37,11 @@ def simulate(p):
 
         if failed_iter == 0 and f > 0:
             for i in range(1,N+1):
-                if ocp.nn_decisionfunction_conservative(params, mean, std, safety_margin, ocp.ocp_solver.get(i, 'x')) >= 0.:
+                if ocp.nn_decisionfunction(params, mean, std, ocp.ocp_solver.get(i, 'x')) >= 0.:
                     receiding = N - i + 1
 
         receiding_iter = N-failed_iter-receiding
-        Q = np.diag([1e-2+pow(10,receiding_iter/N*2), 1e-4, 1e-4, 1e-4, 1e-4, 1e-4]) 
+        Q = np.diag([1e-4+pow(10,receiding_iter/N*4), 1e-4, 1e-4, 1e-4, 1e-4, 1e-4]) 
         R = np.diag([1e-4, 1e-4, 1e-4]) 
 
         for i in range(N):
@@ -49,15 +49,22 @@ def simulate(p):
 
         ocp.ocp_solver.cost_set(N, "W", Q)
 
+        # for i in range(N+1):
+        #     if i == receiding_iter:
+        #         ocp.ocp_solver.cost_set(i, "Zl", 1e8*np.ones((1,)))
+        #     elif i == N:
+        #         ocp.ocp_solver.cost_set(i, "Zl", pow(10, (1-receiding_iter/N)*4)*np.ones((1,)))
+        #     else:
+        #         ocp.ocp_solver.cost_set(i, "Zl", np.zeros((1,)))
+
         for i in range(N+1):
             if i == receiding_iter:
-                ocp.ocp_solver.cost_set(i, "Zl", 1e12*np.ones((1,)))
+                ocp.ocp_solver.constraints_set(i, "lh", np.array([0.]))
             else:
-                ocp.ocp_solver.cost_set(i, "Zl", pow(10, (1-receiding_iter/N)*6)*np.ones((1,)))
+                ocp.ocp_solver.constraints_set(i, "lh", np.array([-1e6]))
        
-        temp = time.time()
-        status = ocp.OCP_solve(simX[f], x_sol_guess, u_sol_guess)
-        times[f] = time.time() - temp
+        status = ocp.OCP_solve(simX[f], x_sol_guess, u_sol_guess, ocp.thetamax-0.05, joint_vec[f])
+        times[f] = ocp.ocp_solver.get_stats('time_tot')
 
         if status != 0:
 
@@ -87,11 +94,12 @@ def simulate(p):
             x_sol_guess[N] = np.copy(x_sol_guess[N-1])
             u_sol_guess[N-1] = np.copy(u_sol_guess[N-2])
 
+        simU[f] += noise_vec[f]
+
         sim.acados_integrator.set("u", simU[f])
         sim.acados_integrator.set("x", simX[f])
         status = sim.acados_integrator.solve()
         simX[f+1] = sim.acados_integrator.get("x")
-        simU[f] = u_sol_guess[0]
 
     return f, times
 
@@ -109,51 +117,44 @@ safety_margin = 2.0
 cpu_num = 1
 test_num = 100
 
-time_step = 4*1e-3
-tot_time = 0.16 #0.1 0.011s, 0.06 0.008s, 0.04 0.006s, 0.03 0.0044s
+time_step = 5*1e-3
+tot_time = 0.16
 tot_steps = 100
 
 regenerate = True
 
 x_sol_guess_vec = np.load('../x_sol_guess.npy')
 u_sol_guess_vec = np.load('../u_sol_guess.npy')
+noise_vec = np.load('../noise.npy')
+noise_vec = np.load('../selected_joint.npy')
 
 params = list(model.parameters())
 
-quant = 10.
-r = 1
+ocp = OCPtriplependulumHardTraj("SQP_RTI", time_step, tot_time, params, mean, std, regenerate)
+sim = SYMtriplependulum(time_step, tot_time, regenerate)
 
-while quant > 3*1e-3:
+# Generate low-discrepancy unlabeled samples:
+sampler = qmc.Halton(d=ocp.ocp.dims.nu, scramble=False)
+sample = sampler.random(n=test_num)
+l_bounds = ocp.Xmin_limits[:ocp.ocp.dims.nu]
+u_bounds = ocp.Xmax_limits[:ocp.ocp.dims.nu]
+data = qmc.scale(sample, l_bounds, u_bounds)
 
-    ocp = OCPtriplependulumSoftTraj("SQP_RTI", time_step, tot_time, params, mean, std, safety_margin, regenerate)
-    sim = SYMtriplependulum(time_step, tot_time, regenerate)
+N = ocp.ocp.dims.N
 
-    # Generate low-discrepancy unlabeled samples:
-    sampler = qmc.Halton(d=ocp.ocp.dims.nu, scramble=False)
-    sample = sampler.random(n=test_num)
-    l_bounds = ocp.Xmin_limits[:ocp.ocp.dims.nu]
-    u_bounds = ocp.Xmax_limits[:ocp.ocp.dims.nu]
-    data = qmc.scale(sample, l_bounds, u_bounds)
+# MPC controller without terminal constraints:
+with Pool(cpu_num) as p:
+    res = p.map(simulate, range(data.shape[0]))
 
-    N = ocp.ocp.dims.N
+res_steps_traj, stats = zip(*res)
 
-    # MPC controller without terminal constraints:
-    with Pool(cpu_num) as p:
-        res = p.map(simulate, range(data.shape[0]))
+times = np.array([i for f in stats for i in f if i is not None])
 
-    res_steps_traj, stats = zip(*res)
+quant = np.quantile(times, 0.99)
 
-    times = np.array([i for f in stats for i in f if i is not None])
-
-    quant = np.quantile(times, 0.9)
-
-    print('iter: ', str(r))
-    print('tot time: ' + str(tot_time))
-    print('90 percent quantile solve time: ' + str(quant))
-    print('Mean solve time: ' + str(np.mean(times)))
-
-    tot_time -= 2*1e-2
-    r += 1
+print('tot time: ' + str(tot_time))
+print('99 percent quantile solve time: ' + str(quant))
+print('Mean solve time: ' + str(np.mean(times)))
 
 print(np.array(res_steps_traj).astype(int))
 
@@ -177,3 +178,7 @@ print('MPC standard vs MPC with receiding hard constraints')
 print('Percentage of initial states in which the MPC+VBOC behaves better: ' + str(better))
 print('Percentage of initial states in which the MPC+VBOC behaves equal: ' + str(equal))
 print('Percentage of initial states in which the MPC+VBOC behaves worse: ' + str(worse))
+
+np.savez('../data/results_receidinghard.npz', res_steps_term=res_steps_traj,
+         better=better, worse=worse, equal=equal, times=times,
+         dt=time_step, tot_time=tot_time)

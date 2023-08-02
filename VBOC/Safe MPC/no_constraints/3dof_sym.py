@@ -7,6 +7,7 @@ import time
 from triplependulum_class_vboc import OCPtriplependulumSTD, SYMtriplependulum
 from multiprocessing import Pool
 from scipy.stats import qmc
+import random
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -30,9 +31,8 @@ def simulate(p):
 
     for f in range(tot_steps):
        
-        temp = time.time()
-        status = ocp.OCP_solve(simX[f], x_sol_guess, u_sol_guess)
-        times[f] = time.time() - temp
+        status = ocp.OCP_solve(simX[f], x_sol_guess, u_sol_guess, ocp.thetamax-0.05, joint_vec[f])
+        times[f] = ocp.ocp_solver.get_stats('time_tot')
 
         if status != 0:
 
@@ -62,11 +62,12 @@ def simulate(p):
             x_sol_guess[N] = np.copy(x_sol_guess[N-1])
             u_sol_guess[N-1] = np.copy(u_sol_guess[N-2])
 
+        simU[f] += noise_vec[f]
+
         sim.acados_integrator.set("u", simU[f])
         sim.acados_integrator.set("x", simX[f])
         status = sim.acados_integrator.solve()
         simX[f+1] = sim.acados_integrator.get("x")
-        simU[f] = u_sol_guess[0]
 
     return f, times
 
@@ -79,7 +80,7 @@ def init_guess(p):
     x_sol_guess = np.full((N+1, ocp.ocp.dims.nx), x0)
     u_sol_guess = np.zeros((N, ocp.ocp.dims.nu))
        
-    status = ocp.OCP_solve(x0, x_sol_guess, u_sol_guess)
+    status = ocp.OCP_solve(x0, x_sol_guess, u_sol_guess, ocp.thetamax-0.05, joint_vec[0])
 
     if status == 0:
 
@@ -96,7 +97,7 @@ start_time = time.time()
 cpu_num = 1
 test_num = 100
 
-time_step = 4*1e-3
+time_step = 5*1e-3
 tot_time = 0.16
 tot_steps = 100
 
@@ -111,6 +112,9 @@ data = qmc.scale(sample, l_bounds, u_bounds)
 
 N = ocp.ocp.dims.N
 
+joint_vec = np.array([random.choice(range(ocp.nu)) for _ in range(tot_steps)])
+np.save('../selected_joint', joint_vec)
+
 with Pool(30) as p:
     res = p.map(init_guess, range(data.shape[0]))
 
@@ -118,6 +122,11 @@ x_sol_guess_vec, u_sol_guess_vec = zip(*res)
 
 np.save('../x_sol_guess', np.asarray(x_sol_guess_vec))
 np.save('../u_sol_guess', np.asarray(u_sol_guess_vec))
+
+noise_perc = 0
+noise_vec = np.full((ocp.ocp.dims.nu,tot_steps), np.random.normal(0,noise_perc*ocp.Cmax/200,tot_steps))
+noise_vec = noise_vec.reshape((tot_steps,ocp.ocp.dims.nu))
+np.save('../noise', noise_vec)
 
 del ocp
 
@@ -134,9 +143,14 @@ res_steps, stats = zip(*res)
 
 times = np.array([i for f in stats for i in f if i is not None])
 
-print('90 percent quantile solve time: ' + str(np.quantile(times, 0.9)))
+print('99 percent quantile solve time: ' + str(np.quantile(times, 0.99)))
 print('Mean solve time: ' + str(np.mean(times)))
 
 print(np.array(res_steps).astype(int))
+print(np.mean(res_steps))
 
 np.save('res_steps_noconstr.npy', np.array(res_steps).astype(int))
+
+# Save the results in an npz file
+np.savez('../data/results_no_constraint.npz', times=times,
+         dt=time_step, tot_time=tot_time, res_steps=res_steps)

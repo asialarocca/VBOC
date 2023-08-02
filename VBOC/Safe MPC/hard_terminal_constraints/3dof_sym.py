@@ -32,9 +32,8 @@ def simulate(p):
 
     for f in range(tot_steps):
        
-        temp = time.time()
-        status = ocp.OCP_solve(simX[f], x_sol_guess, u_sol_guess)
-        times[f] = time.time() - temp
+        status = ocp.OCP_solve(simX[f], x_sol_guess, u_sol_guess, ocp.thetamax-0.05, joint_vec[f])
+        times[f] = ocp.ocp_solver.get_stats('time_tot')
 
         if status != 0:
 
@@ -64,11 +63,12 @@ def simulate(p):
             x_sol_guess[N] = np.copy(x_sol_guess[N-1])
             u_sol_guess[N-1] = np.copy(u_sol_guess[N-2])
 
+        simU[f] += noise_vec[f]
+
         sim.acados_integrator.set("u", simU[f])
         sim.acados_integrator.set("x", simX[f])
         status = sim.acados_integrator.solve()
         simX[f+1] = sim.acados_integrator.get("x")
-        simU[f] = u_sol_guess[0]
 
     return f, times
 
@@ -86,19 +86,21 @@ safety_margin = 2.0
 cpu_num = 1
 test_num = 100
 
-time_step = 4*1e-3
-tot_time = 0.16 #0.1 and 0.115 0.002s, 0.15 0.027s, 0.2 0.003s, 0.25 0.0035s, 0.3 0.0039s
+time_step = 5*1e-3
+tot_time = 0.16
 tot_steps = 100
 
 regenerate = True
 
 x_sol_guess_vec = np.load('../x_sol_guess.npy')
 u_sol_guess_vec = np.load('../u_sol_guess.npy')
+noise_vec = np.load('../noise.npy')
+noise_vec = np.load('../selected_joint.npy')
 
 quant = 10.
 r = 1
 
-while quant > 3*1e-3:
+while quant > 4*1e-3:
 
     ocp = OCPtriplependulumHardTerm("SQP_RTI", time_step, tot_time, list(model.parameters()), mean, std, regenerate)
     sim = SYMtriplependulum(time_step, tot_time, True)
@@ -120,17 +122,19 @@ while quant > 3*1e-3:
 
     times = np.array([i for f in stats for i in f if i is not None])
 
-    quant = np.quantile(times, 0.9)
+    quant = np.quantile(times, 0.99)
 
     print('iter: ', str(r))
     print('tot time: ' + str(tot_time))
-    print('90 percent quantile solve time: ' + str(quant))
+    print('99 percent quantile solve time: ' + str(quant))
     print('Mean solve time: ' + str(np.mean(times)))
 
-    tot_time -= 2*1e-2
+    tot_time -= time_step
     r += 1
 
-print(np.array(res_steps_term).astype(int))
+    print(np.array(res_steps_term).astype(int))
+
+    del ocp
 
 np.save('res_steps_hardterm.npy', np.array(res_steps_term).astype(int))
 
@@ -152,3 +156,7 @@ print('MPC standard vs MPC with hard term constraints')
 print('Percentage of initial states in which the MPC+VBOC behaves better: ' + str(better))
 print('Percentage of initial states in which the MPC+VBOC behaves equal: ' + str(equal))
 print('Percentage of initial states in which the MPC+VBOC behaves worse: ' + str(worse))
+
+np.savez('../data/results_hardterm.npz', res_steps_term=res_steps_term,
+         better=better, worse=worse, equal=equal, times=times,
+         dt=time_step, tot_time=tot_time)

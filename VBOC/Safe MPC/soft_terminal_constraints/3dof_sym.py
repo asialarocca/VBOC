@@ -5,7 +5,7 @@ sys.path.insert(1, os.getcwd() + '/..')
 import numpy as np
 import time
 import torch
-from triplependulum_class_vboc import OCPtriplependulumSoftTraj, SYMtriplependulum
+from triplependulum_class_vboc import OCPtriplependulumSoftTerm, SYMtriplependulum
 from my_nn import NeuralNetDIR
 from multiprocessing import Pool
 from scipy.stats import qmc
@@ -102,8 +102,10 @@ r = 1
 
 while quant > 4*1e-3:
 
-    ocp = OCPtriplependulumSoftTraj("SQP_RTI", time_step, tot_time, list(model.parameters()), mean, std, safety_margin, regenerate)
-    sim = SYMtriplependulum(time_step, tot_time, regenerate)
+    ocp = OCPtriplependulumSoftTerm("SQP_RTI", time_step, tot_time, list(model.parameters()), mean, std, safety_margin, regenerate)
+    sim = SYMtriplependulum(time_step, tot_time, True)
+
+    N = ocp.ocp.dims.N
 
     # Generate low-discrepancy unlabeled samples:
     sampler = qmc.Halton(d=ocp.ocp.dims.nu, scramble=False)
@@ -112,21 +114,17 @@ while quant > 4*1e-3:
     u_bounds = ocp.Xmax_limits[:ocp.ocp.dims.nu]
     data = qmc.scale(sample, l_bounds, u_bounds)
 
-    N = ocp.ocp.dims.N
-
-    for i in range(1,N):
-        ocp.ocp_solver.cost_set(i, "Zl", 1e4*np.ones((1,)))
     ocp.ocp_solver.cost_set(N, "Zl", 1e4*np.ones((1,)))
 
     # MPC controller without terminal constraints:
     with Pool(cpu_num) as p:
         res = p.map(simulate, range(data.shape[0]))
 
-    res_steps_traj, stats = zip(*res)
+    res_steps_term, stats = zip(*res)
 
     times = np.array([i for f in stats for i in f if i is not None])
 
-    quant = np.quantile(times, 0.99)
+    quant = np.quantile(times, 0.9)
 
     print('iter: ', str(r))
     print('tot time: ' + str(tot_time))
@@ -136,11 +134,11 @@ while quant > 4*1e-3:
     tot_time -= time_step
     r += 1
 
+    print(np.array(res_steps_term).astype(int))
+
     del ocp
 
-print(np.array(res_steps_traj).astype(int))
-
-np.save('res_steps_softtraj.npy', np.array(res_steps_traj).astype(int))
+np.save('res_steps_hardterm.npy', np.array(res_steps_term).astype(int))
 
 res_steps = np.load('../no_constraints/res_steps_noconstr.npy')
 
@@ -149,18 +147,18 @@ equal = 0
 worse = 0
 
 for i in range(res_steps.shape[0]):
-    if res_steps_traj[i]-res_steps[i]>0:
+    if res_steps_term[i]-res_steps[i]>0:
         better += 1
-    elif res_steps_traj[i]-res_steps[i]==0:
+    elif res_steps_term[i]-res_steps[i]==0:
         equal += 1
     else:
         worse += 1
 
-print('MPC standard vs MPC with soft traj constraints')
+print('MPC standard vs MPC with hard term constraints')
 print('Percentage of initial states in which the MPC+VBOC behaves better: ' + str(better))
 print('Percentage of initial states in which the MPC+VBOC behaves equal: ' + str(equal))
 print('Percentage of initial states in which the MPC+VBOC behaves worse: ' + str(worse))
 
-np.savez('../data/results_softtraj.npz', res_steps_term=res_steps_traj,
+np.savez('../data/results_softterm.npz', res_steps_term=res_steps_term,
          better=better, worse=worse, equal=equal, times=times,
          dt=time_step, tot_time=tot_time)

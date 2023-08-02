@@ -106,11 +106,11 @@ class OCPtriplependulum(MODELtriplependulum):
         self.ny_e = self.nx
 
         # cost
-        Q = np.diag([1e4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4])
-        R = np.diag([1e-4, 1e-4, 1e-4])
+        self.Q = np.diag([1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4])
+        self.R = np.diag([1e-4, 1e-4, 1e-4])
 
-        self.ocp.cost.W_e = Q
-        self.ocp.cost.W = lin.block_diag(Q, R)
+        self.ocp.cost.W_e = self.Q
+        self.ocp.cost.W = lin.block_diag(self.Q, self.R)
 
         self.ocp.cost.cost_type = "LINEAR_LS"
         self.ocp.cost.cost_type_e = "LINEAR_LS"
@@ -127,9 +127,11 @@ class OCPtriplependulum(MODELtriplependulum):
         self.thetamin = - np.pi / 4 + np.pi
         self.dthetamax = 10.
 
+        self.yref = np.array([np.pi,np.pi,np.pi,0.,0.,0.,0.,0.,0.])
+
         # reference
-        self.ocp.cost.yref = np.array([self.thetamax-0.05,np.pi,np.pi,0.,0.,0.,0.,0.,0.])
-        self.ocp.cost.yref_e = np.array([self.thetamax-0.05,np.pi,np.pi,0.,0.,0.,])
+        self.ocp.cost.yref = self.yref
+        self.ocp.cost.yref_e = self.yref[:self.nx]
 
         self.Cmax_limits = np.array([self.Cmax, self.Cmax, self.Cmax])
         self.Cmin_limits = np.array([-self.Cmax, -self.Cmax, -self.Cmax])
@@ -160,7 +162,7 @@ class OCPtriplependulum(MODELtriplependulum):
         self.ocp.solver_options.alpha_min = 1e-2
         self.ocp.solver_options.levenberg_marquardt = 1e-2
 
-    def OCP_solve(self, x0, x_sol_guess, u_sol_guess):
+    def OCP_solve(self, x0, x_sol_guess, u_sol_guess, ref, joint):
 
         # Reset current iterate:
         self.ocp_solver.reset()
@@ -168,12 +170,22 @@ class OCPtriplependulum(MODELtriplependulum):
         self.ocp_solver.constraints_set(0, "lbx", x0)
         self.ocp_solver.constraints_set(0, "ubx", x0)
 
+        yref = self.yref
+        yref[joint] = ref
+        Q = self.Q
+        Q[joint] = 1e4
+        W = lin.block_diag(Q, self.R)
+
         # Set parameters, guesses and constraints:
         for i in range(self.ocp.dims.N):
             self.ocp_solver.set(i, 'x', x_sol_guess[i])
             self.ocp_solver.set(i, 'u', u_sol_guess[i])
+            self.ocp_solver.cost_set(i, 'yref', yref, api='new')
+            self.ocp_solver.cost_set(i, 'W', W, api='new')
 
         self.ocp_solver.set(self.ocp.dims.N, 'x', x_sol_guess[self.ocp.dims.N])
+        self.ocp_solver.cost_set(self.ocp.dims.N, 'yref', yref[:self.ocp.dims.nx], api='new')
+        self.ocp_solver.cost_set(self.ocp.dims.N, 'W', Q, api='new')
 
         # Solve the OCP:
         status = self.ocp_solver.solve()
@@ -237,7 +249,109 @@ class OCPtriplependulumHardTerm(OCPtriplependulum):
             it += 1
 
         return out - vel_norm 
-    
+
+
+class OCPtriplependulumHardTraj(OCPtriplependulum):
+    def __init__(self, nlp_solver_type, time_step, tot_time, nn_params, mean, std, regenerate):
+
+        # inherit initialization
+        super().__init__(nlp_solver_type, time_step, tot_time)
+
+        # nonlinear constraints
+        self.model.con_h_expr_e = self.nn_decisionfunction(nn_params, mean, std, self.x)
+        
+        self.ocp.constraints.lh_e = np.array([0.])
+        self.ocp.constraints.uh_e = np.array([1e6])
+
+        self.model.con_h_expr = self.model.con_h_expr_e
+        
+        self.ocp.constraints.lh = np.array([0.])
+        self.ocp.constraints.uh = np.array([1e6])
+
+        # ocp model
+        self.ocp.model = self.model
+
+        # solver
+        self.ocp_solver = AcadosOcpSolver(self.ocp, build=regenerate)
+
+    def nn_decisionfunction(self, params, mean, std, x):
+
+        vel_norm = fmax(norm_2(x[2:]), 1e-3)
+
+        mean = vertcat(mean,mean,mean,0.,0.,0.)
+        std = vertcat(std,std,std,vel_norm,vel_norm,vel_norm)
+
+        out = (x - mean) / std
+        it = 0
+
+        for param in params:
+
+            param = SX(param.tolist())
+
+            if it % 2 == 0:
+                out = param @ out
+            else:
+                out = param + out
+
+                if it == 1 or it == 3:
+                    out = fmax(0., out)
+
+            it += 1
+
+        return out - vel_norm 
+
+
+class OCPtriplependulumSoftTerm(OCPtriplependulum):
+    def __init__(self, nlp_solver_type, time_step, tot_time, nn_params, mean, std, safety_margin, regenerate):
+
+        # inherit initialization
+        super().__init__(nlp_solver_type, time_step, tot_time)
+
+        # nonlinear constraints
+        self.model.con_h_expr_e = self.nn_decisionfunction_conservative(nn_params, mean, std, safety_margin, self.x)
+        
+        self.ocp.constraints.lh_e = np.array([0.])
+        self.ocp.constraints.uh_e = np.array([1e6])
+
+        self.ocp.constraints.idxsh_e = np.array([0])
+
+        self.ocp.cost.zl_e = np.zeros((1,))
+        self.ocp.cost.zu_e = np.zeros((1,))
+        self.ocp.cost.Zu_e = np.zeros((1,))
+        self.ocp.cost.Zl_e = np.zeros((1,))
+
+        # ocp model
+        self.ocp.model = self.model
+
+        # solver
+        self.ocp_solver = AcadosOcpSolver(self.ocp, build=regenerate)
+
+    def nn_decisionfunction_conservative(self, params, mean, std, safety_margin, x):
+
+        vel_norm = fmax(norm_2(x[2:]), 1e-3)
+
+        mean = vertcat(mean,mean,mean,0.,0.,0.)
+        std = vertcat(std,std,std,vel_norm,vel_norm,vel_norm)
+
+        out = (x - mean) / std
+        it = 0
+
+        for param in params:
+
+            param = SX(param.tolist())
+
+            if it % 2 == 0:
+                out = param @ out
+            else:
+                out = param + out
+
+                if it == 1 or it == 3:
+                    out = fmax(0., out)
+
+            it += 1
+
+        return out*(100-safety_margin)/100 - vel_norm 
+
 
 class OCPtriplependulumSoftTraj(OCPtriplependulum):
     def __init__(self, nlp_solver_type, time_step, tot_time, nn_params, mean, std, safety_margin, regenerate):
